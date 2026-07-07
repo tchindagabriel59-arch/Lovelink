@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useUser } from "../layout";
 import {
   User,
@@ -42,6 +42,8 @@ export default function ProfilePage() {
   const { user, refreshUser } = useUser();
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [form, setForm] = useState({
     bio: user?.bio || "",
     city: user?.city || "",
@@ -73,6 +75,54 @@ export default function ProfilePage() {
   const selectedInterests = form.interests
     ? form.interests.split(",").map((s) => s.trim()).filter(Boolean)
     : [];
+
+  // 🆕 UPLOAD DE PHOTO
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Vérifier la taille (max 5 MB)
+    if (file.size > 5 * 1024 * 1024) {
+      alert("La photo est trop grande. Maximum 5 MB.");
+      return;
+    }
+
+    // Vérifier le type
+    if (!file.type.startsWith("image/")) {
+      alert("Veuillez sélectionner une image.");
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const response = await fetch(`/api/upload?filename=${encodeURIComponent(file.name)}`, {
+        method: "POST",
+        body: file,
+      });
+
+      if (!response.ok) throw new Error("Erreur upload");
+
+      const blob = await response.json();
+      const newPhotoUrl = blob.url;
+
+      // Mettre à jour le formulaire
+      setForm({ ...form, photoUrl: newPhotoUrl });
+
+      // Sauvegarder directement dans la base de données
+      await fetch("/api/profile", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...form, photoUrl: newPhotoUrl }),
+      });
+
+      refreshUser();
+      alert("✅ Photo mise à jour avec succès !");
+    } catch (error) {
+      alert("❌ Erreur lors de l'envoi de la photo");
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -125,16 +175,50 @@ export default function ProfilePage() {
             <div className={`h-32 bg-gradient-to-br ${gradient}`} />
             <div className="px-6 pb-6 -mt-12">
               <div className="relative inline-block">
-                <div
-                  className={`w-24 h-24 rounded-2xl bg-gradient-to-br ${gradient} flex items-center justify-center text-white text-3xl font-bold border-4 border-white shadow-lg`}
+                {/* PHOTO OU INITIALES */}
+                {form.photoUrl ? (
+                  <img
+                    src={form.photoUrl}
+                    alt="Photo de profil"
+                    className="w-24 h-24 rounded-2xl object-cover border-4 border-white shadow-lg"
+                  />
+                ) : (
+                  <div
+                    className={`w-24 h-24 rounded-2xl bg-gradient-to-br ${gradient} flex items-center justify-center text-white text-3xl font-bold border-4 border-white shadow-lg`}
+                  >
+                    {user?.firstName?.charAt(0)}
+                    {user?.lastName?.charAt(0)}
+                  </div>
+                )}
+
+                {/* BOUTON UPLOAD PHOTO */}
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handlePhotoUpload}
+                  accept="image/*"
+                  className="hidden"
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
+                  className="absolute -bottom-1 -right-1 w-8 h-8 bg-rose-500 hover:bg-rose-600 rounded-lg flex items-center justify-center text-white shadow disabled:opacity-50 transition"
+                  title="Changer ma photo"
                 >
-                  {user?.firstName?.charAt(0)}
-                  {user?.lastName?.charAt(0)}
-                </div>
-                <div className="absolute -bottom-1 -right-1 w-8 h-8 bg-rose-500 rounded-lg flex items-center justify-center text-white shadow">
-                  <Camera className="w-4 h-4" />
-                </div>
+                  {uploading ? (
+                    <span className="text-xs">...</span>
+                  ) : (
+                    <Camera className="w-4 h-4" />
+                  )}
+                </button>
               </div>
+
+              {uploading && (
+                <p className="mt-2 text-xs text-rose-500 font-medium">
+                  📤 Envoi en cours...
+                </p>
+              )}
 
               <h3 className="mt-4 text-xl font-bold text-slate-900">
                 {user?.firstName} {user?.lastName}
