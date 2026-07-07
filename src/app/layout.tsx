@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import "./globals.css";
+import CookieBanner from "./components/CookieBanner";
 
 export const metadata: Metadata = {
   title: "LoveLink — Trouvez votre âme sœur",
@@ -19,6 +20,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       </head>
       <body className="bg-slate-50 text-slate-900 antialiased min-h-screen">
         {children}
+        <CookieBanner />
       </body>
     </html>
   );
