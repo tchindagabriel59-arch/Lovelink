@@ -20,10 +20,24 @@ export default function RegisterPage() {
     birthDate: "",
     gender: "",
   });
+  const [acceptCGU, setAcceptCGU] = useState(false);
+  const [acceptAge, setAcceptAge] = useState(false);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setForm({ ...form, [e.target.name]: e.target.value });
     setError("");
+  };
+
+  // Calcul de l'âge depuis la date de naissance
+  const calculateAge = (birthDate: string): number => {
+    const today = new Date();
+    const birth = new Date(birthDate);
+    let age = today.getFullYear() - birth.getFullYear();
+    const monthDiff = today.getMonth() - birth.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+      age--;
+    }
+    return age;
   };
 
   const nextStep = () => {
@@ -54,6 +68,23 @@ export default function RegisterPage() {
     e.preventDefault();
     if (!form.birthDate || !form.gender) {
       setError("Veuillez remplir tous les champs");
+      return;
+    }
+
+    // Vérification de l'âge (18 ans minimum)
+    const age = calculateAge(form.birthDate);
+    if (age < 18) {
+      setError("Vous devez avoir au moins 18 ans pour vous inscrire sur LoveLink.");
+      return;
+    }
+
+    // Vérification cases à cocher
+    if (!acceptAge) {
+      setError("Vous devez certifier avoir au moins 18 ans.");
+      return;
+    }
+    if (!acceptCGU) {
+      setError("Vous devez accepter les CGU et la Politique de confidentialité.");
       return;
     }
 
@@ -249,6 +280,9 @@ export default function RegisterPage() {
                   onChange={handleChange}
                   className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-rose-400 focus:ring-2 focus:ring-rose-100 transition bg-white/80"
                 />
+                <p className="text-xs text-slate-500 mt-1">
+                  🔞 LoveLink est réservé aux personnes majeures (18 ans ou plus).
+                </p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1.5">
@@ -267,6 +301,44 @@ export default function RegisterPage() {
                   <option value="other">Autre</option>
                 </select>
               </div>
+
+              {/* CASE 18+ */}
+              <div className="flex items-start gap-3 p-4 bg-rose-50 rounded-xl border border-rose-100">
+                <input
+                  type="checkbox"
+                  id="acceptAge"
+                  checked={acceptAge}
+                  onChange={(e) => setAcceptAge(e.target.checked)}
+                  className="mt-1 w-5 h-5 accent-rose-500 cursor-pointer"
+                />
+                <label htmlFor="acceptAge" className="text-sm text-slate-700 cursor-pointer">
+                  Je certifie sur l'honneur avoir <strong>au moins 18 ans</strong> et
+                  disposer de la capacité juridique pour m'inscrire sur LoveLink.
+                </label>
+              </div>
+
+              {/* CASE CGU */}
+              <div className="flex items-start gap-3 p-4 bg-purple-50 rounded-xl border border-purple-100">
+                <input
+                  type="checkbox"
+                  id="acceptCGU"
+                  checked={acceptCGU}
+                  onChange={(e) => setAcceptCGU(e.target.checked)}
+                  className="mt-1 w-5 h-5 accent-purple-500 cursor-pointer"
+                />
+                <label htmlFor="acceptCGU" className="text-sm text-slate-700 cursor-pointer">
+                  J'accepte les{" "}
+                  <Link href="/cgu" target="_blank" className="text-rose-500 underline font-semibold">
+                    Conditions Générales d'Utilisation
+                  </Link>{" "}
+                  et la{" "}
+                  <Link href="/confidentialite" target="_blank" className="text-rose-500 underline font-semibold">
+                    Politique de Confidentialité
+                  </Link>
+                  .
+                </label>
+              </div>
+
               <div className="flex gap-3">
                 <button
                   type="button"
