@@ -61,3 +61,14 @@ export const messages = pgTable("messages", {
   isRead: boolean("is_read").default(false),
   createdAt: timestamp("created_at").defaultNow(),
 });
+
+// 🆕 Table des signalements
+export const reports = pgTable("reports", {
+  id: serial("id").primaryKey(),
+  reporterUserId: integer("reporter_user_id").notNull().references(() => users.id),
+  reportedUserId: integer("reported_user_id").notNull().references(() => users.id),
+  reason: varchar("reason", { length: 100 }).notNull(),
+  details: text("details").default(""),
+  status: varchar("status", { length: 20 }).default("pending"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
