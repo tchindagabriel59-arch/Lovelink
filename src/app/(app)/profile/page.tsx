@@ -10,25 +10,15 @@ import {
   Save,
   Camera,
   Sparkles,
+  Plus,
+  X,
+  ImageIcon,
 } from "lucide-react";
 
 const interestOptions = [
-  "Voyages",
-  "Musique",
-  "Cinema",
-  "Sport",
-  "Cuisine",
-  "Lecture",
-  "Art",
-  "Photographie",
-  "Danse",
-  "Jeux vidéo",
-  "Nature",
-  "Yoga",
-  "Animaux",
-  "Tech",
-  "Mode",
-  "Gastronomie",
+  "Voyages", "Musique", "Cinema", "Sport", "Cuisine", "Lecture",
+  "Art", "Photographie", "Danse", "Jeux vidéo", "Nature", "Yoga",
+  "Animaux", "Tech", "Mode", "Gastronomie",
 ];
 
 const gradients = [
@@ -42,13 +32,25 @@ export default function ProfilePage() {
   const { user, refreshUser } = useUser();
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingField, setUploadingField] = useState<string | null>(null);
+  
+  const profilePhotoRef = useRef<HTMLInputElement>(null);
+  const coverPhotoRef = useRef<HTMLInputElement>(null);
+  const photo1Ref = useRef<HTMLInputElement>(null);
+  const photo2Ref = useRef<HTMLInputElement>(null);
+  const photo3Ref = useRef<HTMLInputElement>(null);
+  const photo4Ref = useRef<HTMLInputElement>(null);
+
   const [form, setForm] = useState({
     bio: user?.bio || "",
     city: user?.city || "",
     country: user?.country || "",
     photoUrl: user?.photoUrl || "",
+    coverPhotoUrl: (user as any)?.coverPhotoUrl || "",
+    photo1Url: (user as any)?.photo1Url || "",
+    photo2Url: (user as any)?.photo2Url || "",
+    photo3Url: (user as any)?.photo3Url || "",
+    photo4Url: (user as any)?.photo4Url || "",
     interests: user?.interests || "",
     occupation: user?.occupation || "",
     lookingFor: user?.lookingFor || "relationship",
@@ -76,52 +78,67 @@ export default function ProfilePage() {
     ? form.interests.split(",").map((s) => s.trim()).filter(Boolean)
     : [];
 
-  // 🆕 UPLOAD DE PHOTO
-  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // 🆕 UPLOAD PHOTO GÉNÉRIQUE (fonctionne pour tous les champs)
+  const handlePhotoUpload = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+    fieldName: string
+  ) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Vérifier la taille (max 5 MB)
     if (file.size > 5 * 1024 * 1024) {
       alert("La photo est trop grande. Maximum 5 MB.");
       return;
     }
 
-    // Vérifier le type
     if (!file.type.startsWith("image/")) {
       alert("Veuillez sélectionner une image.");
       return;
     }
 
-    setUploading(true);
+    setUploadingField(fieldName);
     try {
-      const response = await fetch(`/api/upload?filename=${encodeURIComponent(file.name)}`, {
-        method: "POST",
-        body: file,
-      });
+      const response = await fetch(
+        `/api/upload?filename=${encodeURIComponent(file.name)}`,
+        {
+          method: "POST",
+          body: file,
+        }
+      );
 
       if (!response.ok) throw new Error("Erreur upload");
 
       const blob = await response.json();
-      const newPhotoUrl = blob.url;
+      const newUrl = blob.url;
 
-      // Mettre à jour le formulaire
-      setForm({ ...form, photoUrl: newPhotoUrl });
+      const updatedForm = { ...form, [fieldName]: newUrl };
+      setForm(updatedForm);
 
-      // Sauvegarder directement dans la base de données
       await fetch("/api/profile", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, photoUrl: newPhotoUrl }),
+        body: JSON.stringify(updatedForm),
       });
 
       refreshUser();
-      alert("✅ Photo mise à jour avec succès !");
     } catch (error) {
       alert("❌ Erreur lors de l'envoi de la photo");
     } finally {
-      setUploading(false);
+      setUploadingField(null);
     }
+  };
+
+  // 🗑️ SUPPRIMER UNE PHOTO
+  const removePhoto = async (fieldName: string) => {
+    if (!confirm("Supprimer cette photo ?")) return;
+    const updatedForm = { ...form, [fieldName]: "" };
+    setForm(updatedForm);
+    await fetch("/api/profile", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(updatedForm),
+    });
+    refreshUser();
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -149,16 +166,76 @@ export default function ProfilePage() {
     const birth = new Date(birthDate);
     let age = today.getFullYear() - birth.getFullYear();
     const m = today.getMonth() - birth.getMonth();
-    if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) {
-      age--;
-    }
+    if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
     return age;
   }
 
   const gradient = gradients[(user?.id ?? 0) % gradients.length];
 
+  // Composant réutilisable pour les cases photos
+  const PhotoBox = ({
+    url,
+    fieldName,
+    inputRef,
+    label,
+  }: {
+    url: string;
+    fieldName: string;
+    inputRef: React.RefObject<HTMLInputElement | null>;
+    label: string;
+  }) => (
+    <div className="relative aspect-square bg-slate-100 rounded-2xl overflow-hidden border-2 border-dashed border-slate-300 hover:border-rose-400 transition group">
+      <input
+        type="file"
+        ref={inputRef}
+        onChange={(e) => handlePhotoUpload(e, fieldName)}
+        accept="image/*"
+        className="hidden"
+      />
+      {url ? (
+        <>
+          <img src={url} alt={label} className="w-full h-full object-cover" />
+          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center gap-2">
+            <button
+              type="button"
+              onClick={() => inputRef.current?.click()}
+              className="p-2 bg-white rounded-full hover:bg-rose-50"
+              title="Changer"
+            >
+              <Camera className="w-4 h-4 text-slate-700" />
+            </button>
+            <button
+              type="button"
+              onClick={() => removePhoto(fieldName)}
+              className="p-2 bg-white rounded-full hover:bg-red-50"
+              title="Supprimer"
+            >
+              <X className="w-4 h-4 text-red-600" />
+            </button>
+          </div>
+        </>
+      ) : (
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          disabled={uploadingField === fieldName}
+          className="w-full h-full flex flex-col items-center justify-center gap-2 text-slate-400 hover:text-rose-500 transition"
+        >
+          {uploadingField === fieldName ? (
+            <span className="text-xs">Envoi...</span>
+          ) : (
+            <>
+              <Plus className="w-8 h-8" />
+              <span className="text-xs font-medium">{label}</span>
+            </>
+          )}
+        </button>
+      )}
+    </div>
+  );
+
   return (
-    <div className="p-6 lg:p-8 max-w-4xl mx-auto">
+    <div className="p-6 lg:p-8 max-w-5xl mx-auto">
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-slate-900">
           Mon <span className="gradient-text">Profil</span>
@@ -168,18 +245,126 @@ export default function ProfilePage() {
         </p>
       </div>
 
+      {/* 🖼️ SECTION PHOTOS (STYLE TINDER) */}
+      <div className="bg-white rounded-2xl p-6 border border-slate-100 mb-6">
+        <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+          <ImageIcon className="w-5 h-5 text-rose-500" />
+          Mes photos
+        </h3>
+
+        {/* Photo de couverture */}
+        <div className="mb-6">
+          <p className="text-sm font-medium text-slate-700 mb-2">Photo de couverture</p>
+          <div className="relative h-40 lg:h-56 bg-slate-100 rounded-2xl overflow-hidden border-2 border-dashed border-slate-300 hover:border-rose-400 transition group">
+            <input
+              type="file"
+              ref={coverPhotoRef}
+              onChange={(e) => handlePhotoUpload(e, "coverPhotoUrl")}
+              accept="image/*"
+              className="hidden"
+            />
+            {form.coverPhotoUrl ? (
+              <>
+                <img
+                  src={form.coverPhotoUrl}
+                  alt="Couverture"
+                  className="w-full h-full object-cover"
+                />
+                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => coverPhotoRef.current?.click()}
+                    className="px-4 py-2 bg-white rounded-full font-medium text-sm hover:bg-rose-50"
+                  >
+                    <Camera className="w-4 h-4 inline mr-1" />
+                    Changer
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => removePhoto("coverPhotoUrl")}
+                    className="px-4 py-2 bg-white rounded-full font-medium text-sm text-red-600 hover:bg-red-50"
+                  >
+                    <X className="w-4 h-4 inline mr-1" />
+                    Supprimer
+                  </button>
+                </div>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={() => coverPhotoRef.current?.click()}
+                disabled={uploadingField === "coverPhotoUrl"}
+                className="w-full h-full flex flex-col items-center justify-center gap-2 text-slate-400 hover:text-rose-500 transition"
+              >
+                {uploadingField === "coverPhotoUrl" ? (
+                  <span>Envoi en cours...</span>
+                ) : (
+                  <>
+                    <Plus className="w-10 h-10" />
+                    <span className="font-medium">Ajouter une photo de couverture</span>
+                  </>
+                )}
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Photo de profil + Galerie */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+          {/* Photo de profil (mise en avant) */}
+          <div className="col-span-2 sm:col-span-1">
+            <p className="text-xs font-medium text-slate-700 mb-2">Photo principale</p>
+            <PhotoBox
+              url={form.photoUrl}
+              fieldName="photoUrl"
+              inputRef={profilePhotoRef}
+              label="Photo principale"
+            />
+          </div>
+
+          {/* Photos supplémentaires */}
+          <div>
+            <p className="text-xs font-medium text-slate-700 mb-2">Photo 2</p>
+            <PhotoBox url={form.photo1Url} fieldName="photo1Url" inputRef={photo1Ref} label="Photo 2" />
+          </div>
+          <div>
+            <p className="text-xs font-medium text-slate-700 mb-2">Photo 3</p>
+            <PhotoBox url={form.photo2Url} fieldName="photo2Url" inputRef={photo2Ref} label="Photo 3" />
+          </div>
+          <div>
+            <p className="text-xs font-medium text-slate-700 mb-2">Photo 4</p>
+            <PhotoBox url={form.photo3Url} fieldName="photo3Url" inputRef={photo3Ref} label="Photo 4" />
+          </div>
+          <div>
+            <p className="text-xs font-medium text-slate-700 mb-2">Photo 5</p>
+            <PhotoBox url={form.photo4Url} fieldName="photo4Url" inputRef={photo4Ref} label="Photo 5" />
+          </div>
+        </div>
+
+        <p className="mt-3 text-xs text-slate-500">
+          💡 Astuce : Ajoutez plusieurs photos pour augmenter vos chances de match !
+        </p>
+      </div>
+
       <div className="grid lg:grid-cols-3 gap-6">
-        {/* Profile Preview */}
+        {/* Aperçu profil */}
         <div className="lg:col-span-1">
           <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden sticky top-6">
-            <div className={`h-32 bg-gradient-to-br ${gradient}`} />
+            <div className={`h-32 relative bg-gradient-to-br ${gradient}`}>
+              {form.coverPhotoUrl && (
+                <img
+                  src={form.coverPhotoUrl}
+                  alt="Couverture"
+                  className="w-full h-full object-cover"
+                />
+              )}
+            </div>
             <div className="px-6 pb-6 -mt-12">
               <div className="relative inline-block">
-                {/* PHOTO OU INITIALES */}
                 {form.photoUrl ? (
                   <img
                     src={form.photoUrl}
-                    alt="Photo de profil"
+                    alt="Profil"
                     className="w-24 h-24 rounded-2xl object-cover border-4 border-white shadow-lg"
                   />
                 ) : (
@@ -190,43 +375,13 @@ export default function ProfilePage() {
                     {user?.lastName?.charAt(0)}
                   </div>
                 )}
-
-                {/* BOUTON UPLOAD PHOTO */}
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  onChange={handlePhotoUpload}
-                  accept="image/*"
-                  className="hidden"
-                />
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={uploading}
-                  className="absolute -bottom-1 -right-1 w-8 h-8 bg-rose-500 hover:bg-rose-600 rounded-lg flex items-center justify-center text-white shadow disabled:opacity-50 transition"
-                  title="Changer ma photo"
-                >
-                  {uploading ? (
-                    <span className="text-xs">...</span>
-                  ) : (
-                    <Camera className="w-4 h-4" />
-                  )}
-                </button>
               </div>
-
-              {uploading && (
-                <p className="mt-2 text-xs text-rose-500 font-medium">
-                  📤 Envoi en cours...
-                </p>
-              )}
 
               <h3 className="mt-4 text-xl font-bold text-slate-900">
                 {user?.firstName} {user?.lastName}
               </h3>
               {user?.birthDate && (
-                <p className="text-sm text-slate-500">
-                  {getAge(user.birthDate)} ans
-                </p>
+                <p className="text-sm text-slate-500">{getAge(user.birthDate)} ans</p>
               )}
 
               {form.occupation && (
@@ -244,9 +399,7 @@ export default function ProfilePage() {
               )}
 
               {form.bio && (
-                <p className="mt-3 text-sm text-slate-600 leading-relaxed">
-                  {form.bio}
-                </p>
+                <p className="mt-3 text-sm text-slate-600 leading-relaxed">{form.bio}</p>
               )}
 
               {selectedInterests.length > 0 && (
@@ -265,10 +418,9 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {/* Edit Form */}
+        {/* Formulaire */}
         <div className="lg:col-span-2">
           <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Bio */}
             <div className="bg-white rounded-2xl p-6 border border-slate-100">
               <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
                 <User className="w-5 h-5 text-rose-500" />
@@ -276,9 +428,7 @@ export default function ProfilePage() {
               </h3>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                    Bio
-                  </label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5">Bio</label>
                   <textarea
                     name="bio"
                     value={form.bio}
@@ -289,9 +439,7 @@ export default function ProfilePage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                    Profession
-                  </label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5">Profession</label>
                   <input
                     type="text"
                     name="occupation"
@@ -304,7 +452,6 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            {/* Location */}
             <div className="bg-white rounded-2xl p-6 border border-slate-100">
               <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
                 <MapPin className="w-5 h-5 text-blue-500" />
@@ -312,9 +459,7 @@ export default function ProfilePage() {
               </h3>
               <div className="grid sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                    Ville
-                  </label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5">Ville</label>
                   <input
                     type="text"
                     name="city"
@@ -325,9 +470,7 @@ export default function ProfilePage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                    Pays
-                  </label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5">Pays</label>
                   <input
                     type="text"
                     name="country"
@@ -340,7 +483,6 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            {/* Looking For */}
             <div className="bg-white rounded-2xl p-6 border border-slate-100">
               <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
                 <Heart className="w-5 h-5 text-rose-500" />
@@ -359,7 +501,6 @@ export default function ProfilePage() {
               </select>
             </div>
 
-            {/* Interests */}
             <div className="bg-white rounded-2xl p-6 border border-slate-100">
               <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
                 <Sparkles className="w-5 h-5 text-amber-500" />
@@ -383,7 +524,6 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            {/* Save */}
             <div className="flex items-center gap-4">
               <button
                 type="submit"
