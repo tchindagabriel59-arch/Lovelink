@@ -12,7 +12,20 @@ export async function PUT(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { bio, city, country, photoUrl, interests, occupation, lookingFor } = body;
+    const {
+      bio,
+      city,
+      country,
+      photoUrl,
+      coverPhotoUrl,
+      photo1Url,
+      photo2Url,
+      photo3Url,
+      photo4Url,
+      interests,
+      occupation,
+      lookingFor,
+    } = body;
 
     const [updated] = await db
       .update(users)
@@ -21,6 +34,11 @@ export async function PUT(req: NextRequest) {
         city: city ?? undefined,
         country: country ?? undefined,
         photoUrl: photoUrl ?? undefined,
+        coverPhotoUrl: coverPhotoUrl ?? undefined,
+        photo1Url: photo1Url ?? undefined,
+        photo2Url: photo2Url ?? undefined,
+        photo3Url: photo3Url ?? undefined,
+        photo4Url: photo4Url ?? undefined,
         interests: interests ?? undefined,
         occupation: occupation ?? undefined,
         lookingFor: lookingFor ?? undefined,
@@ -39,6 +57,11 @@ export async function PUT(req: NextRequest) {
         city: updated.city,
         country: updated.country,
         photoUrl: updated.photoUrl,
+        coverPhotoUrl: updated.coverPhotoUrl,
+        photo1Url: updated.photo1Url,
+        photo2Url: updated.photo2Url,
+        photo3Url: updated.photo3Url,
+        photo4Url: updated.photo4Url,
         interests: updated.interests,
         occupation: updated.occupation,
         lookingFor: updated.lookingFor,
