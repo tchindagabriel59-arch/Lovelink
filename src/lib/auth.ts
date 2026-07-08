@@ -29,10 +29,21 @@ export async function getCurrentUserId(): Promise<number | null> {
   const token = cookieStore.get("auth_token")?.value;
   if (!token) return null;
   const payload = await verifyToken(token);
-  return payload?.userId ?? null;
+  if (!payload?.userId) return null;
+
+  // 🚫 Vérifier si l'utilisateur est banni
+  const [user] = await db
+    .select({ isBanned: users.isBanned })
+    .from(users)
+    .where(eq(users.id, payload.userId))
+    .limit(1);
+
+  if (!user || user.isBanned) return null;
+
+  return payload.userId;
 }
 
-// 🆕 Vérifier si l'utilisateur actuel est admin
+// Vérifier si l'utilisateur actuel est admin
 export async function isCurrentUserAdmin(): Promise<boolean> {
   const userId = await getCurrentUserId();
   if (!userId) return false;
@@ -46,7 +57,7 @@ export async function isCurrentUserAdmin(): Promise<boolean> {
   return user?.isAdmin === true;
 }
 
-// 🆕 Récupérer l'utilisateur admin actuel (ou null)
+// Récupérer l'utilisateur admin actuel (ou null)
 export async function getCurrentAdmin() {
   const userId = await getCurrentUserId();
   if (!userId) return null;
