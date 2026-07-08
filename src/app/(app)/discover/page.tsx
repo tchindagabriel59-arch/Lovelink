@@ -9,6 +9,8 @@ import {
   Sparkles,
   ChevronLeft,
   ChevronRight,
+  Flag,
+  AlertTriangle,
 } from "lucide-react";
 
 interface Profile {
@@ -31,9 +33,7 @@ function getAge(birthDate: string): number {
   const birth = new Date(birthDate);
   let age = today.getFullYear() - birth.getFullYear();
   const m = today.getMonth() - birth.getMonth();
-  if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) {
-    age--;
-  }
+  if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
   return age;
 }
 
@@ -46,12 +46,26 @@ const gradients = [
   "from-fuchsia-400 to-pink-500",
 ];
 
+const reportReasons = [
+  { value: "fake_profile", label: "Faux profil" },
+  { value: "inappropriate_content", label: "Contenu inapproprié" },
+  { value: "harassment", label: "Harcèlement ou insultes" },
+  { value: "spam", label: "Spam ou publicité" },
+  { value: "minor", label: "Utilisateur mineur (moins de 18 ans)" },
+  { value: "scam", label: "Arnaque ou escroquerie" },
+  { value: "other", label: "Autre" },
+];
+
 export default function DiscoverPage() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [matchPopup, setMatchPopup] = useState<{ firstName: string; photoUrl: string | null } | null>(null);
   const [animating, setAnimating] = useState<"left" | "right" | null>(null);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [selectedReason, setSelectedReason] = useState("");
+  const [reportDetails, setReportDetails] = useState("");
+  const [sendingReport, setSendingReport] = useState(false);
 
   useEffect(() => {
     fetchProfiles();
@@ -73,7 +87,6 @@ export default function DiscoverPage() {
 
   async function handleAction(isLike: boolean) {
     if (currentIndex >= profiles.length) return;
-
     const profile = profiles[currentIndex];
     setAnimating(isLike ? "right" : "left");
 
@@ -81,10 +94,7 @@ export default function DiscoverPage() {
       const res = await fetch("/api/like", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          toUserId: profile.id,
-          isLike,
-        }),
+        body: JSON.stringify({ toUserId: profile.id, isLike }),
       });
 
       if (res.ok) {
@@ -104,6 +114,43 @@ export default function DiscoverPage() {
       setCurrentIndex((i) => i + 1);
       setAnimating(null);
     }, 300);
+  }
+
+  async function handleReport() {
+    if (!selectedReason) {
+      alert("Veuillez sélectionner un motif");
+      return;
+    }
+    if (!currentProfile) return;
+
+    setSendingReport(true);
+    try {
+      const res = await fetch("/api/reports", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          reportedUserId: currentProfile.id,
+          reason: selectedReason,
+          details: reportDetails,
+        }),
+      });
+
+      if (res.ok) {
+        alert("✅ Signalement envoyé. Merci de nous aider à protéger la communauté !");
+        setShowReportModal(false);
+        setSelectedReason("");
+        setReportDetails("");
+        // Passer au profil suivant automatiquement
+        setCurrentIndex((i) => i + 1);
+      } else {
+        const data = await res.json();
+        alert("❌ " + (data.error || "Erreur lors du signalement"));
+      }
+    } catch {
+      alert("❌ Erreur de connexion");
+    } finally {
+      setSendingReport(false);
+    }
   }
 
   const currentProfile = profiles[currentIndex];
@@ -151,6 +198,79 @@ export default function DiscoverPage() {
 
   return (
     <div className="flex items-center justify-center min-h-[80vh] p-6">
+      {/* 🚨 MODAL DE SIGNALEMENT */}
+      {showReportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 animate-fade-in p-4">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
+                <AlertTriangle className="w-6 h-6 text-red-600" />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-slate-900">Signaler ce profil</h2>
+                <p className="text-sm text-slate-500">{currentProfile.firstName}</p>
+              </div>
+            </div>
+
+            <p className="text-sm text-slate-600 mb-4">
+              Aidez-nous à maintenir une communauté sûre. Pourquoi souhaitez-vous signaler ce profil ?
+            </p>
+
+            <div className="space-y-2 mb-4 max-h-60 overflow-y-auto">
+              {reportReasons.map((reason) => (
+                <label
+                  key={reason.value}
+                  className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition ${
+                    selectedReason === reason.value
+                      ? "border-red-400 bg-red-50"
+                      : "border-slate-200 hover:bg-slate-50"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="reason"
+                    value={reason.value}
+                    checked={selectedReason === reason.value}
+                    onChange={(e) => setSelectedReason(e.target.value)}
+                    className="accent-red-500"
+                  />
+                  <span className="text-sm font-medium text-slate-700">{reason.label}</span>
+                </label>
+              ))}
+            </div>
+
+            <textarea
+              value={reportDetails}
+              onChange={(e) => setReportDetails(e.target.value)}
+              placeholder="Détails supplémentaires (optionnel)..."
+              rows={3}
+              className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-red-400 focus:ring-2 focus:ring-red-100 transition text-sm resize-none mb-4"
+            />
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowReportModal(false);
+                  setSelectedReason("");
+                  setReportDetails("");
+                }}
+                disabled={sendingReport}
+                className="flex-1 px-4 py-3 border border-slate-200 rounded-xl font-semibold text-slate-700 hover:bg-slate-50 transition disabled:opacity-50"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={handleReport}
+                disabled={sendingReport || !selectedReason}
+                className="flex-1 px-4 py-3 bg-red-500 text-white rounded-xl font-semibold hover:bg-red-600 transition disabled:opacity-50"
+              >
+                {sendingReport ? "Envoi..." : "Signaler"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Match Popup */}
       {matchPopup && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 animate-fade-in">
@@ -201,11 +321,28 @@ export default function DiscoverPage() {
               : "opacity-100"
           }`}
         >
+          {/* 🚨 BOUTON SIGNALER (en haut à droite) */}
+          <button
+            onClick={() => setShowReportModal(true)}
+            className="absolute top-4 left-4 z-10 w-9 h-9 bg-white/90 backdrop-blur rounded-full flex items-center justify-center text-slate-600 hover:text-red-500 hover:bg-white shadow-md transition"
+            title="Signaler ce profil"
+          >
+            <Flag className="w-4 h-4" />
+          </button>
+
           {/* Photo / Avatar */}
           <div className={`h-80 bg-gradient-to-br ${gradient} flex items-center justify-center relative`}>
-            <span className="text-8xl font-bold text-white/80">
-              {currentProfile.firstName.charAt(0)}
-            </span>
+            {currentProfile.photoUrl ? (
+              <img
+                src={currentProfile.photoUrl}
+                alt={currentProfile.firstName}
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <span className="text-8xl font-bold text-white/80">
+                {currentProfile.firstName.charAt(0)}
+              </span>
+            )}
             {currentProfile.isOnline && (
               <div className="absolute top-4 right-4 flex items-center gap-2 bg-white/90 rounded-full px-3 py-1.5">
                 <div className="w-2.5 h-2.5 bg-green-500 rounded-full" />
@@ -255,7 +392,6 @@ export default function DiscoverPage() {
               </div>
             )}
 
-            {/* Counter */}
             <p className="text-center text-sm text-slate-400 mt-2">
               {currentIndex + 1} / {profiles.length}
             </p>
@@ -281,7 +417,6 @@ export default function DiscoverPage() {
           </button>
         </div>
 
-        {/* Navigation hint */}
         <div className="flex items-center justify-center gap-8 mt-6 text-slate-400 text-sm">
           <span className="flex items-center gap-1">
             <ChevronLeft className="w-4 h-4" /> Passer
