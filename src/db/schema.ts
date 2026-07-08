@@ -33,6 +33,9 @@ export const users = pgTable("users", {
   interests: text("interests").default(""),
   occupation: varchar("occupation", { length: 150 }).default(""),
   isOnline: boolean("is_online").default(false),
+  isAdmin: boolean("is_admin").default(false),
+  isBanned: boolean("is_banned").default(false),
+  isPremium: boolean("is_premium").default(false),
   lastSeen: timestamp("last_seen").defaultNow(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -62,7 +65,6 @@ export const messages = pgTable("messages", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-// 🆕 Table des signalements
 export const reports = pgTable("reports", {
   id: serial("id").primaryKey(),
   reporterUserId: integer("reporter_user_id").notNull().references(() => users.id),
