@@ -39,6 +39,16 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // 🚫 BLOQUER LES UTILISATEURS BANNIS
+    if (user.isBanned) {
+      return NextResponse.json(
+        {
+          error: "🚫 Votre compte a été suspendu pour non-respect des règles de la communauté. Pour toute réclamation, contactez lovelink237@gmail.com",
+        },
+        { status: 403 }
+      );
+    }
+
     await db
       .update(users)
       .set({ isOnline: true, lastSeen: new Date() })
