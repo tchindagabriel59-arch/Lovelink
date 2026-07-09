@@ -44,15 +44,15 @@ export default function HomePage() {
           <div className="animate-fade-in">
             <div className="inline-flex items-center gap-2 px-4 py-2 bg-rose-100 text-rose-600 rounded-full text-sm font-semibold mb-6">
               <Sparkles className="w-4 h-4" />
-              <span>#1 Plateforme de rencontre en France</span>
+              <span>Plateforme de rencontre internationale</span>
             </div>
             <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold leading-tight">
               Trouvez votre
               <span className="block gradient-text">âme sœur</span>
             </h1>
             <p className="mt-6 text-xl text-slate-600 leading-relaxed max-w-lg">
-              Rejoignez des milliers de célibataires qui ont trouvé l&apos;amour sur LoveLink.
-              Des rencontres authentiques, sécurisées et personnalisées.
+              Rejoignez notre communauté de célibataires qui cherchent l&apos;amour, l&apos;amitié
+              ou de nouvelles rencontres. Authentique, sécurisé et gratuit.
             </p>
             <div className="mt-8 flex flex-col sm:flex-row gap-4">
               <Link
@@ -87,7 +87,7 @@ export default function HomePage() {
                   ))}
                 </div>
                 <p className="text-sm text-slate-500 mt-0.5">
-                  <span className="font-semibold text-slate-700">+50 000</span> membres actifs
+                  <span className="font-semibold text-slate-700">Nouveaux membres</span> chaque jour
                 </p>
               </div>
             </div>
@@ -236,25 +236,6 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Stats */}
-      <section className="py-20 bg-gradient-to-r from-rose-500 to-purple-600 text-white">
-        <div className="max-w-7xl mx-auto px-6">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
-            {[
-              { number: "50K+", label: "Membres actifs" },
-              { number: "12K+", label: "Matchs par jour" },
-              { number: "5K+", label: "Couples formés" },
-              { number: "98%", label: "Taux de satisfaction" },
-            ].map((stat, i) => (
-              <div key={i}>
-                <p className="text-4xl md:text-5xl font-bold">{stat.number}</p>
-                <p className="mt-2 text-rose-100 font-medium">{stat.label}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
       {/* Testimonials */}
       <section id="testimonials" className="py-24 bg-white">
         <div className="max-w-7xl mx-auto px-6">
@@ -263,7 +244,7 @@ export default function HomePage() {
               Ils ont trouvé <span className="gradient-text">l&apos;amour</span>
             </h2>
             <p className="mt-4 text-lg text-slate-600">
-              Des milliers de couples se sont formés grâce à LoveLink
+              Découvrez les histoires de nos membres
             </p>
           </div>
 
@@ -271,7 +252,7 @@ export default function HomePage() {
             {[
               {
                 name: "Sophie & Marc",
-                text: "Nous nous sommes rencontrés sur LoveLink il y a 2 ans. Aujourd'hui, nous sommes mariés et nous attendons notre premier enfant !",
+                text: "Nous nous sommes rencontrés sur LoveLink et depuis, tout va bien ! Une plateforme sérieuse et bien pensée.",
                 rating: 5,
               },
               {
@@ -303,7 +284,7 @@ export default function HomePage() {
                   </div>
                   <div>
                     <p className="font-semibold">{testimonial.name}</p>
-                    <p className="text-sm text-slate-500">Membres depuis 2023</p>
+                    <p className="text-sm text-slate-500">Membres LoveLink</p>
                   </div>
                 </div>
               </div>
@@ -336,7 +317,7 @@ export default function HomePage() {
         </div>
       </section>
 
-           {/* Footer */}
+      {/* Footer */}
       <footer className="bg-gradient-to-br from-slate-900 via-purple-900 to-rose-900 text-slate-300 py-16">
         <div className="max-w-7xl mx-auto px-6">
           <div className="grid md:grid-cols-4 gap-8">
@@ -349,11 +330,11 @@ export default function HomePage() {
                 La plateforme de rencontre en ligne pour trouver l&apos;amour, l&apos;amitié
                 ou faire de belles connaissances partout dans le monde.
               </p>
-              <div className="mt-4 text-sm">
+              <div className="mt-4 text-sm space-y-1">
                 <p className="flex items-center gap-2">
                   📍 Dakar, Sénégal
                 </p>
-                <p className="flex items-center gap-2 mt-1">
+                <p className="flex items-center gap-2">
                   ✉️{" "}
                   <a
                     href="mailto:lovelink237@gmail.com"
