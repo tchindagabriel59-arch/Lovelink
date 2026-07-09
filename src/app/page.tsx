@@ -336,50 +336,99 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Footer */}
-      <footer className="bg-slate-900 text-slate-400 py-16">
+           {/* Footer */}
+      <footer className="bg-gradient-to-br from-slate-900 via-purple-900 to-rose-900 text-slate-300 py-16">
         <div className="max-w-7xl mx-auto px-6">
           <div className="grid md:grid-cols-4 gap-8">
-            <div>
+            <div className="md:col-span-2">
               <div className="flex items-center gap-2 mb-4">
-                <Heart className="w-6 h-6 text-rose-500 fill-rose-500" />
+                <Heart className="w-6 h-6 text-rose-400 fill-rose-400" />
                 <span className="text-xl font-bold text-white">LoveLink</span>
               </div>
-              <p className="text-sm leading-relaxed">
-                La plateforme de rencontre en ligne premium pour des connexions authentiques.
+              <p className="text-sm leading-relaxed max-w-md">
+                La plateforme de rencontre en ligne pour trouver l&apos;amour, l&apos;amitié
+                ou faire de belles connaissances partout dans le monde.
               </p>
+              <div className="mt-4 text-sm">
+                <p className="flex items-center gap-2">
+                  📍 Dakar, Sénégal
+                </p>
+                <p className="flex items-center gap-2 mt-1">
+                  ✉️{" "}
+                  <a
+                    href="mailto:lovelink237@gmail.com"
+                    className="hover:text-rose-400 transition"
+                  >
+                    lovelink237@gmail.com
+                  </a>
+                </p>
+              </div>
             </div>
+
             <div>
-              <h4 className="font-semibold text-white mb-4">Produit</h4>
+              <h4 className="font-semibold text-white mb-4">Navigation</h4>
               <ul className="space-y-2 text-sm">
-                <li><a href="#features" className="hover:text-rose-400 transition">Fonctionnalités</a></li>
-                <li><a href="#" className="hover:text-rose-400 transition">Tarifs</a></li>
-                <li><a href="#" className="hover:text-rose-400 transition">Sécurité</a></li>
+                <li>
+                  <Link href="/" className="hover:text-rose-400 transition">
+                    Accueil
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/register" className="hover:text-rose-400 transition">
+                    S&apos;inscrire
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/login" className="hover:text-rose-400 transition">
+                    Se connecter
+                  </Link>
+                </li>
+                <li>
+                  <a href="#features" className="hover:text-rose-400 transition">
+                    Fonctionnalités
+                  </a>
+                </li>
               </ul>
             </div>
+
             <div>
-              <h4 className="font-semibold text-white mb-4">Entreprise</h4>
+              <h4 className="font-semibold text-white mb-4">Légal</h4>
               <ul className="space-y-2 text-sm">
-                <li><a href="#" className="hover:text-rose-400 transition">À propos</a></li>
-                <li><a href="#" className="hover:text-rose-400 transition">Blog</a></li>
-                <li><a href="#" className="hover:text-rose-400 transition">Carrières</a></li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="font-semibold text-white mb-4">Support</h4>
-              <ul className="space-y-2 text-sm">
-                <li><a href="#" className="hover:text-rose-400 transition">Centre d&apos;aide</a></li>
-                <li><a href="#" className="hover:text-rose-400 transition">Contact</a></li>
-                <li><a href="#" className="hover:text-rose-400 transition">Confidentialité</a></li>
+                <li>
+                  <Link href="/cgu" className="hover:text-rose-400 transition">
+                    CGU
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/confidentialite" className="hover:text-rose-400 transition">
+                    Confidentialité
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/mentions-legales" className="hover:text-rose-400 transition">
+                    Mentions légales
+                  </Link>
+                </li>
+                <li>
+                  <a
+                    href="mailto:lovelink237@gmail.com"
+                    className="hover:text-rose-400 transition"
+                  >
+                    Contact
+                  </a>
+                </li>
               </ul>
             </div>
           </div>
-          <div className="mt-12 pt-8 border-t border-slate-800 flex flex-col md:flex-row justify-between items-center gap-4">
-            <p className="text-sm">&copy; 2024 LoveLink. Tous droits réservés.</p>
-            <div className="flex items-center gap-4">
-              <Users className="w-5 h-5 text-rose-400" />
-              <span className="text-sm">+50 000 membres actifs</span>
-            </div>
+
+          <div className="mt-12 pt-8 border-t border-white/10 flex flex-col md:flex-row justify-between items-center gap-4">
+            <p className="text-sm text-slate-400">
+              © {new Date().getFullYear()} LoveLink — Marketing de Boutique Numérique.
+              Tous droits réservés.
+            </p>
+            <p className="text-sm text-slate-400 flex items-center gap-1">
+              Fait avec <Heart className="w-4 h-4 text-rose-400 fill-rose-400 inline" /> au Sénégal
+            </p>
           </div>
         </div>
       </footer>
