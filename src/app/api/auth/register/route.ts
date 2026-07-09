@@ -4,6 +4,7 @@ import { users } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { createToken } from "@/lib/auth";
+import { sendWelcomeEmail } from "@/lib/emails";
 
 export async function POST(req: NextRequest) {
   try {
@@ -45,6 +46,11 @@ export async function POST(req: NextRequest) {
       .returning();
 
     const token = await createToken(newUser.id);
+
+    // 📧 Envoyer l'email de bienvenue (en asynchrone, ne bloque pas l'inscription)
+    sendWelcomeEmail(email, firstName).catch((err) => {
+      console.error("Erreur envoi email bienvenue:", err);
+    });
 
     const response = NextResponse.json({
       user: {
