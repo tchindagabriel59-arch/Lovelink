@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import {
   Heart,
   X,
@@ -11,6 +11,8 @@ import {
   ChevronRight,
   Flag,
   AlertTriangle,
+  Crown,
+  MessageCircle,
 } from "lucide-react";
 
 interface Profile {
@@ -23,9 +25,15 @@ interface Profile {
   city: string | null;
   country: string | null;
   photoUrl: string | null;
+  coverPhotoUrl: string | null;
+  photo1Url: string | null;
+  photo2Url: string | null;
+  photo3Url: string | null;
+  photo4Url: string | null;
   interests: string | null;
   occupation: string | null;
   isOnline: boolean;
+  isPremium: boolean;
 }
 
 function getAge(birthDate: string): number {
@@ -56,9 +64,22 @@ const reportReasons = [
   { value: "other", label: "Autre" },
 ];
 
+// Récupérer toutes les photos disponibles d'un profil
+function getAllPhotos(profile: Profile): string[] {
+  const photos = [
+    profile.photoUrl,
+    profile.photo1Url,
+    profile.photo2Url,
+    profile.photo3Url,
+    profile.photo4Url,
+  ].filter((p): p is string => !!p && p.trim() !== "");
+  return photos;
+}
+
 export default function DiscoverPage() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [matchPopup, setMatchPopup] = useState<{ firstName: string; photoUrl: string | null } | null>(null);
   const [animating, setAnimating] = useState<"left" | "right" | null>(null);
@@ -66,10 +87,17 @@ export default function DiscoverPage() {
   const [selectedReason, setSelectedReason] = useState("");
   const [reportDetails, setReportDetails] = useState("");
   const [sendingReport, setSendingReport] = useState(false);
+  const [showFullBio, setShowFullBio] = useState(false);
 
   useEffect(() => {
     fetchProfiles();
   }, []);
+
+  // Reset photo index quand on change de profil
+  useEffect(() => {
+    setCurrentPhotoIndex(0);
+    setShowFullBio(false);
+  }, [currentIndex]);
 
   async function fetchProfiles() {
     try {
@@ -85,7 +113,7 @@ export default function DiscoverPage() {
     }
   }
 
-  async function handleAction(isLike: boolean) {
+  const handleAction = useCallback(async (isLike: boolean) => {
     if (currentIndex >= profiles.length) return;
     const profile = profiles[currentIndex];
     setAnimating(isLike ? "right" : "left");
@@ -114,7 +142,7 @@ export default function DiscoverPage() {
       setCurrentIndex((i) => i + 1);
       setAnimating(null);
     }, 300);
-  }
+  }, [currentIndex, profiles]);
 
   async function handleReport() {
     if (!selectedReason) {
@@ -140,7 +168,6 @@ export default function DiscoverPage() {
         setShowReportModal(false);
         setSelectedReason("");
         setReportDetails("");
-        // Passer au profil suivant automatiquement
         setCurrentIndex((i) => i + 1);
       } else {
         const data = await res.json();
@@ -154,12 +181,39 @@ export default function DiscoverPage() {
   }
 
   const currentProfile = profiles[currentIndex];
+  const photos = currentProfile ? getAllPhotos(currentProfile) : [];
+  const hasPhotos = photos.length > 0;
+
+  // Navigation entre photos
+  const nextPhoto = () => {
+    if (currentPhotoIndex < photos.length - 1) {
+      setCurrentPhotoIndex((i) => i + 1);
+    }
+  };
+
+  const prevPhoto = () => {
+    if (currentPhotoIndex > 0) {
+      setCurrentPhotoIndex((i) => i - 1);
+    }
+  };
+
+  // Tap sur la photo (gauche/droite pour changer)
+  const handlePhotoTap = (e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const width = rect.width;
+    if (x < width / 2) {
+      prevPhoto();
+    } else {
+      nextPhoto();
+    }
+  };
 
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[80vh]">
         <div className="text-center">
-          <Heart className="w-12 h-12 text-rose-400 animate-pulse-heart mx-auto" />
+          <Heart className="w-12 h-12 text-rose-400 animate-pulse mx-auto" />
           <p className="mt-4 text-slate-600">Recherche de profils...</p>
         </div>
       </div>
@@ -197,10 +251,10 @@ export default function DiscoverPage() {
   const gradient = gradients[currentProfile.id % gradients.length];
 
   return (
-    <div className="flex items-center justify-center min-h-[80vh] p-6">
+    <div className="flex items-center justify-center min-h-[calc(100vh-100px)] p-4">
       {/* 🚨 MODAL DE SIGNALEMENT */}
       {showReportModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 animate-fade-in p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
           <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
@@ -213,7 +267,7 @@ export default function DiscoverPage() {
             </div>
 
             <p className="text-sm text-slate-600 mb-4">
-              Aidez-nous à maintenir une communauté sûre. Pourquoi souhaitez-vous signaler ce profil ?
+              Aidez-nous à maintenir une communauté sûre.
             </p>
 
             <div className="space-y-2 mb-4 max-h-60 overflow-y-auto">
@@ -271,23 +325,31 @@ export default function DiscoverPage() {
         </div>
       )}
 
-      {/* Match Popup */}
+      {/* 💕 MATCH POPUP */}
       {matchPopup && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 animate-fade-in">
-          <div className="bg-white rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl animate-slide-up mx-4">
-            <div className="relative w-24 h-24 mx-auto mb-4">
-              <div className={`w-24 h-24 rounded-full bg-gradient-to-br ${gradient} flex items-center justify-center text-white text-3xl font-bold`}>
-                {matchPopup.firstName.charAt(0)}
-              </div>
-              <div className="absolute -bottom-1 -right-1 w-10 h-10 bg-gradient-to-r from-rose-500 to-pink-500 rounded-full flex items-center justify-center">
-                <Heart className="w-5 h-5 text-white fill-white" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
+          <div className="bg-white rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl mx-4">
+            <div className="relative w-32 h-32 mx-auto mb-4">
+              {matchPopup.photoUrl ? (
+                <img
+                  src={matchPopup.photoUrl}
+                  alt={matchPopup.firstName}
+                  className="w-32 h-32 rounded-full object-cover border-4 border-rose-500"
+                />
+              ) : (
+                <div className={`w-32 h-32 rounded-full bg-gradient-to-br ${gradient} flex items-center justify-center text-white text-4xl font-bold border-4 border-rose-500`}>
+                  {matchPopup.firstName.charAt(0)}
+                </div>
+              )}
+              <div className="absolute -bottom-2 -right-2 w-12 h-12 bg-gradient-to-r from-rose-500 to-pink-500 rounded-full flex items-center justify-center animate-pulse">
+                <Heart className="w-6 h-6 text-white fill-white" />
               </div>
             </div>
-            <h2 className="text-2xl font-bold gradient-text mb-2">
+            <h2 className="text-3xl font-bold gradient-text mb-2">
               C&apos;est un match ! 🎉
             </h2>
             <p className="text-slate-600 mb-6">
-              Vous et {matchPopup.firstName} vous êtes mutuellement likés !
+              Vous et <strong>{matchPopup.firstName}</strong> vous êtes mutuellement likés !
             </p>
             <div className="flex gap-3">
               <button
@@ -303,7 +365,8 @@ export default function DiscoverPage() {
                 }}
                 className="flex-1 px-4 py-3 bg-gradient-to-r from-rose-500 to-purple-600 text-white rounded-xl font-semibold hover:shadow-lg transition"
               >
-                Envoyer un message
+                <MessageCircle className="w-4 h-4 inline mr-1" />
+                Message
               </button>
             </div>
           </div>
@@ -311,80 +374,160 @@ export default function DiscoverPage() {
       )}
 
       <div className="w-full max-w-md">
-        {/* Profile Card */}
+        {/* CARTE PROFIL STYLE TINDER */}
         <div
-          className={`relative bg-white rounded-3xl shadow-xl overflow-hidden transition-all duration-300 ${
+          className={`relative bg-white rounded-3xl shadow-2xl overflow-hidden transition-all duration-300 ${
             animating === "left"
-              ? "opacity-0 -translate-x-20 rotate-[-5deg]"
+              ? "opacity-0 -translate-x-20 -rotate-12"
               : animating === "right"
-              ? "opacity-0 translate-x-20 rotate-[5deg]"
+              ? "opacity-0 translate-x-20 rotate-12"
               : "opacity-100"
           }`}
+          style={{ minHeight: "600px" }}
         >
-          {/* 🚨 BOUTON SIGNALER (en haut à droite) */}
-          <button
-            onClick={() => setShowReportModal(true)}
-            className="absolute top-4 left-4 z-10 w-9 h-9 bg-white/90 backdrop-blur rounded-full flex items-center justify-center text-slate-600 hover:text-red-500 hover:bg-white shadow-md transition"
-            title="Signaler ce profil"
+          {/* Zone photo */}
+          <div
+            onClick={handlePhotoTap}
+            className={`relative h-[500px] bg-gradient-to-br ${gradient} cursor-pointer select-none`}
           >
-            <Flag className="w-4 h-4" />
-          </button>
-
-          {/* Photo / Avatar */}
-          <div className={`h-80 bg-gradient-to-br ${gradient} flex items-center justify-center relative`}>
-            {currentProfile.photoUrl ? (
+            {/* Photo actuelle */}
+            {hasPhotos ? (
               <img
-                src={currentProfile.photoUrl}
+                src={photos[currentPhotoIndex]}
                 alt={currentProfile.firstName}
                 className="w-full h-full object-cover"
               />
             ) : (
-              <span className="text-8xl font-bold text-white/80">
-                {currentProfile.firstName.charAt(0)}
-              </span>
+              <div className="w-full h-full flex items-center justify-center">
+                <span className="text-9xl font-bold text-white/80">
+                  {currentProfile.firstName.charAt(0)}
+                </span>
+              </div>
             )}
-            {currentProfile.isOnline && (
-              <div className="absolute top-4 right-4 flex items-center gap-2 bg-white/90 rounded-full px-3 py-1.5">
-                <div className="w-2.5 h-2.5 bg-green-500 rounded-full" />
+
+            {/* Overlay dégradé bas */}
+            <div className="absolute bottom-0 left-0 right-0 h-64 bg-gradient-to-t from-black/90 via-black/50 to-transparent pointer-events-none" />
+
+            {/* Barres de progression (photos) */}
+            {photos.length > 1 && (
+              <div className="absolute top-3 left-3 right-3 flex gap-1 z-10">
+                {photos.map((_, i) => (
+                  <div
+                    key={i}
+                    className={`flex-1 h-1 rounded-full transition-all ${
+                      i === currentPhotoIndex ? "bg-white" : "bg-white/40"
+                    }`}
+                  />
+                ))}
+              </div>
+            )}
+
+            {/* Bouton Signaler (haut gauche) */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowReportModal(true);
+              }}
+              className="absolute top-7 left-4 w-9 h-9 bg-white/90 backdrop-blur rounded-full flex items-center justify-center text-slate-600 hover:text-red-500 hover:bg-white shadow-md transition z-10"
+              title="Signaler ce profil"
+            >
+              <Flag className="w-4 h-4" />
+            </button>
+
+            {/* Badge Premium (haut droite) */}
+            {currentProfile.isPremium && (
+              <div className="absolute top-7 right-4 z-10">
+                <div className="flex items-center gap-1.5 bg-gradient-to-r from-amber-400 to-orange-500 rounded-full px-3 py-1.5 shadow-lg">
+                  <Crown className="w-3.5 h-3.5 text-white fill-white" />
+                  <span className="text-xs font-bold text-white">PREMIUM</span>
+                </div>
+              </div>
+            )}
+
+            {/* Badge En ligne */}
+            {currentProfile.isOnline && !currentProfile.isPremium && (
+              <div className="absolute top-7 right-4 flex items-center gap-2 bg-white/90 backdrop-blur rounded-full px-3 py-1.5 z-10">
+                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
                 <span className="text-xs font-medium text-slate-700">En ligne</span>
               </div>
             )}
-            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/50 to-transparent h-24" />
-            <div className="absolute bottom-4 left-4 text-white">
-              <h2 className="text-2xl font-bold">
-                {currentProfile.firstName}, {getAge(currentProfile.birthDate)} ans
-              </h2>
+
+            {/* Flèches navigation photos (visibles au hover sur desktop) */}
+            {photos.length > 1 && (
+              <>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    prevPhoto();
+                  }}
+                  disabled={currentPhotoIndex === 0}
+                  className="absolute left-2 top-1/2 -translate-y-1/2 w-10 h-10 bg-white/80 hover:bg-white rounded-full flex items-center justify-center opacity-0 hover:opacity-100 transition disabled:opacity-0 z-10"
+                >
+                  <ChevronLeft className="w-6 h-6 text-slate-700" />
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    nextPhoto();
+                  }}
+                  disabled={currentPhotoIndex === photos.length - 1}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 bg-white/80 hover:bg-white rounded-full flex items-center justify-center opacity-0 hover:opacity-100 transition disabled:opacity-0 z-10"
+                >
+                  <ChevronRight className="w-6 h-6 text-slate-700" />
+                </button>
+              </>
+            )}
+
+            {/* Info nom/age/ville (bas de la photo) */}
+            <div className="absolute bottom-4 left-4 right-4 text-white z-10 pointer-events-none">
+              <div className="flex items-baseline gap-2 flex-wrap">
+                <h2 className="text-3xl font-bold drop-shadow-lg">
+                  {currentProfile.firstName}
+                </h2>
+                <span className="text-2xl font-light drop-shadow-lg">
+                  {getAge(currentProfile.birthDate)}
+                </span>
+              </div>
               {currentProfile.city && (
-                <p className="flex items-center gap-1 text-white/90 text-sm mt-1">
+                <p className="flex items-center gap-1 text-white/95 text-sm mt-1 drop-shadow">
                   <MapPin className="w-3.5 h-3.5" />
                   {currentProfile.city}
                   {currentProfile.country ? `, ${currentProfile.country}` : ""}
                 </p>
               )}
+              {currentProfile.occupation && (
+                <p className="flex items-center gap-1 text-white/90 text-sm mt-0.5 drop-shadow">
+                  <Briefcase className="w-3.5 h-3.5" />
+                  {currentProfile.occupation}
+                </p>
+              )}
             </div>
           </div>
 
-          {/* Info */}
-          <div className="p-6">
-            {currentProfile.occupation && (
-              <p className="flex items-center gap-2 text-slate-600 mb-3">
-                <Briefcase className="w-4 h-4 text-slate-400" />
-                {currentProfile.occupation}
-              </p>
-            )}
-
+          {/* Info section (bio + intérêts) */}
+          <div className="p-5">
             {currentProfile.bio && (
-              <p className="text-slate-700 leading-relaxed mb-4">
-                {currentProfile.bio}
-              </p>
+              <div className="mb-4">
+                <p className={`text-slate-700 leading-relaxed text-sm ${showFullBio ? "" : "line-clamp-3"}`}>
+                  {currentProfile.bio}
+                </p>
+                {currentProfile.bio.length > 150 && (
+                  <button
+                    onClick={() => setShowFullBio(!showFullBio)}
+                    className="text-xs text-rose-500 font-medium mt-1"
+                  >
+                    {showFullBio ? "Voir moins" : "Voir plus"}
+                  </button>
+                )}
+              </div>
             )}
 
             {currentProfile.interests && (
-              <div className="flex flex-wrap gap-2 mb-4">
-                {currentProfile.interests.split(",").map((interest, i) => (
+              <div className="flex flex-wrap gap-1.5">
+                {currentProfile.interests.split(",").slice(0, 6).map((interest, i) => (
                   <span
                     key={i}
-                    className="px-3 py-1 bg-rose-50 text-rose-600 rounded-full text-sm font-medium"
+                    className="px-2.5 py-1 bg-rose-50 text-rose-600 rounded-full text-xs font-medium"
                   >
                     {interest.trim()}
                   </span>
@@ -392,20 +535,22 @@ export default function DiscoverPage() {
               </div>
             )}
 
-            <p className="text-center text-sm text-slate-400 mt-2">
+            {/* Compteur */}
+            <p className="text-center text-xs text-slate-400 mt-4">
               {currentIndex + 1} / {profiles.length}
+              {photos.length > 1 && ` • 📸 ${currentPhotoIndex + 1}/${photos.length}`}
             </p>
           </div>
         </div>
 
-        {/* Action Buttons */}
-        <div className="flex items-center justify-center gap-6 mt-8">
+        {/* BOUTONS ACTIONS */}
+        <div className="flex items-center justify-center gap-6 mt-6">
           <button
             onClick={() => handleAction(false)}
             className="w-16 h-16 bg-white rounded-full shadow-lg flex items-center justify-center text-slate-400 hover:text-red-500 hover:shadow-xl hover:scale-110 transition-all duration-200 border border-slate-100"
             title="Passer"
           >
-            <X className="w-8 h-8" />
+            <X className="w-8 h-8" strokeWidth={2.5} />
           </button>
 
           <button
@@ -417,14 +562,12 @@ export default function DiscoverPage() {
           </button>
         </div>
 
-        <div className="flex items-center justify-center gap-8 mt-6 text-slate-400 text-sm">
-          <span className="flex items-center gap-1">
-            <ChevronLeft className="w-4 h-4" /> Passer
-          </span>
-          <span className="flex items-center gap-1">
-            Liker <ChevronRight className="w-4 h-4" />
-          </span>
-        </div>
+        {/* Instruction navigation photos */}
+        {photos.length > 1 && (
+          <p className="text-center text-xs text-slate-400 mt-4">
+            💡 Tap à gauche/droite de la photo pour naviguer
+          </p>
+        )}
       </div>
     </div>
   );
