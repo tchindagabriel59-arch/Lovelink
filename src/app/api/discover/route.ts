@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { users, likes } from "@/db/schema";
-import { eq, ne, notInArray, sql } from "drizzle-orm";
+import { eq, notInArray, sql, and } from "drizzle-orm";
 import { getCurrentUserId } from "@/lib/auth";
 
 export async function GET() {
@@ -31,13 +31,24 @@ export async function GET() {
         city: users.city,
         country: users.country,
         photoUrl: users.photoUrl,
+        coverPhotoUrl: users.coverPhotoUrl,
+        photo1Url: users.photo1Url,
+        photo2Url: users.photo2Url,
+        photo3Url: users.photo3Url,
+        photo4Url: users.photo4Url,
         interests: users.interests,
         occupation: users.occupation,
         isOnline: users.isOnline,
         lastSeen: users.lastSeen,
+        isPremium: users.isPremium,
       })
       .from(users)
-      .where(notInArray(users.id, excludeIds))
+      .where(
+        and(
+          notInArray(users.id, excludeIds),
+          eq(users.isBanned, false)
+        )
+      )
       .orderBy(sql`RANDOM()`)
       .limit(20);
 
