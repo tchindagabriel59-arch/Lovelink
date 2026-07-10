@@ -4,6 +4,7 @@ import { likes, matches, users } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
 import { getCurrentUserId } from "@/lib/auth";
 import { sendMatchEmail } from "@/lib/emails";
+import { createNotification } from "@/lib/notifications";
 
 export async function POST(req: NextRequest) {
   try {
@@ -22,7 +23,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Record the like/dislike/superlike
     await db.insert(likes).values({
       fromUserId: userId,
       toUserId,
@@ -33,7 +33,16 @@ export async function POST(req: NextRequest) {
     let isMatch = false;
     let matchedUser = null;
 
-    // Check if there's a mutual like
+    // 🔔 Créer une notification pour la personne likée (si c'est un like)
+    if (isLike !== false) {
+      await createNotification({
+        userId: toUserId,
+        type: isSuperLike ? "super_like" : "like",
+        fromUserId: userId,
+        content: isSuperLike ? "t'a super liké !" : "t'a liké !",
+      });
+    }
+
     if (isLike !== false) {
       const [mutual] = await db
         .select()
@@ -48,7 +57,6 @@ export async function POST(req: NextRequest) {
         .limit(1);
 
       if (mutual) {
-        // Create match
         const user1 = Math.min(userId, toUserId);
         const user2 = Math.max(userId, toUserId);
 
@@ -65,8 +73,8 @@ export async function POST(req: NextRequest) {
           });
           isMatch = true;
 
-          // Récupérer les infos des 2 utilisateurs pour les emails
-          const bothUsers = await db
+          // Récupérer les infos des 2 utilisateurs
+          const [currentUser] = await db
             .select({
               id: users.id,
               email: users.email,
@@ -74,9 +82,8 @@ export async function POST(req: NextRequest) {
               photoUrl: users.photoUrl,
             })
             .from(users)
-            .where(eq(users.id, userId));
-
-          const [currentUser] = bothUsers;
+            .where(eq(users.id, userId))
+            .limit(1);
 
           const [otherUser] = await db
             .select({
@@ -91,8 +98,22 @@ export async function POST(req: NextRequest) {
 
           matchedUser = otherUser;
 
-          // 📧 Envoyer emails de notification aux 2 utilisateurs
+          // 🔔 Créer notifications de match pour les 2 utilisateurs
           if (currentUser && otherUser) {
+            await createNotification({
+              userId: currentUser.id,
+              type: "match",
+              fromUserId: otherUser.id,
+              content: `Nouveau match avec ${otherUser.firstName} !`,
+            });
+            await createNotification({
+              userId: otherUser.id,
+              type: "match",
+              fromUserId: currentUser.id,
+              content: `Nouveau match avec ${currentUser.firstName} !`,
+            });
+
+            // 📧 Emails
             sendMatchEmail(currentUser.email, currentUser.firstName, otherUser.firstName).catch(
               (err) => console.error("Erreur email match user1:", err)
             );
@@ -104,7 +125,6 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Si pas de match mais on n'a pas encore les infos du user matché
     if (!matchedUser && isMatch) {
       const [mu] = await db
         .select({
@@ -121,9 +141,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true, isMatch, matchedUser });
   } catch (error) {
     console.error("Like error:", error);
-    return NextResponse.json(
-      { error: "Erreur serveur" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
   }
 }
