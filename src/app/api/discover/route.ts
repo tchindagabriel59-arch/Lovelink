@@ -1,17 +1,16 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { users, likes } from "@/db/schema";
-import { eq, notInArray, sql, and, gte, lte } from "drizzle-orm";
+import { eq, notInArray, sql, and, gte, lte, inArray } from "drizzle-orm";
 import { getCurrentUserId } from "@/lib/auth";
 
-// Calculer la distance entre 2 points GPS (formule de Haversine) en km
 function calculateDistance(
   lat1: number,
   lon1: number,
   lat2: number,
   lon2: number
 ): number {
-  const R = 6371; // Rayon de la Terre en km
+  const R = 6371;
   const dLat = ((lat2 - lat1) * Math.PI) / 180;
   const dLon = ((lon2 - lon1) * Math.PI) / 180;
   const a =
@@ -31,7 +30,6 @@ export async function GET() {
       return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
     }
 
-    // Récupérer les préférences ET la position de l'utilisateur actuel
     const [currentUser] = await db
       .select({
         prefGender: users.prefGender,
@@ -54,7 +52,6 @@ export async function GET() {
     const userLat = currentUser?.latitude;
     const userLon = currentUser?.longitude;
 
-    // Get IDs already liked/disliked
     const alreadyActed = await db
       .select({ toUserId: likes.toUserId })
       .from(likes)
@@ -63,7 +60,31 @@ export async function GET() {
     const excludeIds = alreadyActed.map((r) => r.toUserId);
     excludeIds.push(userId);
 
-    // Dates limites pour l'âge
+    // 🆕 Récupérer les IDs de ceux qui m'ont SUPER liké
+    const superLikersReceived = await db
+      .select({ fromUserId: likes.fromUserId })
+      .from(likes)
+      .where(
+        and(
+          eq(likes.toUserId, userId),
+          eq(likes.isLike, true),
+          eq(likes.isSuperLike, true)
+        )
+      );
+    const superLikerIds = superLikersReceived.map((s) => s.fromUserId);
+
+    // 🆕 Récupérer les IDs de ceux qui m'ont LIKÉ (normal)
+    const likersReceived = await db
+      .select({ fromUserId: likes.fromUserId })
+      .from(likes)
+      .where(
+        and(
+          eq(likes.toUserId, userId),
+          eq(likes.isLike, true)
+        )
+      );
+    const likerIds = likersReceived.map((l) => l.fromUserId);
+
     const now = new Date();
     const maxBirthDate = new Date(
       now.getFullYear() - prefAgeMin,
@@ -122,7 +143,6 @@ export async function GET() {
       .orderBy(sql`RANDOM()`)
       .limit(50);
 
-    // Calculer distance + filtrer si l'utilisateur a une position
     let profilesWithDistance = allProfiles.map((p) => {
       let distance: number | null = null;
       if (
@@ -135,17 +155,29 @@ export async function GET() {
           calculateDistance(userLat, userLon, p.latitude, p.longitude)
         );
       }
-      return { ...p, distance };
+      return {
+        ...p,
+        distance,
+        hasLikedMe: likerIds.includes(p.id),
+        hasSuperLikedMe: superLikerIds.includes(p.id),
+      };
     });
 
-    // Filtrer par distance max (si applicable)
     if (userLat != null && userLon != null && prefMaxDistance < 999999) {
       profilesWithDistance = profilesWithDistance.filter(
         (p) => p.distance === null || p.distance <= prefMaxDistance
       );
     }
 
-    // Limiter à 20 profils
+    // 🆕 Trier : Super Likes en premier, puis Likes, puis reste
+    profilesWithDistance.sort((a, b) => {
+      if (a.hasSuperLikedMe && !b.hasSuperLikedMe) return -1;
+      if (!a.hasSuperLikedMe && b.hasSuperLikedMe) return 1;
+      if (a.hasLikedMe && !b.hasLikedMe) return -1;
+      if (!a.hasLikedMe && b.hasLikedMe) return 1;
+      return 0;
+    });
+
     const profiles = profilesWithDistance.slice(0, 20);
 
     return NextResponse.json({ profiles });
