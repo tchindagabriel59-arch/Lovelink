@@ -17,6 +17,9 @@ export async function GET() {
         prefAgeMin: users.prefAgeMin,
         prefAgeMax: users.prefAgeMax,
         prefLookingFor: users.prefLookingFor,
+        prefMaxDistance: users.prefMaxDistance,
+        latitude: users.latitude,
+        longitude: users.longitude,
       })
       .from(users)
       .where(eq(users.id, userId))
@@ -28,6 +31,8 @@ export async function GET() {
         ageMin: user?.prefAgeMin || 18,
         ageMax: user?.prefAgeMax || 99,
         lookingFor: user?.prefLookingFor || "all",
+        maxDistance: user?.prefMaxDistance || 999999,
+        hasLocation: user?.latitude != null && user?.longitude != null,
       },
     });
   } catch (error) {
@@ -44,9 +49,8 @@ export async function PUT(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { gender, ageMin, ageMax, lookingFor } = body;
+    const { gender, ageMin, ageMax, lookingFor, maxDistance } = body;
 
-    // Validation
     if (ageMin && (ageMin < 18 || ageMin > 99)) {
       return NextResponse.json(
         { error: "L'âge minimum doit être entre 18 et 99" },
@@ -75,6 +79,7 @@ export async function PUT(req: NextRequest) {
         prefAgeMin: ageMin,
         prefAgeMax: ageMax,
         prefLookingFor: lookingFor,
+        prefMaxDistance: maxDistance,
         updatedAt: new Date(),
       })
       .where(eq(users.id, userId));
