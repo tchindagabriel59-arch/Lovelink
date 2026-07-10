@@ -37,6 +37,8 @@ interface Profile {
   isOnline: boolean;
   isPremium: boolean;
   distance: number | null;
+  hasLikedMe: boolean;
+  hasSuperLikedMe: boolean;
 }
 
 function getAge(birthDate: string): number {
@@ -428,22 +430,48 @@ export default function DiscoverPage() {
       )}
 
       <div className="w-full max-w-md">
-        <div
-          className={`relative bg-white rounded-3xl shadow-2xl overflow-hidden transition-all duration-300 ${
-            animating === "left"
-              ? "opacity-0 -translate-x-20 -rotate-12"
-              : animating === "right"
-              ? "opacity-0 translate-x-20 rotate-12"
-              : animating === "up"
-              ? "opacity-0 -translate-y-20"
-              : "opacity-100"
-          }`}
-          style={{ minHeight: "600px" }}
-        >
+  <div
+  className={`relative bg-white rounded-3xl shadow-2xl overflow-hidden transition-all duration-300 ${
+    currentProfile.hasSuperLikedMe
+      ? "ring-4 ring-blue-400 ring-offset-2 shadow-blue-500/30"
+      : currentProfile.hasLikedMe
+      ? "ring-2 ring-rose-400 ring-offset-2"
+      : ""
+  } ${
+    animating === "left"
+      ? "opacity-0 -translate-x-20 -rotate-12"
+      : animating === "right"
+      ? "opacity-0 translate-x-20 rotate-12"
+      : animating === "up"
+      ? "opacity-0 -translate-y-20"
+      : "opacity-100"
+  }`}
+  style={{ minHeight: "600px" }}
+>
           <div
             onClick={handlePhotoTap}
             className={`relative h-[500px] bg-gradient-to-br ${gradient} cursor-pointer select-none`}
           >
+              {/* 🆕 BADGE SUPER LIKE REÇU */}
+  {currentProfile.hasSuperLikedMe && (
+    <div className="absolute top-16 left-1/2 -translate-x-1/2 z-20 animate-pulse">
+      <div className="bg-gradient-to-r from-blue-500 to-cyan-500 text-white px-4 py-2 rounded-full shadow-2xl flex items-center gap-2 border-2 border-white">
+        <Star className="w-4 h-4 fill-white" />
+        <span className="text-sm font-bold">T&apos;A SUPER LIKÉ !</span>
+        <Star className="w-4 h-4 fill-white" />
+      </div>
+    </div>
+  )}
+
+  {/* 🆕 BADGE LIKE REÇU (normal) */}
+  {currentProfile.hasLikedMe && !currentProfile.hasSuperLikedMe && (
+    <div className="absolute top-16 left-1/2 -translate-x-1/2 z-20">
+      <div className="bg-gradient-to-r from-rose-500 to-pink-500 text-white px-4 py-2 rounded-full shadow-xl flex items-center gap-2 border-2 border-white">
+        <Heart className="w-4 h-4 fill-white" />
+        <span className="text-sm font-bold">T&apos;A LIKÉ !</span>
+      </div>
+    </div>
+  )}
             {hasPhotos ? (
               <img
                 src={photos[currentPhotoIndex]}
