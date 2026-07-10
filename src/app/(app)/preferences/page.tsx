@@ -386,6 +386,24 @@ export default function PreferencesPage() {
             </p>
           </div>
         )}
+        {/* Lien vers utilisateurs bloqués */}
+<div className="bg-white rounded-2xl p-6 border border-slate-100">
+  <Link
+    href="/bloques"
+    className="flex items-center justify-between hover:bg-slate-50 rounded-xl p-3 transition -m-3"
+  >
+    <div className="flex items-center gap-3">
+      <div className="w-10 h-10 bg-red-50 rounded-xl flex items-center justify-center">
+        <span className="text-xl">🚫</span>
+      </div>
+      <div>
+        <p className="font-semibold text-slate-800">Personnes bloquées</p>
+        <p className="text-sm text-slate-500">Gérer ta liste de blocage</p>
+      </div>
+    </div>
+    <span className="text-slate-400">→</span>
+  </Link>
+</div>
       </div>
     </div>
   );
