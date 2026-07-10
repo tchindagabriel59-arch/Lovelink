@@ -83,3 +83,9 @@ export const reports = pgTable("reports", {
   status: varchar("status", { length: 20 }).default("pending"),
   createdAt: timestamp("created_at").defaultNow(),
 });
+export const blocks = pgTable("blocks", {
+  id: serial("id").primaryKey(),
+  blockerUserId: integer("blocker_user_id").notNull().references(() => users.id),
+  blockedUserId: integer("blocked_user_id").notNull().references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+});
