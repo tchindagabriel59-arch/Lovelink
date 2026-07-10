@@ -35,6 +35,7 @@ interface Profile {
   occupation: string | null;
   isOnline: boolean;
   isPremium: boolean;
+  distance: number | null;
 }
 
 function getAge(birthDate: string): number {
@@ -510,13 +511,18 @@ export default function DiscoverPage() {
                   {getAge(currentProfile.birthDate)}
                 </span>
               </div>
-              {currentProfile.city && (
-                <p className="flex items-center gap-1 text-white/95 text-sm mt-1 drop-shadow">
-                  <MapPin className="w-3.5 h-3.5" />
-                  {currentProfile.city}
-                  {currentProfile.country ? `, ${currentProfile.country}` : ""}
-                </p>
-              )}
+           {currentProfile.city && (
+  <p className="flex items-center gap-1 text-white/95 text-sm mt-1 drop-shadow">
+    <MapPin className="w-3.5 h-3.5" />
+    {currentProfile.city}
+    {currentProfile.country ? `, ${currentProfile.country}` : ""}
+    {currentProfile.distance !== null && currentProfile.distance !== undefined && (
+      <span className="ml-2 px-2 py-0.5 bg-white/20 rounded-full text-xs font-bold">
+        {currentProfile.distance === 0 ? "< 1 km" : `${currentProfile.distance} km`}
+      </span>
+    )}
+  </p>
+)}
               {currentProfile.occupation && (
                 <p className="flex items-center gap-1 text-white/90 text-sm mt-0.5 drop-shadow">
                   <Briefcase className="w-3.5 h-3.5" />
