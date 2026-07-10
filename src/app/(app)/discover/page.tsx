@@ -15,6 +15,7 @@ import {
   MessageCircle,
   Star,
   RotateCcw,
+  Ban,
 } from "lucide-react";
 
 interface Profile {
@@ -209,6 +210,28 @@ export default function DiscoverPage() {
       alert("Veuillez sélectionner un motif");
       return;
     }
+      async function handleBlock() {
+    if (!currentProfile) return;
+    if (!confirm(`Bloquer ${currentProfile.firstName} ?\n\nCette personne ne verra plus ton profil et vous ne pourrez plus vous contacter.`)) return;
+
+    try {
+      const res = await fetch("/api/blocks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ blockedUserId: currentProfile.id }),
+      });
+
+      if (res.ok) {
+        alert("✅ Utilisateur bloqué");
+        setCurrentIndex((i) => i + 1);
+      } else {
+        const data = await res.json();
+        alert("❌ " + (data.error || "Erreur"));
+      }
+    } catch {
+      alert("Erreur de connexion");
+    }
+  }
     if (!currentProfile) return;
 
     setSendingReport(true);
@@ -501,16 +524,29 @@ export default function DiscoverPage() {
               </div>
             )}
 
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setShowReportModal(true);
-              }}
-              className="absolute top-7 left-4 w-9 h-9 bg-white/90 backdrop-blur rounded-full flex items-center justify-center text-slate-600 hover:text-red-500 hover:bg-white shadow-md transition z-10"
-              title="Signaler ce profil"
-            >
-              <Flag className="w-4 h-4" />
-            </button>
+          {/* Boutons Signaler + Bloquer */}
+<div className="absolute top-7 left-4 flex gap-2 z-10">
+  <button
+    onClick={(e) => {
+      e.stopPropagation();
+      setShowReportModal(true);
+    }}
+    className="w-9 h-9 bg-white/90 backdrop-blur rounded-full flex items-center justify-center text-slate-600 hover:text-red-500 hover:bg-white shadow-md transition"
+    title="Signaler ce profil"
+  >
+    <Flag className="w-4 h-4" />
+  </button>
+  <button
+    onClick={(e) => {
+      e.stopPropagation();
+      handleBlock();
+    }}
+    className="w-9 h-9 bg-white/90 backdrop-blur rounded-full flex items-center justify-center text-slate-600 hover:text-red-500 hover:bg-white shadow-md transition"
+    title="Bloquer ce profil"
+  >
+    <Ban className="w-4 h-4" />
+  </button>
+</div>
 
             {currentProfile.isPremium && (
               <div className="absolute top-7 right-4 z-10">
