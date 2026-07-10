@@ -14,6 +14,7 @@ import {
   Crown,
   MessageCircle,
   Star,
+  RotateCcw,
 } from "lucide-react";
 
 interface Profile {
@@ -82,6 +83,7 @@ export default function DiscoverPage() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [canRewind, setCanRewind] = useState(false);
   const [matchPopup, setMatchPopup] = useState<{ firstName: string; photoUrl: string | null } | null>(null);
   const [animating, setAnimating] = useState<"left" | "right" | "up" | null>(null);
   const [showReportModal, setShowReportModal] = useState(false);
@@ -117,6 +119,7 @@ export default function DiscoverPage() {
     if (currentIndex >= profiles.length) return;
     const profile = profiles[currentIndex];
     setAnimating(isLike ? "right" : "left");
+    setCanRewind(true);
 
     try {
       const res = await fetch("/api/like", {
@@ -148,6 +151,7 @@ export default function DiscoverPage() {
     if (currentIndex >= profiles.length) return;
     const profile = profiles[currentIndex];
     setAnimating("up");
+    setCanRewind(true);
 
     try {
       const res = await fetch("/api/like", {
@@ -178,6 +182,25 @@ export default function DiscoverPage() {
       setAnimating(null);
     }, 300);
   }, [currentIndex, profiles]);
+    const handleRewind = useCallback(async () => {
+    if (currentIndex === 0) return;
+
+    try {
+      const res = await fetch("/api/like/rewind", {
+        method: "POST",
+      });
+
+      if (res.ok) {
+        // Revenir au profil précédent
+        setCurrentIndex((i) => Math.max(0, i - 1));
+        setCanRewind(false);
+      } else {
+        alert("Impossible d'annuler cette action");
+      }
+    } catch {
+      alert("Erreur de connexion");
+    }
+  }, [currentIndex]);
 
   async function handleReport() {
     if (!selectedReason) {
@@ -569,32 +592,45 @@ export default function DiscoverPage() {
           </div>
         </div>
 
-        {/* BOUTONS ACTIONS AVEC SUPER LIKE */}
-        <div className="flex items-center justify-center gap-4 mt-6">
-          <button
-            onClick={() => handleAction(false)}
-            className="w-14 h-14 bg-white rounded-full shadow-lg flex items-center justify-center text-slate-400 hover:text-red-500 hover:shadow-xl hover:scale-110 transition-all duration-200 border border-slate-100"
-            title="Passer"
-          >
-            <X className="w-7 h-7" strokeWidth={2.5} />
-          </button>
+       {/* BOUTONS ACTIONS AVEC REWIND + SUPER LIKE */}
+<div className="flex items-center justify-center gap-3 mt-6">
+  {/* Bouton REWIND (retour arrière) */}
+  <button
+    onClick={handleRewind}
+    disabled={!canRewind}
+    className="w-12 h-12 bg-white rounded-full shadow-lg flex items-center justify-center text-amber-500 hover:shadow-xl hover:scale-110 transition-all duration-200 border border-slate-100 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:scale-100"
+    title={canRewind ? "Retour arrière" : "Rien à annuler"}
+  >
+    <RotateCcw className="w-5 h-5" strokeWidth={2.5} />
+  </button>
 
-          <button
-            onClick={handleSuperLike}
-            className="w-16 h-16 bg-gradient-to-br from-blue-400 to-cyan-500 rounded-full shadow-lg shadow-blue-500/40 flex items-center justify-center text-white hover:shadow-xl hover:scale-110 transition-all duration-200"
-            title="Super Like"
-          >
-            <Star className="w-8 h-8 fill-white" strokeWidth={2} />
-          </button>
+  {/* Bouton Passer */}
+  <button
+    onClick={() => handleAction(false)}
+    className="w-14 h-14 bg-white rounded-full shadow-lg flex items-center justify-center text-slate-400 hover:text-red-500 hover:shadow-xl hover:scale-110 transition-all duration-200 border border-slate-100"
+    title="Passer"
+  >
+    <X className="w-7 h-7" strokeWidth={2.5} />
+  </button>
 
-          <button
-            onClick={() => handleAction(true)}
-            className="w-16 h-16 bg-gradient-to-r from-rose-500 to-pink-500 rounded-full shadow-lg shadow-rose-500/30 flex items-center justify-center text-white hover:shadow-xl hover:scale-110 transition-all duration-200"
-            title="Liker"
-          >
-            <Heart className="w-8 h-8 fill-white" />
-          </button>
-        </div>
+  {/* Bouton SUPER LIKE ⭐ */}
+  <button
+    onClick={handleSuperLike}
+    className="w-16 h-16 bg-gradient-to-br from-blue-400 to-cyan-500 rounded-full shadow-lg shadow-blue-500/40 flex items-center justify-center text-white hover:shadow-xl hover:scale-110 transition-all duration-200"
+    title="Super Like"
+  >
+    <Star className="w-8 h-8 fill-white" strokeWidth={2} />
+  </button>
+
+  {/* Bouton Liker */}
+  <button
+    onClick={() => handleAction(true)}
+    className="w-14 h-14 bg-gradient-to-r from-rose-500 to-pink-500 rounded-full shadow-lg shadow-rose-500/30 flex items-center justify-center text-white hover:shadow-xl hover:scale-110 transition-all duration-200"
+    title="Liker"
+  >
+    <Heart className="w-7 h-7 fill-white" />
+  </button>
+</div>
 
         {photos.length > 1 && (
           <p className="text-center text-xs text-slate-400 mt-4">
