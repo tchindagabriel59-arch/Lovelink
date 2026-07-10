@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { users, likes } from "@/db/schema";
+import { users, likes, blocks } from "@/db/schema";
 import { eq, notInArray, sql, and, gte, lte, inArray } from "drizzle-orm";
 import { getCurrentUserId } from "@/lib/auth";
 
@@ -57,8 +57,23 @@ export async function GET() {
       .from(likes)
       .where(eq(likes.fromUserId, userId));
 
-    const excludeIds = alreadyActed.map((r) => r.toUserId);
+       const excludeIds = alreadyActed.map((r) => r.toUserId);
     excludeIds.push(userId);
+
+    // 🆕 Exclure les utilisateurs bloqués (que j'ai bloqués OU qui m'ont bloqué)
+    const myBlocks = await db
+      .select({ blockedUserId: blocks.blockedUserId })
+      .from(blocks)
+      .where(eq(blocks.blockerUserId, userId));
+    const iBlocked = myBlocks.map((b) => b.blockedUserId);
+
+    const blockedByOthers = await db
+      .select({ blockerUserId: blocks.blockerUserId })
+      .from(blocks)
+      .where(eq(blocks.blockedUserId, userId));
+    const blockedMe = blockedByOthers.map((b) => b.blockerUserId);
+
+    excludeIds.push(...iBlocked, ...blockedMe);
 
     // 🆕 Récupérer les IDs de ceux qui m'ont SUPER liké
     const superLikersReceived = await db
