@@ -12,6 +12,7 @@ import {
   Menu,
   X,
   Sparkles,
+  Settings,
 } from "lucide-react";
 
 interface UserData {
@@ -81,7 +82,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     { href: "/matches", label: "Matchs", icon: <Heart className="w-5 h-5" /> },
     { href: "/messages", label: "Messages", icon: <MessageCircle className="w-5 h-5" /> },
     { href: "/profile", label: "Profil", icon: <User className="w-5 h-5" /> },
+    { href: "/preferences", label: "Préférences", icon: <Settings className="w-5 h-5" /> },
   ];
+
+  // Sur mobile : afficher moins d'items dans la barre du bas (max 5)
+  const mobileNavItems = navItems.slice(0, 5);
 
   if (loading) {
     return (
@@ -125,9 +130,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
           <div className="p-4 border-t border-slate-100">
             <div className="flex items-center gap-3 px-4 py-3">
-              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-rose-400 to-purple-500 flex items-center justify-center text-white font-bold text-sm">
-                {user?.firstName?.charAt(0)}
-                {user?.lastName?.charAt(0)}
+              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-rose-400 to-purple-500 flex items-center justify-center text-white font-bold text-sm overflow-hidden">
+                {user?.photoUrl ? (
+                  <img src={user.photoUrl} alt="Profil" className="w-full h-full object-cover" />
+                ) : (
+                  <>
+                    {user?.firstName?.charAt(0)}
+                    {user?.lastName?.charAt(0)}
+                  </>
+                )}
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold truncate">
@@ -192,7 +203,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         {/* Mobile Bottom Nav */}
         <div className="lg:hidden fixed bottom-0 left-0 right-0 z-30 bg-white border-t border-slate-100">
           <div className="flex items-center justify-around py-2">
-            {navItems.map((item) => (
+            {mobileNavItems.map((item) => (
               <Link
                 key={item.href}
                 href={item.href}
