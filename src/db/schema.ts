@@ -7,6 +7,7 @@ import {
   boolean,
   timestamp,
   pgEnum,
+  doublePrecision,
 } from "drizzle-orm/pg-core";
 
 export const genderEnum = pgEnum("gender", ["male", "female", "non_binary", "other"]);
@@ -40,6 +41,9 @@ export const users = pgTable("users", {
   prefAgeMin: integer("pref_age_min").default(18),
   prefAgeMax: integer("pref_age_max").default(99),
   prefLookingFor: varchar("pref_looking_for", { length: 20 }).default("all"),
+  prefMaxDistance: integer("pref_max_distance").default(999999),
+  latitude: doublePrecision("latitude"),
+  longitude: doublePrecision("longitude"),
   lastSeen: timestamp("last_seen").defaultNow(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
