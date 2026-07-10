@@ -13,6 +13,7 @@ import {
   AlertTriangle,
   Crown,
   MessageCircle,
+  Star,
 } from "lucide-react";
 
 interface Profile {
@@ -115,6 +116,40 @@ export default function DiscoverPage() {
 
   const handleAction = useCallback(async (isLike: boolean) => {
     if (currentIndex >= profiles.length) return;
+      const handleSuperLike = useCallback(async () => {
+    if (currentIndex >= profiles.length) return;
+    const profile = profiles[currentIndex];
+    setAnimating("right");
+
+    try {
+      const res = await fetch("/api/like", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          toUserId: profile.id, 
+          isLike: true,
+          isSuperLike: true,
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.isMatch) {
+          setMatchPopup({
+            firstName: profile.firstName,
+            photoUrl: profile.photoUrl,
+          });
+        }
+      }
+    } catch {
+      // silently fail
+    }
+
+    setTimeout(() => {
+      setCurrentIndex((i) => i + 1);
+      setAnimating(null);
+    }, 300);
+  }, [currentIndex, profiles]);
     const profile = profiles[currentIndex];
     setAnimating(isLike ? "right" : "left");
 
@@ -543,24 +578,35 @@ export default function DiscoverPage() {
           </div>
         </div>
 
-        {/* BOUTONS ACTIONS */}
-        <div className="flex items-center justify-center gap-6 mt-6">
-          <button
-            onClick={() => handleAction(false)}
-            className="w-16 h-16 bg-white rounded-full shadow-lg flex items-center justify-center text-slate-400 hover:text-red-500 hover:shadow-xl hover:scale-110 transition-all duration-200 border border-slate-100"
-            title="Passer"
-          >
-            <X className="w-8 h-8" strokeWidth={2.5} />
-          </button>
+{/* BOUTONS ACTIONS */}
+<div className="flex items-center justify-center gap-4 mt-6">
+  {/* Bouton Passer */}
+  <button
+    onClick={() => handleAction(false)}
+    className="w-14 h-14 bg-white rounded-full shadow-lg flex items-center justify-center text-slate-400 hover:text-red-500 hover:shadow-xl hover:scale-110 transition-all duration-200 border border-slate-100"
+    title="Passer"
+  >
+    <X className="w-7 h-7" strokeWidth={2.5} />
+  </button>
 
-          <button
-            onClick={() => handleAction(true)}
-            className="w-20 h-20 bg-gradient-to-r from-rose-500 to-pink-500 rounded-full shadow-lg shadow-rose-500/30 flex items-center justify-center text-white hover:shadow-xl hover:scale-110 transition-all duration-200"
-            title="Liker"
-          >
-            <Heart className="w-10 h-10 fill-white" />
-          </button>
-        </div>
+  {/* Bouton SUPER LIKE ⭐ */}
+  <button
+    onClick={() => handleSuperLike()}
+    className="w-16 h-16 bg-gradient-to-br from-blue-400 to-cyan-500 rounded-full shadow-lg shadow-blue-500/40 flex items-center justify-center text-white hover:shadow-xl hover:scale-110 transition-all duration-200"
+    title="Super Like"
+  >
+    <Star className="w-8 h-8 fill-white" strokeWidth={2} />
+  </button>
+
+  {/* Bouton Liker */}
+  <button
+    onClick={() => handleAction(true)}
+    className="w-16 h-16 bg-gradient-to-r from-rose-500 to-pink-500 rounded-full shadow-lg shadow-rose-500/30 flex items-center justify-center text-white hover:shadow-xl hover:scale-110 transition-all duration-200"
+    title="Liker"
+  >
+    <Heart className="w-8 h-8 fill-white" />
+  </button>
+</div>
 
         {/* Instruction navigation photos */}
         {photos.length > 1 && (
