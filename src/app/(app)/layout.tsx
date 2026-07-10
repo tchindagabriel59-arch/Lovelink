@@ -3,6 +3,7 @@
 import { useState, useEffect, createContext, useContext, useCallback } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
+import Notifications from "../components/Notifications";
 import {
   Heart,
   User,
@@ -106,12 +107,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <div className="min-h-screen bg-slate-50 flex">
         {/* Sidebar - Desktop */}
         <aside className="hidden lg:flex w-72 bg-white border-r border-slate-100 flex-col fixed inset-y-0 left-0 z-30">
-          <div className="p-6">
-            <Link href="/dashboard" className="flex items-center gap-2">
-              <Heart className="w-8 h-8 text-rose-500 fill-rose-500" />
-              <span className="text-2xl font-bold gradient-text">LoveLink</span>
-            </Link>
-          </div>
+          <div className="p-6 flex items-center justify-between">
+  <Link href="/dashboard" className="flex items-center gap-2">
+    <Heart className="w-8 h-8 text-rose-500 fill-rose-500" />
+    <span className="text-2xl font-bold gradient-text">LoveLink</span>
+  </Link>
+  <Notifications />
+</div>
 
           <nav className="flex-1 px-4 space-y-1">
             {navItems.map((item) => (
@@ -161,18 +163,21 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
         {/* Mobile Header */}
         <div className="lg:hidden fixed top-0 left-0 right-0 z-30 glass-card border-b border-slate-100">
-          <div className="flex items-center justify-between px-4 py-3">
-            <Link href="/dashboard" className="flex items-center gap-2">
-              <Heart className="w-6 h-6 text-rose-500 fill-rose-500" />
-              <span className="text-lg font-bold gradient-text">LoveLink</span>
-            </Link>
-            <button
-              onClick={() => setMenuOpen(!menuOpen)}
-              className="p-2 text-slate-600"
-            >
-              {menuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-            </button>
-          </div>
+         <div className="flex items-center justify-between px-4 py-3">
+  <Link href="/dashboard" className="flex items-center gap-2">
+    <Heart className="w-6 h-6 text-rose-500 fill-rose-500" />
+    <span className="text-lg font-bold gradient-text">LoveLink</span>
+  </Link>
+  <div className="flex items-center gap-2">
+    <Notifications />
+    <button
+      onClick={() => setMenuOpen(!menuOpen)}
+      className="p-2 text-slate-600"
+    >
+      {menuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+    </button>
+  </div>
+</div>
 
           {menuOpen && (
             <nav className="px-4 pb-4 space-y-1 animate-fade-in">
