@@ -65,7 +65,6 @@ const reportReasons = [
   { value: "other", label: "Autre" },
 ];
 
-// Récupérer toutes les photos disponibles d'un profil
 function getAllPhotos(profile: Profile): string[] {
   const photos = [
     profile.photoUrl,
@@ -83,7 +82,7 @@ export default function DiscoverPage() {
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [matchPopup, setMatchPopup] = useState<{ firstName: string; photoUrl: string | null } | null>(null);
-  const [animating, setAnimating] = useState<"left" | "right" | null>(null);
+  const [animating, setAnimating] = useState<"left" | "right" | "up" | null>(null);
   const [showReportModal, setShowReportModal] = useState(false);
   const [selectedReason, setSelectedReason] = useState("");
   const [reportDetails, setReportDetails] = useState("");
@@ -94,7 +93,6 @@ export default function DiscoverPage() {
     fetchProfiles();
   }, []);
 
-  // Reset photo index quand on change de profil
   useEffect(() => {
     setCurrentPhotoIndex(0);
     setShowFullBio(false);
@@ -116,20 +114,14 @@ export default function DiscoverPage() {
 
   const handleAction = useCallback(async (isLike: boolean) => {
     if (currentIndex >= profiles.length) return;
-      const handleSuperLike = useCallback(async () => {
-    if (currentIndex >= profiles.length) return;
     const profile = profiles[currentIndex];
-    setAnimating("right");
+    setAnimating(isLike ? "right" : "left");
 
     try {
       const res = await fetch("/api/like", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          toUserId: profile.id, 
-          isLike: true,
-          isSuperLike: true,
-        }),
+        body: JSON.stringify({ toUserId: profile.id, isLike }),
       });
 
       if (res.ok) {
@@ -150,14 +142,21 @@ export default function DiscoverPage() {
       setAnimating(null);
     }, 300);
   }, [currentIndex, profiles]);
+
+  const handleSuperLike = useCallback(async () => {
+    if (currentIndex >= profiles.length) return;
     const profile = profiles[currentIndex];
-    setAnimating(isLike ? "right" : "left");
+    setAnimating("up");
 
     try {
       const res = await fetch("/api/like", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ toUserId: profile.id, isLike }),
+        body: JSON.stringify({
+          toUserId: profile.id,
+          isLike: true,
+          isSuperLike: true,
+        }),
       });
 
       if (res.ok) {
@@ -219,7 +218,6 @@ export default function DiscoverPage() {
   const photos = currentProfile ? getAllPhotos(currentProfile) : [];
   const hasPhotos = photos.length > 0;
 
-  // Navigation entre photos
   const nextPhoto = () => {
     if (currentPhotoIndex < photos.length - 1) {
       setCurrentPhotoIndex((i) => i + 1);
@@ -232,7 +230,6 @@ export default function DiscoverPage() {
     }
   };
 
-  // Tap sur la photo (gauche/droite pour changer)
   const handlePhotoTap = (e: React.MouseEvent<HTMLDivElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left;
@@ -287,7 +284,6 @@ export default function DiscoverPage() {
 
   return (
     <div className="flex items-center justify-center min-h-[calc(100vh-100px)] p-4">
-      {/* 🚨 MODAL DE SIGNALEMENT */}
       {showReportModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
           <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl">
@@ -360,7 +356,6 @@ export default function DiscoverPage() {
         </div>
       )}
 
-      {/* 💕 MATCH POPUP */}
       {matchPopup && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
           <div className="bg-white rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl mx-4">
@@ -409,23 +404,22 @@ export default function DiscoverPage() {
       )}
 
       <div className="w-full max-w-md">
-        {/* CARTE PROFIL STYLE TINDER */}
         <div
           className={`relative bg-white rounded-3xl shadow-2xl overflow-hidden transition-all duration-300 ${
             animating === "left"
               ? "opacity-0 -translate-x-20 -rotate-12"
               : animating === "right"
               ? "opacity-0 translate-x-20 rotate-12"
+              : animating === "up"
+              ? "opacity-0 -translate-y-20"
               : "opacity-100"
           }`}
           style={{ minHeight: "600px" }}
         >
-          {/* Zone photo */}
           <div
             onClick={handlePhotoTap}
             className={`relative h-[500px] bg-gradient-to-br ${gradient} cursor-pointer select-none`}
           >
-            {/* Photo actuelle */}
             {hasPhotos ? (
               <img
                 src={photos[currentPhotoIndex]}
@@ -440,10 +434,8 @@ export default function DiscoverPage() {
               </div>
             )}
 
-            {/* Overlay dégradé bas */}
             <div className="absolute bottom-0 left-0 right-0 h-64 bg-gradient-to-t from-black/90 via-black/50 to-transparent pointer-events-none" />
 
-            {/* Barres de progression (photos) */}
             {photos.length > 1 && (
               <div className="absolute top-3 left-3 right-3 flex gap-1 z-10">
                 {photos.map((_, i) => (
@@ -457,7 +449,6 @@ export default function DiscoverPage() {
               </div>
             )}
 
-            {/* Bouton Signaler (haut gauche) */}
             <button
               onClick={(e) => {
                 e.stopPropagation();
@@ -469,7 +460,6 @@ export default function DiscoverPage() {
               <Flag className="w-4 h-4" />
             </button>
 
-            {/* Badge Premium (haut droite) */}
             {currentProfile.isPremium && (
               <div className="absolute top-7 right-4 z-10">
                 <div className="flex items-center gap-1.5 bg-gradient-to-r from-amber-400 to-orange-500 rounded-full px-3 py-1.5 shadow-lg">
@@ -479,7 +469,6 @@ export default function DiscoverPage() {
               </div>
             )}
 
-            {/* Badge En ligne */}
             {currentProfile.isOnline && !currentProfile.isPremium && (
               <div className="absolute top-7 right-4 flex items-center gap-2 bg-white/90 backdrop-blur rounded-full px-3 py-1.5 z-10">
                 <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
@@ -487,7 +476,6 @@ export default function DiscoverPage() {
               </div>
             )}
 
-            {/* Flèches navigation photos (visibles au hover sur desktop) */}
             {photos.length > 1 && (
               <>
                 <button
@@ -513,7 +501,6 @@ export default function DiscoverPage() {
               </>
             )}
 
-            {/* Info nom/age/ville (bas de la photo) */}
             <div className="absolute bottom-4 left-4 right-4 text-white z-10 pointer-events-none">
               <div className="flex items-baseline gap-2 flex-wrap">
                 <h2 className="text-3xl font-bold drop-shadow-lg">
@@ -539,7 +526,6 @@ export default function DiscoverPage() {
             </div>
           </div>
 
-          {/* Info section (bio + intérêts) */}
           <div className="p-5">
             {currentProfile.bio && (
               <div className="mb-4">
@@ -570,7 +556,6 @@ export default function DiscoverPage() {
               </div>
             )}
 
-            {/* Compteur */}
             <p className="text-center text-xs text-slate-400 mt-4">
               {currentIndex + 1} / {profiles.length}
               {photos.length > 1 && ` • 📸 ${currentPhotoIndex + 1}/${photos.length}`}
@@ -578,37 +563,33 @@ export default function DiscoverPage() {
           </div>
         </div>
 
-{/* BOUTONS ACTIONS */}
-<div className="flex items-center justify-center gap-4 mt-6">
-  {/* Bouton Passer */}
-  <button
-    onClick={() => handleAction(false)}
-    className="w-14 h-14 bg-white rounded-full shadow-lg flex items-center justify-center text-slate-400 hover:text-red-500 hover:shadow-xl hover:scale-110 transition-all duration-200 border border-slate-100"
-    title="Passer"
-  >
-    <X className="w-7 h-7" strokeWidth={2.5} />
-  </button>
+        {/* BOUTONS ACTIONS AVEC SUPER LIKE */}
+        <div className="flex items-center justify-center gap-4 mt-6">
+          <button
+            onClick={() => handleAction(false)}
+            className="w-14 h-14 bg-white rounded-full shadow-lg flex items-center justify-center text-slate-400 hover:text-red-500 hover:shadow-xl hover:scale-110 transition-all duration-200 border border-slate-100"
+            title="Passer"
+          >
+            <X className="w-7 h-7" strokeWidth={2.5} />
+          </button>
 
-  {/* Bouton SUPER LIKE ⭐ */}
-  <button
-    onClick={() => handleSuperLike()}
-    className="w-16 h-16 bg-gradient-to-br from-blue-400 to-cyan-500 rounded-full shadow-lg shadow-blue-500/40 flex items-center justify-center text-white hover:shadow-xl hover:scale-110 transition-all duration-200"
-    title="Super Like"
-  >
-    <Star className="w-8 h-8 fill-white" strokeWidth={2} />
-  </button>
+          <button
+            onClick={handleSuperLike}
+            className="w-16 h-16 bg-gradient-to-br from-blue-400 to-cyan-500 rounded-full shadow-lg shadow-blue-500/40 flex items-center justify-center text-white hover:shadow-xl hover:scale-110 transition-all duration-200"
+            title="Super Like"
+          >
+            <Star className="w-8 h-8 fill-white" strokeWidth={2} />
+          </button>
 
-  {/* Bouton Liker */}
-  <button
-    onClick={() => handleAction(true)}
-    className="w-16 h-16 bg-gradient-to-r from-rose-500 to-pink-500 rounded-full shadow-lg shadow-rose-500/30 flex items-center justify-center text-white hover:shadow-xl hover:scale-110 transition-all duration-200"
-    title="Liker"
-  >
-    <Heart className="w-8 h-8 fill-white" />
-  </button>
-</div>
+          <button
+            onClick={() => handleAction(true)}
+            className="w-16 h-16 bg-gradient-to-r from-rose-500 to-pink-500 rounded-full shadow-lg shadow-rose-500/30 flex items-center justify-center text-white hover:shadow-xl hover:scale-110 transition-all duration-200"
+            title="Liker"
+          >
+            <Heart className="w-8 h-8 fill-white" />
+          </button>
+        </div>
 
-        {/* Instruction navigation photos */}
         {photos.length > 1 && (
           <p className="text-center text-xs text-slate-400 mt-4">
             💡 Tap à gauche/droite de la photo pour naviguer
