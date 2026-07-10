@@ -89,3 +89,12 @@ export const blocks = pgTable("blocks", {
   blockedUserId: integer("blocked_user_id").notNull().references(() => users.id),
   createdAt: timestamp("created_at").defaultNow(),
 });
+export const notifications = pgTable("notifications", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id),
+  type: varchar("type", { length: 50 }).notNull(),
+  fromUserId: integer("from_user_id").references(() => users.id),
+  content: text("content").default(""),
+  isRead: boolean("is_read").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+});
