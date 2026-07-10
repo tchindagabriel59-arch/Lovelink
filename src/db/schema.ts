@@ -46,6 +46,7 @@ export const likes = pgTable("likes", {
   fromUserId: integer("from_user_id").notNull().references(() => users.id),
   toUserId: integer("to_user_id").notNull().references(() => users.id),
   isLike: boolean("is_like").notNull().default(true),
+  isSuperLike: boolean("is_super_like").default(false),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
