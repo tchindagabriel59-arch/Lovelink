@@ -185,7 +185,8 @@ export default function DiscoverPage() {
       setAnimating(null);
     }, 300);
   }, [currentIndex, profiles]);
-    const handleRewind = useCallback(async () => {
+
+  const handleRewind = useCallback(async () => {
     if (currentIndex === 0) return;
 
     try {
@@ -194,7 +195,6 @@ export default function DiscoverPage() {
       });
 
       if (res.ok) {
-        // Revenir au profil précédent
         setCurrentIndex((i) => Math.max(0, i - 1));
         setCanRewind(false);
       } else {
@@ -210,28 +210,6 @@ export default function DiscoverPage() {
       alert("Veuillez sélectionner un motif");
       return;
     }
-      async function handleBlock() {
-    if (!currentProfile) return;
-    if (!confirm(`Bloquer ${currentProfile.firstName} ?\n\nCette personne ne verra plus ton profil et vous ne pourrez plus vous contacter.`)) return;
-
-    try {
-      const res = await fetch("/api/blocks", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ blockedUserId: currentProfile.id }),
-      });
-
-      if (res.ok) {
-        alert("✅ Utilisateur bloqué");
-        setCurrentIndex((i) => i + 1);
-      } else {
-        const data = await res.json();
-        alert("❌ " + (data.error || "Erreur"));
-      }
-    } catch {
-      alert("Erreur de connexion");
-    }
-  }
     if (!currentProfile) return;
 
     setSendingReport(true);
@@ -260,6 +238,29 @@ export default function DiscoverPage() {
       alert("❌ Erreur de connexion");
     } finally {
       setSendingReport(false);
+    }
+  }
+
+  async function handleBlock() {
+    if (!currentProfile) return;
+    if (!confirm(`Bloquer ${currentProfile.firstName} ?\n\nCette personne ne verra plus ton profil et vous ne pourrez plus vous contacter.`)) return;
+
+    try {
+      const res = await fetch("/api/blocks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ blockedUserId: currentProfile.id }),
+      });
+
+      if (res.ok) {
+        alert("✅ Utilisateur bloqué");
+        setCurrentIndex((i) => i + 1);
+      } else {
+        const data = await res.json();
+        alert("❌ " + (data.error || "Erreur"));
+      }
+    } catch {
+      alert("Erreur de connexion");
     }
   }
 
@@ -453,48 +454,49 @@ export default function DiscoverPage() {
       )}
 
       <div className="w-full max-w-md">
-  <div
-  className={`relative bg-white rounded-3xl shadow-2xl overflow-hidden transition-all duration-300 ${
-    currentProfile.hasSuperLikedMe
-      ? "ring-4 ring-blue-400 ring-offset-2 shadow-blue-500/30"
-      : currentProfile.hasLikedMe
-      ? "ring-2 ring-rose-400 ring-offset-2"
-      : ""
-  } ${
-    animating === "left"
-      ? "opacity-0 -translate-x-20 -rotate-12"
-      : animating === "right"
-      ? "opacity-0 translate-x-20 rotate-12"
-      : animating === "up"
-      ? "opacity-0 -translate-y-20"
-      : "opacity-100"
-  }`}
-  style={{ minHeight: "600px" }}
->
+        <div
+          className={`relative bg-white rounded-3xl shadow-2xl overflow-hidden transition-all duration-300 ${
+            currentProfile.hasSuperLikedMe
+              ? "ring-4 ring-blue-400 ring-offset-2 shadow-blue-500/30"
+              : currentProfile.hasLikedMe
+              ? "ring-2 ring-rose-400 ring-offset-2"
+              : ""
+          } ${
+            animating === "left"
+              ? "opacity-0 -translate-x-20 -rotate-12"
+              : animating === "right"
+              ? "opacity-0 translate-x-20 rotate-12"
+              : animating === "up"
+              ? "opacity-0 -translate-y-20"
+              : "opacity-100"
+          }`}
+          style={{ minHeight: "600px" }}
+        >
           <div
             onClick={handlePhotoTap}
             className={`relative h-[500px] bg-gradient-to-br ${gradient} cursor-pointer select-none`}
           >
-              {/* 🆕 BADGE SUPER LIKE REÇU */}
-  {currentProfile.hasSuperLikedMe && (
-    <div className="absolute top-16 left-1/2 -translate-x-1/2 z-20 animate-pulse">
-      <div className="bg-gradient-to-r from-blue-500 to-cyan-500 text-white px-4 py-2 rounded-full shadow-2xl flex items-center gap-2 border-2 border-white">
-        <Star className="w-4 h-4 fill-white" />
-        <span className="text-sm font-bold">T&apos;A SUPER LIKÉ !</span>
-        <Star className="w-4 h-4 fill-white" />
-      </div>
-    </div>
-  )}
+            {/* BADGE SUPER LIKE REÇU */}
+            {currentProfile.hasSuperLikedMe && (
+              <div className="absolute top-16 left-1/2 -translate-x-1/2 z-20 animate-pulse">
+                <div className="bg-gradient-to-r from-blue-500 to-cyan-500 text-white px-4 py-2 rounded-full shadow-2xl flex items-center gap-2 border-2 border-white">
+                  <Star className="w-4 h-4 fill-white" />
+                  <span className="text-sm font-bold">T&apos;A SUPER LIKÉ !</span>
+                  <Star className="w-4 h-4 fill-white" />
+                </div>
+              </div>
+            )}
 
-  {/* 🆕 BADGE LIKE REÇU (normal) */}
-  {currentProfile.hasLikedMe && !currentProfile.hasSuperLikedMe && (
-    <div className="absolute top-16 left-1/2 -translate-x-1/2 z-20">
-      <div className="bg-gradient-to-r from-rose-500 to-pink-500 text-white px-4 py-2 rounded-full shadow-xl flex items-center gap-2 border-2 border-white">
-        <Heart className="w-4 h-4 fill-white" />
-        <span className="text-sm font-bold">T&apos;A LIKÉ !</span>
-      </div>
-    </div>
-  )}
+            {/* BADGE LIKE REÇU (normal) */}
+            {currentProfile.hasLikedMe && !currentProfile.hasSuperLikedMe && (
+              <div className="absolute top-16 left-1/2 -translate-x-1/2 z-20">
+                <div className="bg-gradient-to-r from-rose-500 to-pink-500 text-white px-4 py-2 rounded-full shadow-xl flex items-center gap-2 border-2 border-white">
+                  <Heart className="w-4 h-4 fill-white" />
+                  <span className="text-sm font-bold">T&apos;A LIKÉ !</span>
+                </div>
+              </div>
+            )}
+
             {hasPhotos ? (
               <img
                 src={photos[currentPhotoIndex]}
@@ -524,29 +526,29 @@ export default function DiscoverPage() {
               </div>
             )}
 
-          {/* Boutons Signaler + Bloquer */}
-<div className="absolute top-7 left-4 flex gap-2 z-10">
-  <button
-    onClick={(e) => {
-      e.stopPropagation();
-      setShowReportModal(true);
-    }}
-    className="w-9 h-9 bg-white/90 backdrop-blur rounded-full flex items-center justify-center text-slate-600 hover:text-red-500 hover:bg-white shadow-md transition"
-    title="Signaler ce profil"
-  >
-    <Flag className="w-4 h-4" />
-  </button>
-  <button
-    onClick={(e) => {
-      e.stopPropagation();
-      handleBlock();
-    }}
-    className="w-9 h-9 bg-white/90 backdrop-blur rounded-full flex items-center justify-center text-slate-600 hover:text-red-500 hover:bg-white shadow-md transition"
-    title="Bloquer ce profil"
-  >
-    <Ban className="w-4 h-4" />
-  </button>
-</div>
+            {/* Boutons Signaler + Bloquer */}
+            <div className="absolute top-7 left-4 flex gap-2 z-10">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowReportModal(true);
+                }}
+                className="w-9 h-9 bg-white/90 backdrop-blur rounded-full flex items-center justify-center text-slate-600 hover:text-red-500 hover:bg-white shadow-md transition"
+                title="Signaler ce profil"
+              >
+                <Flag className="w-4 h-4" />
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleBlock();
+                }}
+                className="w-9 h-9 bg-white/90 backdrop-blur rounded-full flex items-center justify-center text-slate-600 hover:text-red-500 hover:bg-white shadow-md transition"
+                title="Bloquer ce profil"
+              >
+                <Ban className="w-4 h-4" />
+              </button>
+            </div>
 
             {currentProfile.isPremium && (
               <div className="absolute top-7 right-4 z-10">
@@ -598,18 +600,18 @@ export default function DiscoverPage() {
                   {getAge(currentProfile.birthDate)}
                 </span>
               </div>
-           {currentProfile.city && (
-  <p className="flex items-center gap-1 text-white/95 text-sm mt-1 drop-shadow">
-    <MapPin className="w-3.5 h-3.5" />
-    {currentProfile.city}
-    {currentProfile.country ? `, ${currentProfile.country}` : ""}
-    {currentProfile.distance !== null && currentProfile.distance !== undefined && (
-      <span className="ml-2 px-2 py-0.5 bg-white/20 rounded-full text-xs font-bold">
-        {currentProfile.distance === 0 ? "< 1 km" : `${currentProfile.distance} km`}
-      </span>
-    )}
-  </p>
-)}
+              {currentProfile.city && (
+                <p className="flex items-center gap-1 text-white/95 text-sm mt-1 drop-shadow">
+                  <MapPin className="w-3.5 h-3.5" />
+                  {currentProfile.city}
+                  {currentProfile.country ? `, ${currentProfile.country}` : ""}
+                  {currentProfile.distance !== null && currentProfile.distance !== undefined && (
+                    <span className="ml-2 px-2 py-0.5 bg-white/20 rounded-full text-xs font-bold">
+                      {currentProfile.distance === 0 ? "< 1 km" : `${currentProfile.distance} km`}
+                    </span>
+                  )}
+                </p>
+              )}
               {currentProfile.occupation && (
                 <p className="flex items-center gap-1 text-white/90 text-sm mt-0.5 drop-shadow">
                   <Briefcase className="w-3.5 h-3.5" />
@@ -656,45 +658,41 @@ export default function DiscoverPage() {
           </div>
         </div>
 
-       {/* BOUTONS ACTIONS AVEC REWIND + SUPER LIKE */}
-<div className="flex items-center justify-center gap-3 mt-6">
-  {/* Bouton REWIND (retour arrière) */}
-  <button
-    onClick={handleRewind}
-    disabled={!canRewind}
-    className="w-12 h-12 bg-white rounded-full shadow-lg flex items-center justify-center text-amber-500 hover:shadow-xl hover:scale-110 transition-all duration-200 border border-slate-100 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:scale-100"
-    title={canRewind ? "Retour arrière" : "Rien à annuler"}
-  >
-    <RotateCcw className="w-5 h-5" strokeWidth={2.5} />
-  </button>
+        {/* BOUTONS ACTIONS AVEC REWIND + SUPER LIKE */}
+        <div className="flex items-center justify-center gap-3 mt-6">
+          <button
+            onClick={handleRewind}
+            disabled={!canRewind}
+            className="w-12 h-12 bg-white rounded-full shadow-lg flex items-center justify-center text-amber-500 hover:shadow-xl hover:scale-110 transition-all duration-200 border border-slate-100 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:scale-100"
+            title={canRewind ? "Retour arrière" : "Rien à annuler"}
+          >
+            <RotateCcw className="w-5 h-5" strokeWidth={2.5} />
+          </button>
 
-  {/* Bouton Passer */}
-  <button
-    onClick={() => handleAction(false)}
-    className="w-14 h-14 bg-white rounded-full shadow-lg flex items-center justify-center text-slate-400 hover:text-red-500 hover:shadow-xl hover:scale-110 transition-all duration-200 border border-slate-100"
-    title="Passer"
-  >
-    <X className="w-7 h-7" strokeWidth={2.5} />
-  </button>
+          <button
+            onClick={() => handleAction(false)}
+            className="w-14 h-14 bg-white rounded-full shadow-lg flex items-center justify-center text-slate-400 hover:text-red-500 hover:shadow-xl hover:scale-110 transition-all duration-200 border border-slate-100"
+            title="Passer"
+          >
+            <X className="w-7 h-7" strokeWidth={2.5} />
+          </button>
 
-  {/* Bouton SUPER LIKE ⭐ */}
-  <button
-    onClick={handleSuperLike}
-    className="w-16 h-16 bg-gradient-to-br from-blue-400 to-cyan-500 rounded-full shadow-lg shadow-blue-500/40 flex items-center justify-center text-white hover:shadow-xl hover:scale-110 transition-all duration-200"
-    title="Super Like"
-  >
-    <Star className="w-8 h-8 fill-white" strokeWidth={2} />
-  </button>
+          <button
+            onClick={handleSuperLike}
+            className="w-16 h-16 bg-gradient-to-br from-blue-400 to-cyan-500 rounded-full shadow-lg shadow-blue-500/40 flex items-center justify-center text-white hover:shadow-xl hover:scale-110 transition-all duration-200"
+            title="Super Like"
+          >
+            <Star className="w-8 h-8 fill-white" strokeWidth={2} />
+          </button>
 
-  {/* Bouton Liker */}
-  <button
-    onClick={() => handleAction(true)}
-    className="w-14 h-14 bg-gradient-to-r from-rose-500 to-pink-500 rounded-full shadow-lg shadow-rose-500/30 flex items-center justify-center text-white hover:shadow-xl hover:scale-110 transition-all duration-200"
-    title="Liker"
-  >
-    <Heart className="w-7 h-7 fill-white" />
-  </button>
-</div>
+          <button
+            onClick={() => handleAction(true)}
+            className="w-14 h-14 bg-gradient-to-r from-rose-500 to-pink-500 rounded-full shadow-lg shadow-rose-500/30 flex items-center justify-center text-white hover:shadow-xl hover:scale-110 transition-all duration-200"
+            title="Liker"
+          >
+            <Heart className="w-7 h-7 fill-white" />
+          </button>
+        </div>
 
         {photos.length > 1 && (
           <p className="text-center text-xs text-slate-400 mt-4">
