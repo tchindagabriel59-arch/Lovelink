@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { likes, matches, users } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
 import { getCurrentUserId } from "@/lib/auth";
+import { sendMatchEmail } from "@/lib/emails";
 
 export async function POST(req: NextRequest) {
   try {
@@ -12,7 +13,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { toUserId, isLike } = body;
+    const { toUserId, isLike, isSuperLike } = body;
 
     if (!toUserId) {
       return NextResponse.json(
@@ -21,14 +22,16 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Record the like/dislike
+    // Record the like/dislike/superlike
     await db.insert(likes).values({
       fromUserId: userId,
       toUserId,
       isLike: isLike !== false,
+      isSuperLike: isSuperLike === true,
     });
 
     let isMatch = false;
+    let matchedUser = null;
 
     // Check if there's a mutual like
     if (isLike !== false) {
@@ -61,13 +64,48 @@ export async function POST(req: NextRequest) {
             user2Id: user2,
           });
           isMatch = true;
+
+          // Récupérer les infos des 2 utilisateurs pour les emails
+          const bothUsers = await db
+            .select({
+              id: users.id,
+              email: users.email,
+              firstName: users.firstName,
+              photoUrl: users.photoUrl,
+            })
+            .from(users)
+            .where(eq(users.id, userId));
+
+          const [currentUser] = bothUsers;
+
+          const [otherUser] = await db
+            .select({
+              id: users.id,
+              email: users.email,
+              firstName: users.firstName,
+              photoUrl: users.photoUrl,
+            })
+            .from(users)
+            .where(eq(users.id, toUserId))
+            .limit(1);
+
+          matchedUser = otherUser;
+
+          // 📧 Envoyer emails de notification aux 2 utilisateurs
+          if (currentUser && otherUser) {
+            sendMatchEmail(currentUser.email, currentUser.firstName, otherUser.firstName).catch(
+              (err) => console.error("Erreur email match user1:", err)
+            );
+            sendMatchEmail(otherUser.email, otherUser.firstName, currentUser.firstName).catch(
+              (err) => console.error("Erreur email match user2:", err)
+            );
+          }
         }
       }
     }
 
-    // Get matched user info if it's a match
-    let matchedUser = null;
-    if (isMatch) {
+    // Si pas de match mais on n'a pas encore les infos du user matché
+    if (!matchedUser && isMatch) {
       const [mu] = await db
         .select({
           id: users.id,
