@@ -13,6 +13,7 @@ import {
   X,
   Sparkles,
   Settings,
+  Star,
 } from "lucide-react";
 
 interface UserData {
@@ -79,6 +80,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const navItems = [
     { href: "/dashboard", label: "Accueil", icon: <Sparkles className="w-5 h-5" /> },
     { href: "/discover", label: "Découvrir", icon: <Compass className="w-5 h-5" /> },
+    { href: "/likes-recus", label: "Qui m'a liké", icon: <Star className="w-5 h-5" /> },
     { href: "/matches", label: "Matchs", icon: <Heart className="w-5 h-5" /> },
     { href: "/messages", label: "Messages", icon: <MessageCircle className="w-5 h-5" /> },
     { href: "/profile", label: "Profil", icon: <User className="w-5 h-5" /> },
