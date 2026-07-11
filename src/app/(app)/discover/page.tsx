@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import Link from "next/link";
 import {
   Heart,
   X,
@@ -16,6 +17,8 @@ import {
   Star,
   RotateCcw,
   Ban,
+  Gem,
+  Lock,
 } from "lucide-react";
 
 interface Profile {
@@ -46,6 +49,14 @@ interface Profile {
   prompt2Answer: string | null;
   prompt3Question: string | null;
   prompt3Answer: string | null;
+}
+
+interface SuperLikeStatus {
+  isPremium: boolean;
+  used: number;
+  limit: number;
+  remaining: number;
+  canSuperLike: boolean;
 }
 
 function getAge(birthDate: string): number {
@@ -100,9 +111,12 @@ export default function DiscoverPage() {
   const [reportDetails, setReportDetails] = useState("");
   const [sendingReport, setSendingReport] = useState(false);
   const [showFullBio, setShowFullBio] = useState(false);
+  const [superLikeStatus, setSuperLikeStatus] = useState<SuperLikeStatus | null>(null);
+  const [showLimitModal, setShowLimitModal] = useState(false);
 
   useEffect(() => {
     fetchProfiles();
+    fetchSuperLikeStatus();
   }, []);
 
   useEffect(() => {
@@ -121,6 +135,18 @@ export default function DiscoverPage() {
       // silently fail
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function fetchSuperLikeStatus() {
+    try {
+      const res = await fetch("/api/like");
+      if (res.ok) {
+        const data = await res.json();
+        setSuperLikeStatus(data);
+      }
+    } catch {
+      // silently fail
     }
   }
 
@@ -158,6 +184,13 @@ export default function DiscoverPage() {
 
   const handleSuperLike = useCallback(async () => {
     if (currentIndex >= profiles.length) return;
+
+    // 🔒 Vérifier la limite AVANT
+    if (superLikeStatus && !superLikeStatus.canSuperLike) {
+      setShowLimitModal(true);
+      return;
+    }
+
     const profile = profiles[currentIndex];
     setAnimating("up");
     setCanRewind(true);
@@ -173,6 +206,14 @@ export default function DiscoverPage() {
         }),
       });
 
+      if (res.status === 403) {
+        // Limite atteinte
+        setAnimating(null);
+        setShowLimitModal(true);
+        fetchSuperLikeStatus();
+        return;
+      }
+
       if (res.ok) {
         const data = await res.json();
         if (data.isMatch) {
@@ -181,6 +222,8 @@ export default function DiscoverPage() {
             photoUrl: profile.photoUrl,
           });
         }
+        // Actualiser le compteur
+        fetchSuperLikeStatus();
       }
     } catch {
       // silently fail
@@ -190,7 +233,7 @@ export default function DiscoverPage() {
       setCurrentIndex((i) => i + 1);
       setAnimating(null);
     }, 300);
-  }, [currentIndex, profiles]);
+  }, [currentIndex, profiles, superLikeStatus]);
 
   const handleRewind = useCallback(async () => {
     if (currentIndex === 0) return;
@@ -337,10 +380,79 @@ export default function DiscoverPage() {
   }
 
   const gradient = gradients[currentProfile.id % gradients.length];
+  const canUseSuperLike = superLikeStatus?.canSuperLike ?? true;
 
   return (
     <div className="flex items-center justify-center min-h-[calc(100vh-100px)] p-4">
-      {/* Modal de signalement et Popup de match gardés à l'identique... */}
+      
+      {/* 🔒 MODAL LIMITE SUPER LIKE ATTEINTE */}
+      {showLimitModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl">
+            <div className="text-center mb-6">
+              <div className="w-20 h-20 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full flex items-center justify-center mx-auto mb-4 shadow-xl">
+                <Lock className="w-10 h-10 text-white" />
+              </div>
+              <h2 className="text-2xl font-black text-slate-900 mb-2">
+                {superLikeStatus?.isPremium
+                  ? "Limite quotidienne atteinte ⭐"
+                  : "Plus de Super Likes ! ⭐"}
+              </h2>
+              <p className="text-slate-600">
+                {superLikeStatus?.isPremium ? (
+                  <>Tu as utilisé tes <strong>{superLikeStatus.limit} Super Likes</strong> aujourd&apos;hui. Reviens demain !</>
+                ) : (
+                  <>Tu as utilisé ton Super Like gratuit du jour.</>
+                )}
+              </p>
+            </div>
+
+            {!superLikeStatus?.isPremium && (
+              <div className="bg-gradient-to-br from-yellow-50 to-orange-50 rounded-2xl p-5 border-2 border-yellow-200 mb-5">
+                <div className="flex items-center gap-2 mb-3">
+                  <Crown className="w-6 h-6 text-yellow-500 fill-yellow-500" />
+                  <p className="font-black text-slate-900">Avec Premium :</p>
+                </div>
+                <ul className="space-y-2 text-sm text-slate-700">
+                  <li className="flex items-center gap-2">
+                    <Star className="w-4 h-4 text-blue-500 fill-blue-500" />
+                    <strong>5 Super Likes</strong> par jour
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <Heart className="w-4 h-4 text-rose-500 fill-rose-500" />
+                    Voir qui t&apos;a liké
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-purple-500" />
+                    Boost profil 3x/jour
+                  </li>
+                </ul>
+              </div>
+            )}
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowLimitModal(false)}
+                className="flex-1 px-4 py-3 border border-slate-200 rounded-xl font-semibold text-slate-700 hover:bg-slate-50 transition"
+              >
+                Fermer
+              </button>
+              {!superLikeStatus?.isPremium && (
+                <Link
+                  href="/premium"
+                  onClick={() => setShowLimitModal(false)}
+                  className="flex-1 px-4 py-3 bg-gradient-to-r from-yellow-500 to-orange-500 text-white rounded-xl font-bold hover:shadow-lg transition flex items-center justify-center gap-2"
+                >
+                  <Gem className="w-4 h-4" />
+                  Premium
+                </Link>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal signalement */}
       {showReportModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
           <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl">
@@ -481,7 +593,7 @@ export default function DiscoverPage() {
           }`}
           style={{ minHeight: "600px" }}
         >
-          {/* Badge Premium flottant haut droite */}
+          {/* Badge Premium */}
           {currentProfile.isPremium && (
             <div className="absolute top-7 right-4 z-20">
               <div className="flex items-center gap-1.5 bg-gradient-to-r from-yellow-400 via-orange-500 to-yellow-400 bg-[length:200%_100%] animate-gradient-x rounded-full px-3 py-1.5 shadow-lg border border-white/30">
@@ -495,7 +607,6 @@ export default function DiscoverPage() {
             onClick={handlePhotoTap}
             className={`relative h-[500px] bg-gradient-to-br ${gradient} cursor-pointer select-none`}
           >
-            {/* BADGES REÇUS */}
             {currentProfile.hasSuperLikedMe && (
               <div className="absolute top-16 left-1/2 -translate-x-1/2 z-20 animate-pulse">
                 <div className="bg-gradient-to-r from-blue-500 to-cyan-500 text-white px-4 py-2 rounded-full shadow-2xl flex items-center gap-2 border-2 border-white">
@@ -531,7 +642,6 @@ export default function DiscoverPage() {
 
             <div className="absolute bottom-0 left-0 right-0 h-64 bg-gradient-to-t from-black/90 via-black/50 to-transparent pointer-events-none" />
 
-            {/* Indicateurs de photos */}
             {photos.length > 1 && (
               <div className="absolute top-3 left-3 right-3 flex gap-1 z-10">
                 {photos.map((_, i) => (
@@ -545,7 +655,6 @@ export default function DiscoverPage() {
               </div>
             )}
 
-            {/* Boutons Signaler + Bloquer */}
             <div className="absolute top-7 left-4 flex gap-2 z-10">
               <button
                 onClick={(e) => {
@@ -569,7 +678,6 @@ export default function DiscoverPage() {
               </button>
             </div>
 
-            {/* Statut En ligne (masqué si premium car badge premium prend la place) */}
             {currentProfile.isOnline && !currentProfile.isPremium && (
               <div className="absolute top-7 right-4 flex items-center gap-2 bg-white/90 backdrop-blur rounded-full px-3 py-1.5 z-10">
                 <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
@@ -577,7 +685,6 @@ export default function DiscoverPage() {
               </div>
             )}
 
-            {/* Navigation photos */}
             {photos.length > 1 && (
               <>
                 <button
@@ -603,7 +710,6 @@ export default function DiscoverPage() {
               </>
             )}
 
-            {/* Infos Overlay */}
             <div className="absolute bottom-4 left-4 right-4 text-white z-10 pointer-events-none">
               <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="text-3xl font-bold drop-shadow-lg flex items-center gap-2">
@@ -637,7 +743,6 @@ export default function DiscoverPage() {
             </div>
           </div>
 
-          {/* Bio, Interests et Prompts gardés à l'identique... */}
           <div className="p-5">
             {currentProfile.bio && (
               <div className="mb-4">
@@ -710,8 +815,28 @@ export default function DiscoverPage() {
           </div>
         </div>
 
-        {/* Boutons Actions */}
-        <div className="flex items-center justify-center gap-3 mt-6">
+        {/* Compteur Super Likes */}
+        {superLikeStatus && (
+          <div className="flex items-center justify-center mt-4">
+            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold ${
+              superLikeStatus.canSuperLike
+                ? "bg-blue-50 text-blue-600 border border-blue-200"
+                : "bg-slate-100 text-slate-500 border border-slate-200"
+            }`}>
+              <Star className={`w-3.5 h-3.5 ${superLikeStatus.canSuperLike ? "fill-blue-500" : ""}`} />
+              {superLikeStatus.remaining} / {superLikeStatus.limit} Super Like{superLikeStatus.limit > 1 ? "s" : ""} restant{superLikeStatus.limit > 1 ? "s" : ""}
+              {!superLikeStatus.isPremium && (
+                <Link href="/premium" className="ml-1 text-orange-500 hover:underline flex items-center gap-0.5">
+                  <Crown className="w-3 h-3" />
+                  +
+                </Link>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* BOUTONS ACTIONS */}
+        <div className="flex items-center justify-center gap-3 mt-3">
           <button
             onClick={handleRewind}
             disabled={!canRewind}
@@ -729,12 +854,24 @@ export default function DiscoverPage() {
             <X className="w-7 h-7" strokeWidth={2.5} />
           </button>
 
+          {/* Bouton Super Like avec verrouillage */}
           <button
             onClick={handleSuperLike}
-            className="w-16 h-16 bg-gradient-to-br from-blue-400 to-cyan-500 rounded-full shadow-lg shadow-blue-500/40 flex items-center justify-center text-white hover:shadow-xl hover:scale-110 transition-all duration-200"
-            title="Super Like"
+            className={`relative w-16 h-16 rounded-full shadow-lg flex items-center justify-center text-white transition-all duration-200 ${
+              canUseSuperLike
+                ? "bg-gradient-to-br from-blue-400 to-cyan-500 shadow-blue-500/40 hover:shadow-xl hover:scale-110"
+                : "bg-gradient-to-br from-slate-300 to-slate-400 shadow-slate-300/40 hover:scale-105"
+            }`}
+            title={canUseSuperLike ? "Super Like" : "Limite atteinte - Passe Premium"}
           >
-            <Star className="w-8 h-8 fill-white" strokeWidth={2} />
+            {canUseSuperLike ? (
+              <Star className="w-8 h-8 fill-white" strokeWidth={2} />
+            ) : (
+              <div className="relative">
+                <Star className="w-8 h-8 fill-white opacity-50" strokeWidth={2} />
+                <Lock className="w-4 h-4 absolute -top-1 -right-1 text-white bg-orange-500 rounded-full p-0.5" />
+              </div>
+            )}
           </button>
 
           <button
