@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { messages, matches, users } from "@/db/schema";
+import { messages, matches, users, blocks } from "@/db/schema";
 import { eq, and, or, asc, sql } from "drizzle-orm";
 import { getCurrentUserId } from "@/lib/auth";
+import { createNotification } from "@/lib/notifications";
 
 export async function GET(
   _req: NextRequest,
@@ -17,7 +18,6 @@ export async function GET(
     const { matchId: matchIdStr } = await params;
     const matchId = parseInt(matchIdStr, 10);
 
-    // Verify the user is part of this match
     const [match] = await db
       .select()
       .from(matches)
@@ -35,6 +35,22 @@ export async function GET(
 
     const otherId = match.user1Id === userId ? match.user2Id : match.user1Id;
 
+    // Vérifier blocage
+    const [blockCheck] = await db
+      .select()
+      .from(blocks)
+      .where(
+        or(
+          and(eq(blocks.blockerUserId, userId), eq(blocks.blockedUserId, otherId)),
+          and(eq(blocks.blockerUserId, otherId), eq(blocks.blockedUserId, userId))
+        )
+      )
+      .limit(1);
+
+    if (blockCheck) {
+      return NextResponse.json({ error: "Conversation impossible" }, { status: 403 });
+    }
+
     const [otherUser] = await db
       .select({
         id: users.id,
@@ -42,6 +58,8 @@ export async function GET(
         lastName: users.lastName,
         photoUrl: users.photoUrl,
         isOnline: users.isOnline,
+        isPremium: users.isPremium,
+        lastSeen: users.lastSeen,
       })
       .from(users)
       .where(eq(users.id, otherId))
@@ -59,7 +77,7 @@ export async function GET(
       .where(eq(messages.matchId, matchId))
       .orderBy(asc(messages.createdAt));
 
-    // Mark messages as read
+    // Marquer messages comme lus
     await db
       .update(messages)
       .set({ isRead: true })
@@ -74,10 +92,7 @@ export async function GET(
     return NextResponse.json({ messages: msgs, otherUser });
   } catch (error) {
     console.error("Messages error:", error);
-    return NextResponse.json(
-      { error: "Erreur serveur" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
   }
 }
 
@@ -94,7 +109,6 @@ export async function POST(
     const { matchId: matchIdStr } = await params;
     const matchId = parseInt(matchIdStr, 10);
 
-    // Verify the user is part of this match
     const [match] = await db
       .select()
       .from(matches)
@@ -108,6 +122,24 @@ export async function POST(
 
     if (!match) {
       return NextResponse.json({ error: "Match non trouvé" }, { status: 404 });
+    }
+
+    const otherId = match.user1Id === userId ? match.user2Id : match.user1Id;
+
+    // Vérifier blocage
+    const [blockCheck] = await db
+      .select()
+      .from(blocks)
+      .where(
+        or(
+          and(eq(blocks.blockerUserId, userId), eq(blocks.blockedUserId, otherId)),
+          and(eq(blocks.blockerUserId, otherId), eq(blocks.blockedUserId, userId))
+        )
+      )
+      .limit(1);
+
+    if (blockCheck) {
+      return NextResponse.json({ error: "Impossible d'envoyer un message" }, { status: 403 });
     }
 
     const body = await req.json();
@@ -129,12 +161,26 @@ export async function POST(
       })
       .returning();
 
+    // Récupérer mon prénom pour la notification
+    const [currentUser] = await db
+      .select({ firstName: users.firstName })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+
+    // Créer notification pour l'autre
+    if (currentUser) {
+      await createNotification({
+        userId: otherId,
+        type: "message",
+        fromUserId: userId,
+        content: `t'a envoyé un message`,
+      });
+    }
+
     return NextResponse.json({ message: newMsg });
   } catch (error) {
     console.error("Send message error:", error);
-    return NextResponse.json(
-      { error: "Erreur serveur" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
   }
 }
