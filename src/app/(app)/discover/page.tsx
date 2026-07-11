@@ -19,6 +19,7 @@ import {
   Ban,
   Gem,
   Lock,
+  BadgeCheck,
 } from "lucide-react";
 
 interface Profile {
@@ -40,6 +41,7 @@ interface Profile {
   occupation: string | null;
   isOnline: boolean;
   isPremium: boolean;
+  isVerified: boolean;
   distance: number | null;
   hasLikedMe: boolean;
   hasSuperLikedMe: boolean;
@@ -712,8 +714,11 @@ export default function DiscoverPage() {
 
             <div className="absolute bottom-4 left-4 right-4 text-white z-10 pointer-events-none">
               <div className="flex items-center gap-2 flex-wrap">
-                <h2 className="text-3xl font-bold drop-shadow-lg flex items-center gap-2">
+               <h2 className="text-3xl font-bold drop-shadow-lg flex items-center gap-2">
                   {currentProfile.firstName}
+                  {currentProfile.isVerified && (
+                    <BadgeCheck className="w-6 h-6 text-blue-400 fill-blue-500 drop-shadow-md" />
+                  )}
                   {currentProfile.isPremium && (
                     <Crown className="w-6 h-6 text-yellow-400 fill-yellow-400 drop-shadow-md" />
                   )}
