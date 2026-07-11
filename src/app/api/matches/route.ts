@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { matches, users, messages, blocks } from "@/db/schema";
-import { eq, or, and, desc, sql, notInArray } from "drizzle-orm";
+import { eq, or, and, desc, sql } from "drizzle-orm";
 import { getCurrentUserId } from "@/lib/auth";
 
 export async function GET() {
@@ -55,6 +55,7 @@ export async function GET() {
           lastSeen: users.lastSeen,
           city: users.city,
           isPremium: users.isPremium,
+          isVerified: users.isVerified,
           isBanned: users.isBanned,
         })
         .from(users)
