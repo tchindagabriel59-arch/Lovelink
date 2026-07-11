@@ -563,4 +563,284 @@ export default function DashboardPage() {
           {/* NOTIFICATIONS */}
           <div className="bg-white rounded-2xl p-6 border border-slate-100">
             <div className="flex items-center justify-between mb-4">
-              <h3 
+              <h3 className="text-lg font-bold flex items-center gap-2">
+                <Bell className="w-5 h-5 text-purple-500" />
+                Notifications
+              </h3>
+              {(stats?.unreadNotifs || 0) > 0 && (
+                <span className="px-2 py-0.5 bg-rose-500 text-white text-xs rounded-full font-bold">
+                  {stats?.unreadNotifs}
+                </span>
+              )}
+            </div>
+            {dashData?.recentNotifs && dashData.recentNotifs.length > 0 ? (
+              <div className="space-y-2">
+                {dashData.recentNotifs.map((notif) => (
+                  <Link
+                    key={notif.id}
+                    href={getNotifLink(notif.type)}
+                    className={`flex items-start gap-3 p-3 rounded-xl transition ${
+                      !notif.isRead
+                        ? "bg-rose-50 hover:bg-rose-100"
+                        : "hover:bg-slate-50"
+                    }`}
+                  >
+                    {notif.fromUser?.photoUrl ? (
+                      <img
+                        src={notif.fromUser.photoUrl}
+                        alt=""
+                        className="w-9 h-9 rounded-full object-cover flex-shrink-0"
+                      />
+                    ) : (
+                      <div className="w-9 h-9 rounded-full bg-gradient-to-br from-rose-400 to-purple-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                        {notif.fromUser?.firstName?.charAt(0) || "?"}
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-slate-700">
+                        <span className="text-base mr-1">{getNotifIcon(notif.type)}</span>
+                        <strong>{notif.fromUser?.firstName || "Quelqu'un"}</strong>{" "}
+                        {notif.content}
+                      </p>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        {timeAgo(notif.createdAt)}
+                      </p>
+                    </div>
+                    {!notif.isRead && (
+                      <div className="w-2 h-2 bg-rose-500 rounded-full flex-shrink-0 mt-1.5" />
+                    )}
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-6">
+                <Bell className="w-10 h-10 text-slate-200 mx-auto mb-2" />
+                <p className="text-sm text-slate-500">Aucune notification</p>
+              </div>
+            )}
+          </div>
+
+          {/* PROGRESSION SEMAINE */}
+          <div className="bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 rounded-2xl p-6 text-white relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500/20 rounded-full blur-3xl" />
+            <div className="relative">
+              <div className="flex items-center gap-2 mb-4">
+                <TrendingUp className="w-5 h-5 text-emerald-400" />
+                <h3 className="text-lg font-bold">Ta semaine</h3>
+              </div>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-slate-300">💕 Nouveaux matchs</span>
+                  <span className="font-bold text-emerald-400 text-lg">
+                    +{stats?.matchesThisWeek || 0}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-slate-300">❤️ Likes reçus</span>
+                  <span className="font-bold text-rose-400 text-lg">
+                    +{stats?.likesReceivedThisWeek || 0}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-slate-300">⭐ Super likes</span>
+                  <span className="font-bold text-blue-400 text-lg">
+                    {stats?.superLikesReceived || 0}
+                  </span>
+                </div>
+              </div>
+              <div className="mt-4 pt-4 border-t border-white/10">
+                <Link
+                  href="/discover"
+                  className="flex items-center justify-center gap-2 w-full py-2.5 bg-gradient-to-r from-rose-500 to-purple-600 rounded-xl font-bold text-sm hover:shadow-lg transition"
+                >
+                  <Compass className="w-4 h-4" />
+                  Découvrir plus
+                </Link>
+              </div>
+            </div>
+          </div>
+
+          {/* MINI CTA PREMIUM */}
+          {!isPremium && (
+            <div className="bg-gradient-to-br from-yellow-400 via-orange-500 to-yellow-500 rounded-2xl p-5 text-white shadow-2xl relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full -translate-y-12 translate-x-12" />
+              <div className="relative">
+                <div className="flex items-center gap-2 mb-3">
+                  <Crown className="w-6 h-6 fill-white" />
+                  <h3 className="font-black text-lg">Passe Premium</h3>
+                </div>
+                <ul className="space-y-1.5 text-sm mb-4">
+                  <li className="flex items-center gap-2">
+                    <Eye className="w-4 h-4" />
+                    Vois qui t&apos;a liké
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <Star className="w-4 h-4 fill-white" />
+                    Super Likes illimités
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <Rocket className="w-4 h-4" />
+                    Boosts 3x/jour
+                  </li>
+                </ul>
+                <Link
+                  href="/premium"
+                  className="w-full flex items-center justify-center gap-2 py-2.5 bg-white text-orange-600 rounded-xl font-black text-sm hover:scale-105 transition-transform"
+                >
+                  <Gem className="w-4 h-4" />
+                  Découvrir
+                </Link>
+              </div>
+            </div>
+          )}
+
+          {/* MON PROFIL */}
+          <div className="bg-white rounded-2xl p-6 border border-slate-100">
+            <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
+              <User className="w-5 h-5 text-blue-500" />
+              Mon profil
+            </h3>
+            <div className="text-center">
+              <div className="relative inline-block">
+                {user?.photoUrl ? (
+                  <img
+                    src={user.photoUrl}
+                    alt={user.firstName}
+                    className={`w-20 h-20 rounded-2xl object-cover mx-auto mb-3 shadow-md ${
+                      isPremium ? "ring-4 ring-yellow-400" : ""
+                    }`}
+                  />
+                ) : (
+                  <div className={`w-20 h-20 rounded-2xl bg-gradient-to-br from-rose-400 to-purple-500 flex items-center justify-center text-white text-2xl font-bold mx-auto mb-3 shadow-md ${
+                    isPremium ? "ring-4 ring-yellow-400" : ""
+                  }`}>
+                    {user?.firstName?.charAt(0)}
+                    {user?.lastName?.charAt(0)}
+                  </div>
+                )}
+                {isPremium && (
+                  <div className="absolute -top-1 -right-1 w-6 h-6 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full flex items-center justify-center shadow-lg border-2 border-white">
+                    <Crown className="w-3 h-3 text-white fill-white" />
+                  </div>
+                )}
+              </div>
+              <div className="flex items-center justify-center gap-1">
+                <p className="font-bold text-slate-900">
+                  {user?.firstName} {user?.lastName}
+                </p>
+                {user?.isVerified && (
+                  <BadgeCheck className="w-4 h-4 text-blue-500 fill-blue-500" />
+                )}
+                {isPremium && (
+                  <Crown className="w-4 h-4 text-yellow-500 fill-yellow-500" />
+                )}
+              </div>
+              {user?.city && (
+                <p className="text-sm text-slate-500 flex items-center justify-center gap-1 mt-1">
+                  <MapPin className="w-3 h-3" />
+                  {user.city}
+                </p>
+              )}
+              <Link
+                href="/profile"
+                className="inline-flex items-center gap-2 mt-4 px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-slate-700 font-medium text-sm transition"
+              >
+                <Camera className="w-4 h-4" />
+                Éditer
+              </Link>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StatCard({
+  icon,
+  value,
+  label,
+  sub,
+  gradient,
+  badge,
+  alert,
+}: {
+  icon: React.ReactNode;
+  value: number;
+  label: string;
+  sub: string;
+  gradient: string;
+  badge?: string;
+  alert?: boolean;
+}) {
+  return (
+    <div className={`bg-gradient-to-br ${gradient} rounded-2xl p-4 text-white shadow-md relative overflow-hidden`}>
+      {alert && (value > 0) && (
+        <div className="absolute top-2 right-2 w-2 h-2 bg-white rounded-full animate-pulse" />
+      )}
+      <div className="flex items-center justify-between mb-2">
+        <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
+          {icon}
+        </div>
+        {badge && (
+          <span className="text-xs font-bold bg-white/20 px-2 py-1 rounded-full">
+            {badge}
+          </span>
+        )}
+      </div>
+      <p className="text-3xl font-bold">{value.toLocaleString()}</p>
+      <p className="text-xs text-white/90 mt-1">{label}</p>
+      <p className="text-[10px] text-white/70 mt-0.5">{sub}</p>
+    </div>
+  );
+}
+
+function ActionCard({
+  href,
+  icon,
+  label,
+  gradient,
+  badge,
+  alert,
+  locked,
+}: {
+  href: string;
+  icon: React.ReactNode;
+  label: string;
+  gradient: string;
+  badge?: number;
+  alert?: boolean;
+  locked?: boolean;
+}) {
+  return (
+    <Link
+      href={href}
+      className="group relative bg-white rounded-2xl p-4 border border-slate-100 hover:shadow-lg hover:-translate-y-1 transition-all"
+    >
+      {badge !== undefined && badge > 0 && (
+        <div className={`absolute -top-1 -right-1 min-w-[20px] h-5 ${alert ? "bg-rose-500" : "bg-purple-500"} text-white text-xs font-bold rounded-full flex items-center justify-center px-1.5 shadow-lg ${alert ? "animate-pulse" : ""}`}>
+          {badge > 9 ? "9+" : badge}
+        </div>
+      )}
+      {locked && (
+        <div className="absolute -top-1 -left-1 w-5 h-5 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full flex items-center justify-center shadow-lg">
+          <Lock className="w-3 h-3 text-white" />
+        </div>
+      )}
+      <div className={`w-12 h-12 bg-gradient-to-br ${gradient} rounded-xl flex items-center justify-center text-white mb-2 group-hover:scale-110 transition`}>
+        {icon}
+      </div>
+      <p className="text-sm font-bold text-slate-900">{label}</p>
+    </Link>
+  );
+}
+
+function PremiumFeature({ icon, title, desc }: { icon: string; title: string; desc: string }) {
+  return (
+    <div className="p-3 bg-gradient-to-br from-yellow-50 to-orange-50 rounded-xl border border-yellow-200">
+      <div className="text-2xl mb-1">{icon}</div>
+      <p className="text-xs font-bold text-slate-900">{title}</p>
+      <p className="text-[10px] text-slate-500">{desc}</p>
+    </div>
+  );
+}
