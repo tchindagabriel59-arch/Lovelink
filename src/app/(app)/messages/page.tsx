@@ -9,11 +9,17 @@ import {
   ArrowLeft,
   MessageCircle,
   Compass,
+  Crown,
+  Image as ImageIcon,
+  Smile,
+  Check,
+  CheckCheck,
 } from "lucide-react";
 import Link from "next/link";
 
 interface MatchData {
   matchId: number;
+  matchedAt: string;
   user: {
     id: number;
     firstName: string;
@@ -21,10 +27,13 @@ interface MatchData {
     photoUrl: string | null;
     isOnline: boolean;
     city: string | null;
+    isPremium: boolean;
   };
   lastMessage: {
     content: string;
+    senderId: number;
     createdAt: string;
+    isRead: boolean;
   } | null;
   unreadCount: number;
 }
@@ -43,6 +52,8 @@ interface OtherUser {
   lastName: string;
   photoUrl: string | null;
   isOnline: boolean;
+  isPremium: boolean;
+  lastSeen: string | null;
 }
 
 const gradients = [
@@ -53,6 +64,8 @@ const gradients = [
   "from-emerald-400 to-teal-500",
   "from-fuchsia-400 to-pink-500",
 ];
+
+const quickEmojis = ["❤️", "😂", "🔥", "👍", "🥰", "😍", "😘", "🎉"];
 
 function MessagesContent() {
   const searchParams = useSearchParams();
@@ -65,28 +78,35 @@ function MessagesContent() {
   const [loadingMatches, setLoadingMatches] = useState(true);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [sending, setSending] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [showEmojis, setShowEmojis] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
-  useEffect(() => {
-    async function fetchMatches() {
-      try {
-        const res = await fetch("/api/matches");
-        if (res.ok) {
-          const data = await res.json();
-          setMatchesList(data.matches || []);
-        }
-      } catch {
-        // silently fail
-      } finally {
-        setLoadingMatches(false);
+  const fetchMatchesList = useCallback(async () => {
+    try {
+      const res = await fetch("/api/matches");
+      if (res.ok) {
+        const data = await res.json();
+        setMatchesList(data.matches || []);
       }
+    } catch {
+      // silently fail
+    } finally {
+      setLoadingMatches(false);
     }
-    fetchMatches();
   }, []);
+
+  useEffect(() => {
+    fetchMatchesList();
+    // Actualiser la liste toutes les 15 secondes
+    const interval = setInterval(fetchMatchesList, 15000);
+    return () => clearInterval(interval);
+  }, [fetchMatchesList]);
 
   useEffect(() => {
     const matchParam = searchParams.get("match");
@@ -121,12 +141,11 @@ function MessagesContent() {
     scrollToBottom();
   }, [chatMessages]);
 
-  // Poll for new messages
   useEffect(() => {
     if (!selectedMatch) return;
     const interval = setInterval(() => {
       fetchMessages(selectedMatch);
-    }, 5000);
+    }, 3000);
     return () => clearInterval(interval);
   }, [selectedMatch, fetchMessages]);
 
@@ -135,6 +154,7 @@ function MessagesContent() {
     if (!newMessage.trim() || !selectedMatch || sending) return;
 
     setSending(true);
+    setShowEmojis(false);
     try {
       const res = await fetch(`/api/messages/${selectedMatch}`, {
         method: "POST",
@@ -145,6 +165,7 @@ function MessagesContent() {
         const data = await res.json();
         setChatMessages((prev) => [...prev, data.message]);
         setNewMessage("");
+        fetchMatchesList();
       }
     } catch {
       // silently fail
@@ -153,27 +174,128 @@ function MessagesContent() {
     }
   }
 
+  async function handleSendEmoji(emoji: string) {
+    if (!selectedMatch || sending) return;
+    setSending(true);
+    try {
+      const res = await fetch(`/api/messages/${selectedMatch}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: emoji }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setChatMessages((prev) => [...prev, data.message]);
+        fetchMatchesList();
+      }
+    } catch {
+      // silently fail
+    } finally {
+      setSending(false);
+    }
+  }
+
+  async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !selectedMatch) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      alert("Image trop grande. Max 5 MB.");
+      return;
+    }
+
+    setUploadingImage(true);
+    try {
+      // Upload à ImgBB
+      const uploadRes = await fetch(
+        `/api/upload?filename=${encodeURIComponent(file.name)}`,
+        {
+          method: "POST",
+          body: file,
+        }
+      );
+
+      if (!uploadRes.ok) throw new Error("Upload échoué");
+
+      const blob = await uploadRes.json();
+      const imageUrl = blob.url;
+
+      // Envoyer comme message avec URL formattée
+      const res = await fetch(`/api/messages/${selectedMatch}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: `[IMAGE]${imageUrl}` }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setChatMessages((prev) => [...prev, data.message]);
+        fetchMatchesList();
+      }
+    } catch {
+      alert("Erreur envoi image");
+    } finally {
+      setUploadingImage(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
+  function formatMessageTime(dateStr: string) {
+    const date = new Date(dateStr);
+    return date.toLocaleTimeString("fr-FR", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
+
   function timeAgo(dateStr: string) {
     const diff = Date.now() - new Date(dateStr).getTime();
     const mins = Math.floor(diff / 60000);
-    if (mins < 1) return "À l'instant";
+    if (mins < 1) return "maintenant";
     if (mins < 60) return `${mins}min`;
     const hours = Math.floor(mins / 60);
     if (hours < 24) return `${hours}h`;
     const days = Math.floor(hours / 24);
-    return `${days}j`;
+    if (days < 7) return `${days}j`;
+    return new Date(dateStr).toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
   }
+
+  // Séparer nouveaux matchs (sans messages) et conversations
+  const newMatches = matchesList.filter((m) => !m.lastMessage);
+  const conversations = matchesList.filter((m) => m.lastMessage);
+
+  // Fonction pour render un message (texte ou image)
+  const renderMessageContent = (content: string, isMine: boolean) => {
+    if (content.startsWith("[IMAGE]")) {
+      const imageUrl = content.replace("[IMAGE]", "");
+      return (
+        <img
+          src={imageUrl}
+          alt="Photo envoyée"
+          className="rounded-xl max-w-full max-h-64 object-cover cursor-pointer"
+          onClick={() => window.open(imageUrl, "_blank")}
+        />
+      );
+    }
+    // Détecter si c'est juste un ou plusieurs emojis
+    const isEmojiOnly = /^\p{Emoji}+$/u.test(content) && content.length <= 4;
+    return (
+      <p className={`leading-relaxed ${isEmojiOnly ? "text-4xl" : "text-sm"}`}>
+        {content}
+      </p>
+    );
+  };
 
   return (
     <div className="flex h-[calc(100vh-64px)] lg:h-screen">
-      {/* Conversations List */}
+      {/* Sidebar Conversations */}
       <div
         className={`${
           selectedMatch ? "hidden md:flex" : "flex"
         } flex-col w-full md:w-80 lg:w-96 border-r border-slate-100 bg-white`}
       >
         <div className="p-4 border-b border-slate-100">
-          <h2 className="text-xl font-bold text-slate-900">Messages</h2>
+          <h2 className="text-2xl font-bold text-slate-900">Messages</h2>
         </div>
 
         {loadingMatches ? (
@@ -183,14 +305,14 @@ function MessagesContent() {
         ) : matchesList.length === 0 ? (
           <div className="flex-1 flex items-center justify-center p-6">
             <div className="text-center">
-              <MessageCircle className="w-12 h-12 text-slate-200 mx-auto mb-3" />
-              <p className="text-slate-500 font-medium">Aucune conversation</p>
-              <p className="text-sm text-slate-400 mt-1">
+              <MessageCircle className="w-16 h-16 text-slate-200 mx-auto mb-3" />
+              <p className="text-slate-600 font-semibold">Aucun match</p>
+              <p className="text-sm text-slate-400 mt-1 mb-4">
                 Matchez avec quelqu&apos;un pour commencer à discuter
               </p>
               <Link
                 href="/discover"
-                className="inline-flex items-center gap-2 mt-4 px-4 py-2 bg-gradient-to-r from-rose-500 to-purple-600 text-white rounded-lg text-sm font-medium"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-rose-500 to-purple-600 text-white rounded-full text-sm font-semibold shadow-md hover:shadow-lg transition"
               >
                 <Compass className="w-4 h-4" />
                 Découvrir
@@ -199,66 +321,143 @@ function MessagesContent() {
           </div>
         ) : (
           <div className="flex-1 overflow-y-auto">
-            {matchesList.map((match) => {
-              const gradient = gradients[match.user.id % gradients.length];
-              return (
-                <button
-                  key={match.matchId}
-                  onClick={() => setSelectedMatch(match.matchId)}
-                  className={`flex items-center gap-3 w-full p-4 hover:bg-slate-50 transition text-left ${
-                    selectedMatch === match.matchId
-                      ? "bg-rose-50 border-r-2 border-rose-500"
-                      : ""
-                  }`}
-                >
-                  <div className="relative flex-shrink-0">
-                    <div
-                      className={`w-12 h-12 rounded-full bg-gradient-to-br ${gradient} flex items-center justify-center text-white font-bold`}
+            {/* Section NOUVEAUX MATCHS style Instagram Stories */}
+            {newMatches.length > 0 && (
+              <div className="p-4 border-b border-slate-100">
+                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">
+                  ✨ Nouveaux matchs
+                </h3>
+                <div className="flex gap-3 overflow-x-auto pb-2">
+                  {newMatches.map((match) => {
+                    const gradient = gradients[match.user.id % gradients.length];
+                    return (
+                      <button
+                        key={match.matchId}
+                        onClick={() => setSelectedMatch(match.matchId)}
+                        className="flex flex-col items-center gap-1 flex-shrink-0"
+                      >
+                        <div className="relative">
+                          <div className="p-0.5 rounded-full bg-gradient-to-r from-rose-500 via-purple-500 to-pink-500">
+                            {match.user.photoUrl ? (
+                              <img
+                                src={match.user.photoUrl}
+                                alt={match.user.firstName}
+                                className="w-16 h-16 rounded-full object-cover border-2 border-white"
+                              />
+                            ) : (
+                              <div
+                                className={`w-16 h-16 rounded-full bg-gradient-to-br ${gradient} flex items-center justify-center text-white font-bold text-lg border-2 border-white`}
+                              >
+                                {match.user.firstName?.charAt(0)}
+                              </div>
+                            )}
+                          </div>
+                          {match.user.isOnline && (
+                            <div className="absolute bottom-0.5 right-0.5 w-3.5 h-3.5 bg-green-500 rounded-full border-2 border-white" />
+                          )}
+                        </div>
+                        <span className="text-xs font-medium text-slate-700 max-w-[64px] truncate">
+                          {match.user.firstName}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Section CONVERSATIONS */}
+            {conversations.length > 0 && (
+              <div>
+                {newMatches.length > 0 && (
+                  <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider p-4 pb-2">
+                    💬 Conversations
+                  </h3>
+                )}
+                {conversations.map((match) => {
+                  const gradient = gradients[match.user.id % gradients.length];
+                  const lastMsgIsMine = match.lastMessage?.senderId === user?.id;
+                  return (
+                    <button
+                      key={match.matchId}
+                      onClick={() => setSelectedMatch(match.matchId)}
+                      className={`flex items-center gap-3 w-full p-4 hover:bg-slate-50 transition text-left ${
+                        selectedMatch === match.matchId
+                          ? "bg-rose-50 border-r-4 border-rose-500"
+                          : ""
+                      }`}
                     >
-                      {match.user.firstName?.charAt(0)}
-                    </div>
-                    {match.user.isOnline && (
-                      <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 rounded-full border-2 border-white" />
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between">
-                      <p className="font-semibold text-sm text-slate-900 truncate">
-                        {match.user.firstName}
-                      </p>
-                      {match.lastMessage && (
-                        <span className="text-[10px] text-slate-400">
-                          {timeAgo(match.lastMessage.createdAt)}
+                      <div className="relative flex-shrink-0">
+                        {match.user.photoUrl ? (
+                          <img
+                            src={match.user.photoUrl}
+                            alt={match.user.firstName}
+                            className="w-14 h-14 rounded-full object-cover"
+                          />
+                        ) : (
+                          <div
+                            className={`w-14 h-14 rounded-full bg-gradient-to-br ${gradient} flex items-center justify-center text-white font-bold text-lg`}
+                          >
+                            {match.user.firstName?.charAt(0)}
+                          </div>
+                        )}
+                        {match.user.isOnline && (
+                          <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 rounded-full border-2 border-white" />
+                        )}
+                        {match.user.isPremium && (
+                          <div className="absolute -top-1 -right-1 w-5 h-5 bg-gradient-to-br from-amber-400 to-orange-500 rounded-full flex items-center justify-center border-2 border-white">
+                            <Crown className="w-2.5 h-2.5 text-white fill-white" />
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between">
+                          <p className="font-semibold text-slate-900 truncate">
+                            {match.user.firstName}
+                          </p>
+                          {match.lastMessage && (
+                            <span className="text-xs text-slate-400 flex-shrink-0 ml-2">
+                              {timeAgo(match.lastMessage.createdAt)}
+                            </span>
+                          )}
+                        </div>
+                        {match.lastMessage && (
+                          <p className={`text-sm truncate mt-0.5 flex items-center gap-1 ${
+                            match.unreadCount > 0 && !lastMsgIsMine
+                              ? "text-slate-900 font-semibold"
+                              : "text-slate-500"
+                          }`}>
+                            {lastMsgIsMine && <span className="text-slate-400">Toi:</span>}
+                            {match.lastMessage.content.startsWith("[IMAGE]") ? (
+                              <span className="flex items-center gap-1">
+                                <ImageIcon className="w-3.5 h-3.5" />
+                                Photo
+                              </span>
+                            ) : (
+                              match.lastMessage.content
+                            )}
+                          </p>
+                        )}
+                      </div>
+                      {match.unreadCount > 0 && !lastMsgIsMine && (
+                        <span className="w-6 h-6 bg-gradient-to-br from-rose-500 to-pink-500 text-white rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 shadow-md">
+                          {match.unreadCount > 9 ? "9+" : match.unreadCount}
                         </span>
                       )}
-                    </div>
-                    {match.lastMessage ? (
-                      <p className="text-xs text-slate-500 truncate mt-0.5">
-                        {match.lastMessage.content}
-                      </p>
-                    ) : (
-                      <p className="text-xs text-rose-400 italic mt-0.5">
-                        Nouveau match ! 💕
-                      </p>
-                    )}
-                  </div>
-                  {match.unreadCount > 0 && (
-                    <span className="w-5 h-5 bg-rose-500 text-white rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0">
-                      {match.unreadCount}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
       </div>
 
       {/* Chat Area */}
       {selectedMatch ? (
-        <div className="flex-1 flex flex-col bg-slate-50">
+        <div className="flex-1 flex flex-col bg-gradient-to-br from-slate-50 to-rose-50/30">
           {/* Chat Header */}
-          <div className="p-4 bg-white border-b border-slate-100 flex items-center gap-3">
+          <div className="p-4 bg-white border-b border-slate-100 flex items-center gap-3 shadow-sm">
             <button
               onClick={() => setSelectedMatch(null)}
               className="md:hidden p-1 text-slate-400 hover:text-slate-600"
@@ -268,23 +467,45 @@ function MessagesContent() {
             {otherUser && (
               <>
                 <div className="relative">
-                  <div
-                    className={`w-10 h-10 rounded-full bg-gradient-to-br ${
-                      gradients[otherUser.id % gradients.length]
-                    } flex items-center justify-center text-white font-bold text-sm`}
-                  >
-                    {otherUser.firstName?.charAt(0)}
-                  </div>
+                  {otherUser.photoUrl ? (
+                    <img
+                      src={otherUser.photoUrl}
+                      alt={otherUser.firstName}
+                      className="w-11 h-11 rounded-full object-cover"
+                    />
+                  ) : (
+                    <div
+                      className={`w-11 h-11 rounded-full bg-gradient-to-br ${
+                        gradients[otherUser.id % gradients.length]
+                      } flex items-center justify-center text-white font-bold`}
+                    >
+                      {otherUser.firstName?.charAt(0)}
+                    </div>
+                  )}
                   {otherUser.isOnline && (
                     <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-white" />
                   )}
                 </div>
-                <div>
-                  <p className="font-semibold text-slate-900 text-sm">
-                    {otherUser.firstName} {otherUser.lastName}
-                  </p>
-                  <p className="text-xs text-slate-400">
-                    {otherUser.isOnline ? "En ligne" : "Hors ligne"}
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <p className="font-semibold text-slate-900">
+                      {otherUser.firstName} {otherUser.lastName}
+                    </p>
+                    {otherUser.isPremium && (
+                      <Crown className="w-4 h-4 text-amber-500 fill-amber-500" />
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    {otherUser.isOnline ? (
+                      <span className="flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
+                        En ligne
+                      </span>
+                    ) : otherUser.lastSeen ? (
+                      `Vu ${timeAgo(otherUser.lastSeen)}`
+                    ) : (
+                      "Hors ligne"
+                    )}
                   </p>
                 </div>
               </>
@@ -292,46 +513,88 @@ function MessagesContent() {
           </div>
 
           {/* Messages */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-3">
+          <div className="flex-1 overflow-y-auto p-4 space-y-2">
             {loadingMessages ? (
               <div className="flex items-center justify-center h-full">
                 <Heart className="w-8 h-8 text-rose-300 animate-pulse" />
               </div>
             ) : chatMessages.length === 0 ? (
               <div className="flex items-center justify-center h-full">
-                <div className="text-center">
-                  <Heart className="w-12 h-12 text-rose-200 mx-auto mb-3" />
-                  <p className="text-slate-500 font-medium">
-                    Commencez la conversation !
+                <div className="text-center max-w-xs">
+                  <div className="w-20 h-20 rounded-full bg-gradient-to-br from-rose-100 to-purple-100 flex items-center justify-center mx-auto mb-4">
+                    <Heart className="w-10 h-10 text-rose-400 fill-rose-400" />
+                  </div>
+                  <p className="text-slate-700 font-bold text-lg">
+                    C&apos;est un match !
                   </p>
-                  <p className="text-sm text-slate-400 mt-1">
-                    Envoyez le premier message
+                  <p className="text-sm text-slate-500 mt-1">
+                    Envoie le premier message à {otherUser?.firstName} 💬
                   </p>
                 </div>
               </div>
             ) : (
-              chatMessages.map((msg) => {
+              chatMessages.map((msg, index) => {
                 const isMine = msg.senderId === user?.id;
+                const prevMsg = index > 0 ? chatMessages[index - 1] : null;
+                const nextMsg = index < chatMessages.length - 1 ? chatMessages[index + 1] : null;
+                const isSameSenderAsPrev = prevMsg?.senderId === msg.senderId;
+                const isSameSenderAsNext = nextMsg?.senderId === msg.senderId;
+
+                // Grouper les messages : première, milieu, dernière du groupe
+                const isFirstOfGroup = !isSameSenderAsPrev;
+                const isLastOfGroup = !isSameSenderAsNext;
+
+                // Afficher l'heure seulement au dernier message du groupe
+                const showTime = isLastOfGroup;
+                const isImage = msg.content.startsWith("[IMAGE]");
+
                 return (
                   <div
                     key={msg.id}
-                    className={`flex ${isMine ? "justify-end" : "justify-start"}`}
+                    className={`flex ${isMine ? "justify-end" : "justify-start"} ${
+                      isFirstOfGroup ? "mt-3" : "mt-0.5"
+                    }`}
                   >
-                    <div
-                      className={`max-w-[75%] px-4 py-2.5 rounded-2xl ${
-                        isMine
-                          ? "bg-gradient-to-r from-rose-500 to-purple-600 text-white rounded-br-md"
-                          : "bg-white text-slate-800 shadow-sm rounded-bl-md"
-                      }`}
-                    >
-                      <p className="text-sm leading-relaxed">{msg.content}</p>
-                      <p
-                        className={`text-[10px] mt-1 ${
-                          isMine ? "text-white/70" : "text-slate-400"
+                    <div className={`max-w-[75%] ${isImage ? "" : ""}`}>
+                      <div
+                        className={`${isImage ? "p-1" : "px-4 py-2.5"} ${
+                          isMine
+                            ? `bg-gradient-to-r from-rose-500 to-purple-600 text-white ${
+                                isFirstOfGroup && isLastOfGroup
+                                  ? "rounded-2xl"
+                                  : isFirstOfGroup
+                                  ? "rounded-2xl rounded-br-md"
+                                  : isLastOfGroup
+                                  ? "rounded-2xl rounded-tr-md"
+                                  : "rounded-l-2xl rounded-r-md"
+                              }`
+                            : `bg-white text-slate-800 shadow-sm ${
+                                isFirstOfGroup && isLastOfGroup
+                                  ? "rounded-2xl"
+                                  : isFirstOfGroup
+                                  ? "rounded-2xl rounded-bl-md"
+                                  : isLastOfGroup
+                                  ? "rounded-2xl rounded-tl-md"
+                                  : "rounded-r-2xl rounded-l-md"
+                              }`
                         }`}
                       >
-                        {timeAgo(msg.createdAt)}
-                      </p>
+                        {renderMessageContent(msg.content, isMine)}
+                      </div>
+                      {showTime && (
+                        <div className={`flex items-center gap-1 mt-1 ${isMine ? "justify-end" : "justify-start"}`}>
+                          <span className="text-[10px] text-slate-400">
+                            {formatMessageTime(msg.createdAt)}
+                          </span>
+                          {isMine && (
+                            msg.isRead ? (
+                              <CheckCheck className="w-3 h-3 text-blue-500" />
+                            ) : (
+                              <Check className="w-3 h-3 text-slate-400" />
+                            )
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                 );
@@ -340,38 +603,96 @@ function MessagesContent() {
             <div ref={messagesEndRef} />
           </div>
 
+          {/* Emojis rapides */}
+          {showEmojis && (
+            <div className="px-4 py-2 bg-white border-t border-slate-100 flex items-center gap-2 overflow-x-auto">
+              {quickEmojis.map((emoji) => (
+                <button
+                  key={emoji}
+                  type="button"
+                  onClick={() => handleSendEmoji(emoji)}
+                  disabled={sending}
+                  className="text-3xl hover:scale-125 transition disabled:opacity-50 flex-shrink-0"
+                >
+                  {emoji}
+                </button>
+              ))}
+            </div>
+          )}
+
           {/* Message Input */}
           <form
             onSubmit={handleSend}
-            className="p-4 bg-white border-t border-slate-100"
+            className="p-3 bg-white border-t border-slate-100"
           >
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              {/* Bouton emoji */}
+              <button
+                type="button"
+                onClick={() => setShowEmojis(!showEmojis)}
+                className={`p-2.5 rounded-full transition ${
+                  showEmojis
+                    ? "bg-rose-100 text-rose-600"
+                    : "text-slate-400 hover:bg-slate-100"
+                }`}
+                title="Emojis"
+              >
+                <Smile className="w-5 h-5" />
+              </button>
+
+              {/* Bouton image */}
+              <input
+                type="file"
+                ref={fileInputRef}
+                accept="image/*"
+                onChange={handleImageUpload}
+                className="hidden"
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploadingImage}
+                className="p-2.5 rounded-full text-slate-400 hover:bg-slate-100 transition disabled:opacity-50"
+                title="Envoyer une photo"
+              >
+                {uploadingImage ? (
+                  <span className="text-xs">...</span>
+                ) : (
+                  <ImageIcon className="w-5 h-5" />
+                )}
+              </button>
+
+              {/* Input texte */}
               <input
                 type="text"
                 value={newMessage}
                 onChange={(e) => setNewMessage(e.target.value)}
-                placeholder="Écrivez un message..."
-                className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-rose-400 focus:ring-2 focus:ring-rose-100 transition text-sm"
+                placeholder="Écris un message..."
+                className="flex-1 px-4 py-2.5 bg-slate-100 rounded-full focus:bg-white focus:ring-2 focus:ring-rose-200 transition text-sm outline-none"
               />
+
+              {/* Bouton envoyer */}
               <button
                 type="submit"
                 disabled={!newMessage.trim() || sending}
-                className="w-12 h-12 bg-gradient-to-r from-rose-500 to-purple-600 rounded-xl flex items-center justify-center text-white hover:shadow-lg transition disabled:opacity-50"
+                className="w-11 h-11 bg-gradient-to-r from-rose-500 to-purple-600 rounded-full flex items-center justify-center text-white hover:shadow-lg hover:scale-105 transition disabled:opacity-30 disabled:hover:scale-100"
               >
-                <Send className="w-5 h-5" />
+                <Send className="w-4 h-4" />
               </button>
             </div>
           </form>
         </div>
       ) : (
-        <div className="hidden md:flex flex-1 items-center justify-center bg-slate-50">
+        <div className="hidden md:flex flex-1 items-center justify-center bg-gradient-to-br from-slate-50 to-rose-50/30">
           <div className="text-center">
-            <MessageCircle className="w-16 h-16 text-slate-200 mx-auto mb-4" />
-            <p className="text-xl font-semibold text-slate-400">
-              Sélectionnez une conversation
+            <div className="w-24 h-24 rounded-full bg-gradient-to-br from-rose-100 to-purple-100 flex items-center justify-center mx-auto mb-4">
+              <MessageCircle className="w-12 h-12 text-rose-400" />
+            </div>
+            <p className="text-xl font-bold text-slate-700">
+              Sélectionne une conversation
             </p>
-            <p className="text-sm text-slate-400 mt-1">
-              Choisissez un match pour commencer à discuter
+            <p className="text-sm text-slate-500 mt-1">
+              Choisis un match pour commencer à discuter 💬
             </p>
           </div>
         </div>
