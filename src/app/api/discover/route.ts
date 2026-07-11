@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { users, likes, blocks } from "@/db/schema";
-import { eq, notInArray, sql, and, gte, lte, inArray } from "drizzle-orm";
+import { eq, notInArray, sql, and, gte, lte } from "drizzle-orm";
 import { getCurrentUserId } from "@/lib/auth";
 
 function calculateDistance(
@@ -39,13 +39,6 @@ export async function GET() {
         prefMaxDistance: users.prefMaxDistance,
         latitude: users.latitude,
         longitude: users.longitude,
-        prompt1Question: users.prompt1Question,
-        prompt1Answer: users.prompt1Answer,
-        prompt2Question: users.prompt2Question,
-        prompt2Answer: users.prompt2Answer,
-        prompt3Question: users.prompt3Question,
-        prompt3Answer: users.prompt3Answer,
-        boostEndAt: users.boostEndAt,
       })
       .from(users)
       .where(eq(users.id, userId))
@@ -64,10 +57,10 @@ export async function GET() {
       .from(likes)
       .where(eq(likes.fromUserId, userId));
 
-       const excludeIds = alreadyActed.map((r) => r.toUserId);
+    const excludeIds = alreadyActed.map((r) => r.toUserId);
     excludeIds.push(userId);
 
-    // 🆕 Exclure les utilisateurs bloqués (que j'ai bloqués OU qui m'ont bloqué)
+    // Exclure les utilisateurs bloqués
     const myBlocks = await db
       .select({ blockedUserId: blocks.blockedUserId })
       .from(blocks)
@@ -82,7 +75,7 @@ export async function GET() {
 
     excludeIds.push(...iBlocked, ...blockedMe);
 
-    // 🆕 Récupérer les IDs de ceux qui m'ont SUPER liké
+    // Super Likers reçus
     const superLikersReceived = await db
       .select({ fromUserId: likes.fromUserId })
       .from(likes)
@@ -95,7 +88,7 @@ export async function GET() {
       );
     const superLikerIds = superLikersReceived.map((s) => s.fromUserId);
 
-    // 🆕 Récupérer les IDs de ceux qui m'ont LIKÉ (normal)
+    // Likers reçus (normaux)
     const likersReceived = await db
       .select({ fromUserId: likes.fromUserId })
       .from(likes)
@@ -159,6 +152,13 @@ export async function GET() {
         isPremium: users.isPremium,
         latitude: users.latitude,
         longitude: users.longitude,
+        prompt1Question: users.prompt1Question,
+        prompt1Answer: users.prompt1Answer,
+        prompt2Question: users.prompt2Question,
+        prompt2Answer: users.prompt2Answer,
+        prompt3Question: users.prompt3Question,
+        prompt3Answer: users.prompt3Answer,
+        boostEndAt: users.boostEndAt,
       })
       .from(users)
       .where(and(...conditions))
@@ -191,8 +191,8 @@ export async function GET() {
       );
     }
 
-    // 🆕 Trier : Super Likes en premier, puis Likes, puis reste
-     const nowDate = new Date();
+    // Tri : Boostés d'abord, puis Super Likes, puis Likes, puis reste
+    const nowDate = new Date();
     profilesWithDistance.sort((a, b) => {
       // Priorité 1 : Profils BOOSTÉS
       const aBoost = a.boostEndAt ? new Date(a.boostEndAt) > nowDate : false;
