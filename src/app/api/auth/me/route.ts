@@ -28,6 +28,7 @@ export async function GET() {
         occupation: users.occupation,
         isOnline: users.isOnline,
         isPremium: users.isPremium,
+        isVerified: users.isVerified,
         isAdmin: users.isAdmin,
         createdAt: users.createdAt,
       })
