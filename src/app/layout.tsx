@@ -6,7 +6,6 @@ import CookieBanner from "./components/CookieBanner";
 const SITE_URL = "https://lovelink-omega.vercel.app";
 const SITE_NAME = "LoveLink";
 const DESCRIPTION = "LoveLink est la plateforme de rencontre en ligne pour trouver l'amour, l'amitié ou faire de nouvelles connaissances partout dans le monde. Inscription gratuite en 2 minutes.";
-const IMAGE_URL = "https://i.ibb.co/Kj0P8Kt/lovelink-og.jpg"; // On changera avec ta vraie image
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -47,20 +46,11 @@ export const metadata: Metadata = {
     siteName: SITE_NAME,
     title: "LoveLink — Trouvez votre âme sœur 💜",
     description: DESCRIPTION,
-    images: [
-      {
-        url: IMAGE_URL,
-        width: 1200,
-        height: 630,
-        alt: "LoveLink - Site de rencontre en ligne",
-      },
-    ],
   },
   twitter: {
     card: "summary_large_image",
     title: "LoveLink — Trouvez votre âme sœur 💜",
     description: DESCRIPTION,
-    images: [IMAGE_URL],
     creator: "@lovelink",
   },
   robots: {
@@ -74,14 +64,6 @@ export const metadata: Metadata = {
       "max-snippet": -1,
     },
   },
-  icons: {
-    icon: [
-      { url: "/favicon.ico" },
-      { url: "/icon.png", type: "image/png" },
-    ],
-    apple: [{ url: "/apple-icon.png" }],
-  },
-  manifest: "/manifest.json",
   category: "dating",
   applicationName: "LoveLink",
 };
