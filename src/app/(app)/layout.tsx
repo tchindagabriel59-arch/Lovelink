@@ -18,6 +18,7 @@ import {
   Gem,
   Zap,
   ShieldCheck,
+  BadgeCheck,
 } from "lucide-react";
 
 interface UserData {
@@ -35,6 +36,7 @@ interface UserData {
   gender?: string;
   birthDate?: string;
   isPremium?: boolean;
+  isVerified?: boolean;
   isAdmin?: boolean;
 }
 
@@ -177,11 +179,14 @@ const navItems = [
                   </>
                 )}
               </div>
-              <div className="flex-1 min-w-0">
+                <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1">
                   <p className="text-sm font-semibold truncate">
                     {user?.firstName} {user?.lastName}
                   </p>
+                  {user?.isVerified && (
+                    <BadgeCheck className="w-3.5 h-3.5 text-blue-500 fill-blue-500 flex-shrink-0" />
+                  )}
                   {user?.isPremium && (
                     <span className="text-yellow-500 text-xs">👑</span>
                   )}
