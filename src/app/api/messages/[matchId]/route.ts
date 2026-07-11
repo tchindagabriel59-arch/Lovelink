@@ -59,6 +59,7 @@ export async function GET(
         photoUrl: users.photoUrl,
         isOnline: users.isOnline,
         isPremium: users.isPremium,
+        isVerified: users.isVerified,
         lastSeen: users.lastSeen,
       })
       .from(users)
