@@ -152,7 +152,7 @@ export default function MatchesPage() {
               Mes <span className="gradient-text">Matchs</span>
             </h1>
             <p className="text-slate-600">
-              {stats.total} {stats.total > 1 ? "personnes" : "personne"} qui t&apos;ont matché 💕
+              {stats.total} {stats.total > 1 ? "personnes" : "personne"}{" "}qui t&apos;ont matché 💕
             </p>
           </div>
         </div>
