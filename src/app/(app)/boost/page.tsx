@@ -2,7 +2,19 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { Rocket, ArrowLeft, Eye, Heart, Clock, Zap, Crown, Sparkles, TrendingUp } from "lucide-react";
+import {
+  Rocket,
+  ArrowLeft,
+  Eye,
+  Heart,
+  Clock,
+  Zap,
+  Crown,
+  Sparkles,
+  TrendingUp,
+  Lock,
+  Gem,
+} from "lucide-react";
 
 interface BoostData {
   isActive: boolean;
@@ -10,6 +22,9 @@ interface BoostData {
   canBoost: boolean;
   cooldownSeconds: number;
   isPremium: boolean;
+  boostsUsedToday: number;
+  boostsRemaining: number;
+  limit: number;
   stats: {
     views: number;
     likes: number;
@@ -21,6 +36,7 @@ export default function BoostPage() {
   const [loading, setLoading] = useState(true);
   const [activating, setActivating] = useState(false);
   const [timeDisplay, setTimeDisplay] = useState("");
+  const [showPremiumModal, setShowPremiumModal] = useState(false);
 
   const fetchBoostStatus = useCallback(async () => {
     try {
@@ -42,7 +58,6 @@ export default function BoostPage() {
     return () => clearInterval(interval);
   }, [fetchBoostStatus]);
 
-  // Timer local pour un affichage fluide
   useEffect(() => {
     if (!data?.isActive) return;
 
@@ -59,7 +74,6 @@ export default function BoostPage() {
       setTimeDisplay(`${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`);
     }, 1000);
 
-    // Init
     const mins = Math.floor(remaining / 60);
     const secs = remaining % 60;
     setTimeDisplay(`${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`);
@@ -68,8 +82,19 @@ export default function BoostPage() {
   }, [data, fetchBoostStatus]);
 
   async function activateBoost() {
-    if (!data?.canBoost) return;
-    if (!confirm("🚀 Activer le Boost ?\n\nTon profil sera mis en avant pendant 30 minutes.\n\n⚠️ Un seul boost par 24h (illimité pour Premium)")) return;
+    if (!data?.canBoost) {
+      // Si non-Premium en cooldown → montrer modal Premium
+      if (!data?.isPremium && data?.cooldownSeconds && data.cooldownSeconds > 0) {
+        setShowPremiumModal(true);
+      }
+      return;
+    }
+    
+    const message = data.isPremium
+      ? `🚀 Activer un boost Premium ?\n\nTon profil sera mis en avant pendant 30 minutes.\n\n⭐ Tu as ${data.boostsRemaining}/${data.limit} boosts restants aujourd'hui.`
+      : `🚀 Activer le Boost ?\n\nTon profil sera mis en avant pendant 30 minutes.\n\n⚠️ Un seul boost par 24h (3/jour avec Premium)`;
+    
+    if (!confirm(message)) return;
 
     setActivating(true);
     try {
@@ -80,7 +105,11 @@ export default function BoostPage() {
         fetchBoostStatus();
       } else {
         const err = await res.json();
-        alert("❌ " + (err.error || "Erreur"));
+        if (err.error === "COOLDOWN" && !data.isPremium) {
+          setShowPremiumModal(true);
+        } else {
+          alert("❌ " + (err.error || err.message || "Erreur"));
+        }
       }
     } catch {
       alert("Erreur");
@@ -108,6 +137,64 @@ export default function BoostPage() {
 
   return (
     <div className="p-6 lg:p-8 max-w-3xl mx-auto">
+      
+      {/* 🔒 MODAL PREMIUM SI LIMITE ATTEINTE */}
+      {showPremiumModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl">
+            <div className="text-center mb-6">
+              <div className="w-20 h-20 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full flex items-center justify-center mx-auto mb-4 shadow-xl">
+                <Rocket className="w-10 h-10 text-white" />
+              </div>
+              <h2 className="text-2xl font-black text-slate-900 mb-2">
+                Boost quotidien utilisé 🚀
+              </h2>
+              <p className="text-slate-600">
+                Prochain boost gratuit dans <strong>{formatCooldown(data?.cooldownSeconds || 0)}</strong>
+              </p>
+            </div>
+
+            <div className="bg-gradient-to-br from-yellow-50 to-orange-50 rounded-2xl p-5 border-2 border-yellow-200 mb-5">
+              <div className="flex items-center gap-2 mb-3">
+                <Crown className="w-6 h-6 text-yellow-500 fill-yellow-500" />
+                <p className="font-black text-slate-900">Avec Premium :</p>
+              </div>
+              <ul className="space-y-2 text-sm text-slate-700">
+                <li className="flex items-center gap-2">
+                  <Rocket className="w-4 h-4 text-purple-500" />
+                  <strong>3 Boosts</strong> par jour au lieu de 1
+                </li>
+                <li className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-blue-500" />
+                  Priorité #1 dans la découverte
+                </li>
+                <li className="flex items-center gap-2">
+                  <Heart className="w-4 h-4 text-rose-500 fill-rose-500" />
+                  10x plus de matchs
+                </li>
+              </ul>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowPremiumModal(false)}
+                className="flex-1 px-4 py-3 border border-slate-200 rounded-xl font-semibold text-slate-700 hover:bg-slate-50 transition"
+              >
+                Attendre
+              </button>
+              <Link
+                href="/premium"
+                onClick={() => setShowPremiumModal(false)}
+                className="flex-1 px-4 py-3 bg-gradient-to-r from-yellow-500 to-orange-500 text-white rounded-xl font-bold hover:shadow-lg transition flex items-center justify-center gap-2"
+              >
+                <Gem className="w-4 h-4" />
+                Premium
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
+
       <Link
         href="/dashboard"
         className="inline-flex items-center gap-2 text-sm text-slate-500 hover:text-rose-500 transition mb-6"
@@ -127,6 +214,30 @@ export default function BoostPage() {
         <p className="text-slate-600">
           Sois le premier profil vu pendant 30 minutes 🚀
         </p>
+
+        {/* Badge Premium ou Gratuit */}
+        {data && (
+          <div className="mt-4 inline-flex items-center gap-2">
+            {data.isPremium ? (
+              <div className="inline-flex items-center gap-2 bg-gradient-to-r from-yellow-100 to-orange-100 border-2 border-yellow-300 rounded-full px-4 py-1.5">
+                <Crown className="w-4 h-4 text-yellow-600 fill-yellow-500" />
+                <span className="text-sm font-black text-yellow-700">
+                  Premium • {data.boostsRemaining}/{data.limit} restants
+                </span>
+              </div>
+            ) : (
+              <div className="inline-flex items-center gap-2 bg-slate-100 border border-slate-200 rounded-full px-4 py-1.5">
+                <span className="text-sm font-bold text-slate-600">
+                  Gratuit • 1 boost / 24h
+                </span>
+                <Link href="/premium" className="text-xs text-orange-500 hover:underline font-bold flex items-center gap-0.5">
+                  <Crown className="w-3 h-3" />
+                  Upgrader
+                </Link>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* BOOST ACTIF */}
@@ -178,40 +289,84 @@ export default function BoostPage() {
                 <p className="text-slate-600">
                   Prêt(e) à booster ta visibilité ? 🚀
                 </p>
+                {data.isPremium && (
+                  <p className="text-xs text-yellow-600 font-bold mt-2 flex items-center justify-center gap-1">
+                    <Crown className="w-3 h-3 fill-yellow-500" />
+                    {data.boostsRemaining} boost{data.boostsRemaining > 1 ? "s" : ""} restant{data.boostsRemaining > 1 ? "s" : ""} aujourd&apos;hui
+                  </p>
+                )}
               </div>
 
               <button
                 onClick={activateBoost}
                 disabled={activating}
-                className="w-full py-5 bg-gradient-to-r from-purple-500 via-rose-500 to-orange-500 hover:shadow-2xl hover:shadow-purple-500/40 hover:scale-[1.02] text-white rounded-2xl font-bold text-lg transition-all disabled:opacity-50 flex items-center justify-center gap-3"
+                className={`w-full py-5 rounded-2xl font-bold text-lg transition-all disabled:opacity-50 flex items-center justify-center gap-3 hover:scale-[1.02] ${
+                  data.isPremium
+                    ? "bg-gradient-to-r from-yellow-500 via-orange-500 to-yellow-500 hover:shadow-2xl hover:shadow-orange-500/40 text-white"
+                    : "bg-gradient-to-r from-purple-500 via-rose-500 to-orange-500 hover:shadow-2xl hover:shadow-purple-500/40 text-white"
+                }`}
               >
                 <Rocket className="w-6 h-6" />
-                {activating ? "Activation..." : "ACTIVER LE BOOST"}
+                {activating ? "Activation..." : data.isPremium ? "BOOSTER (PREMIUM)" : "ACTIVER LE BOOST"}
               </button>
             </>
           ) : (
             <div className="text-center">
-              <div className="w-16 h-16 bg-amber-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                <Clock className="w-8 h-8 text-amber-500" />
+              <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 ${
+                data?.isPremium ? "bg-yellow-50" : "bg-amber-50"
+              }`}>
+                {data?.isPremium ? (
+                  <Crown className="w-8 h-8 text-yellow-500 fill-yellow-500" />
+                ) : (
+                  <Lock className="w-8 h-8 text-amber-500" />
+                )}
               </div>
               <h3 className="text-xl font-bold text-slate-900 mb-2">
-                Prochain boost disponible dans
+                {data?.isPremium
+                  ? "Limite quotidienne atteinte"
+                  : "Prochain boost dans"}
               </h3>
               <p className="text-3xl font-bold gradient-text mb-4">
                 {formatCooldown(data?.cooldownSeconds || 0)}
               </p>
               <p className="text-sm text-slate-500 mb-6">
-                Tu as déjà utilisé ton boost quotidien
+                {data?.isPremium
+                  ? `Tu as utilisé tes ${data.limit} boosts Premium aujourd'hui`
+                  : "Tu as déjà utilisé ton boost quotidien"}
               </p>
+
+              {/* CTA Premium pour non-Premium */}
               {!data?.isPremium && (
-                <div className="p-4 bg-gradient-to-br from-amber-50 to-orange-50 rounded-2xl border border-amber-200">
-                  <div className="flex items-center gap-2 justify-center mb-2">
-                    <Crown className="w-5 h-5 text-amber-500" />
-                    <p className="font-bold text-amber-800">Passe Premium</p>
+                <div className="p-5 bg-gradient-to-br from-yellow-50 to-orange-50 rounded-2xl border-2 border-yellow-200">
+                  <div className="flex items-center gap-2 justify-center mb-3">
+                    <Crown className="w-6 h-6 text-yellow-500 fill-yellow-500" />
+                    <p className="font-black text-slate-900 text-lg">Débloque plus de boosts !</p>
                   </div>
-                  <p className="text-sm text-slate-700">
-                    Débloque des <strong>boosts illimités</strong> avec Premium !
+                  <p className="text-sm text-slate-700 mb-4">
+                    Avec Premium tu as <strong>3 boosts par jour</strong> au lieu d&apos;un seul.
                   </p>
+                  <Link
+                    href="/premium"
+                    className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-yellow-500 to-orange-500 text-white rounded-xl font-bold shadow-lg hover:shadow-xl transition-all hover:scale-105"
+                  >
+                    <Gem className="w-4 h-4" />
+                    Passer Premium
+                  </Link>
+                </div>
+              )}
+
+              {/* Note Premium si Premium */}
+              {data?.isPremium && (
+                <div className="p-4 bg-gradient-to-br from-blue-50 to-purple-50 rounded-2xl border border-blue-200">
+                  <p className="text-sm text-slate-700">
+                    💫 Passe à <strong>Gold</strong> pour des boosts illimités !
+                  </p>
+                  <Link
+                    href="/premium"
+                    className="inline-block mt-2 text-xs font-bold text-yellow-600 hover:underline"
+                  >
+                    Voir les offres →
+                  </Link>
                 </div>
               )}
             </div>
@@ -248,6 +403,28 @@ export default function BoostPage() {
           />
         </div>
       </div>
+
+      {/* Bannière Premium en bas (si non-Premium) */}
+      {!data?.isPremium && (
+        <div className="bg-gradient-to-r from-yellow-400 via-orange-500 to-yellow-500 rounded-3xl p-6 text-white shadow-2xl mb-6 relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-16 translate-x-16" />
+          <div className="relative flex items-center gap-4">
+            <div className="w-14 h-14 bg-white/20 backdrop-blur rounded-2xl flex items-center justify-center flex-shrink-0">
+              <Crown className="w-8 h-8 text-white fill-white" />
+            </div>
+            <div className="flex-1">
+              <p className="font-black text-lg">3x plus de boosts avec Premium</p>
+              <p className="text-sm text-white/90">Booste 3 fois par jour au lieu d&apos;une seule</p>
+            </div>
+            <Link
+              href="/premium"
+              className="flex-shrink-0 bg-white text-orange-600 font-black px-5 py-2.5 rounded-xl shadow-lg hover:scale-105 transition-transform text-sm"
+            >
+              Découvrir
+            </Link>
+          </div>
+        </div>
+      )}
 
       {/* CONSEIL */}
       <div className="bg-gradient-to-br from-blue-50 to-cyan-50 rounded-2xl p-5 border border-blue-100">
