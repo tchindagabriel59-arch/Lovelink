@@ -45,6 +45,7 @@ export async function GET() {
         prompt2Answer: users.prompt2Answer,
         prompt3Question: users.prompt3Question,
         prompt3Answer: users.prompt3Answer,
+        boostEndAt: users.boostEndAt,
       })
       .from(users)
       .where(eq(users.id, userId))
@@ -191,9 +192,19 @@ export async function GET() {
     }
 
     // 🆕 Trier : Super Likes en premier, puis Likes, puis reste
+     const nowDate = new Date();
     profilesWithDistance.sort((a, b) => {
+      // Priorité 1 : Profils BOOSTÉS
+      const aBoost = a.boostEndAt ? new Date(a.boostEndAt) > nowDate : false;
+      const bBoost = b.boostEndAt ? new Date(b.boostEndAt) > nowDate : false;
+      if (aBoost && !bBoost) return -1;
+      if (!aBoost && bBoost) return 1;
+
+      // Priorité 2 : Super Likes reçus
       if (a.hasSuperLikedMe && !b.hasSuperLikedMe) return -1;
       if (!a.hasSuperLikedMe && b.hasSuperLikedMe) return 1;
+
+      // Priorité 3 : Likes reçus
       if (a.hasLikedMe && !b.hasLikedMe) return -1;
       if (!a.hasLikedMe && b.hasLikedMe) return 1;
       return 0;
