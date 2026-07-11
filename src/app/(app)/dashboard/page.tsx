@@ -22,6 +22,8 @@ import {
   Lock,
   Rocket,
   Eye,
+  BadgeCheck,
+  ShieldCheck,
 } from "lucide-react";
 
 interface DashboardStats {
@@ -197,10 +199,16 @@ export default function DashboardPage() {
             )}
           </div>
           <div>
-            <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-3xl font-bold text-slate-900">
                 Bonjour, <span className="gradient-text">{user?.firstName}</span> 👋
               </h1>
+              {user?.isVerified && (
+                <span className="inline-flex items-center gap-1 bg-gradient-to-r from-blue-100 to-cyan-100 text-blue-700 rounded-full px-3 py-1 text-xs font-black border border-blue-300">
+                  <BadgeCheck className="w-3 h-3 fill-blue-500" />
+                  VÉRIFIÉ
+                </span>
+              )}
               {isPremium && (
                 <span className="inline-flex items-center gap-1 bg-gradient-to-r from-yellow-100 to-orange-100 text-yellow-700 rounded-full px-3 py-1 text-xs font-black border border-yellow-300">
                   <Crown className="w-3 h-3 fill-yellow-500" />
@@ -276,6 +284,35 @@ export default function DashboardPage() {
           </Link>
         </div>
       )}
+            {/* 💙 BANNIÈRE VÉRIFICATION (si pas encore vérifié) */}
+      {!user?.isVerified && (
+        <div className="mb-6 bg-gradient-to-r from-blue-50 via-cyan-50 to-blue-50 border-2 border-blue-200 rounded-2xl p-4 flex items-center gap-4">
+          <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg">
+            <ShieldCheck className="w-6 h-6 text-white fill-white" />
+          </div>
+          <div className="flex-1">
+            <p className="font-black text-slate-900 text-sm flex items-center gap-2">
+              Obtiens le badge bleu ✅
+              <span className="text-[10px] bg-blue-500 text-white px-2 py-0.5 rounded-full font-bold">
+                +30% MATCHS
+              </span>
+            </p>
+            <p className="text-xs text-slate-600">
+              Prouve que tu es une vraie personne et gagne la confiance des matchs
+            </p>
+          </div>
+          <Link
+            href="/verification"
+            className="flex-shrink-0 px-4 py-2 bg-gradient-to-r from-blue-500 to-cyan-500 text-white rounded-xl font-bold text-sm hover:shadow-lg transition flex items-center gap-1"
+          >
+            <BadgeCheck className="w-4 h-4" />
+            Vérifier
+          </Link>
+        </div>
+      )}
+
+      {/* STATS PRINCIPALES */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
 
       {/* STATS PRINCIPALES */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
@@ -697,10 +734,13 @@ export default function DashboardPage() {
                   </div>
                 )}
               </div>
-              <div className="flex items-center justify-center gap-1">
+               <div className="flex items-center justify-center gap-1">
                 <p className="font-bold text-slate-900">
                   {user?.firstName} {user?.lastName}
                 </p>
+                {user?.isVerified && (
+                  <BadgeCheck className="w-4 h-4 text-blue-500 fill-blue-500" />
+                )}
                 {isPremium && (
                   <Crown className="w-4 h-4 text-yellow-500 fill-yellow-500" />
                 )}
