@@ -25,6 +25,12 @@ export async function PUT(req: NextRequest) {
       interests,
       occupation,
       lookingFor,
+      prompt1Question,
+      prompt1Answer,
+      prompt2Question,
+      prompt2Answer,
+      prompt3Question,
+      prompt3Answer,
     } = body;
 
     const [updated] = await db
@@ -42,6 +48,12 @@ export async function PUT(req: NextRequest) {
         interests: interests ?? undefined,
         occupation: occupation ?? undefined,
         lookingFor: lookingFor ?? undefined,
+        prompt1Question: prompt1Question ?? undefined,
+        prompt1Answer: prompt1Answer ?? undefined,
+        prompt2Question: prompt2Question ?? undefined,
+        prompt2Answer: prompt2Answer ?? undefined,
+        prompt3Question: prompt3Question ?? undefined,
+        prompt3Answer: prompt3Answer ?? undefined,
         updatedAt: new Date(),
       })
       .where(eq(users.id, userId))
@@ -65,6 +77,12 @@ export async function PUT(req: NextRequest) {
         interests: updated.interests,
         occupation: updated.occupation,
         lookingFor: updated.lookingFor,
+        prompt1Question: updated.prompt1Question,
+        prompt1Answer: updated.prompt1Answer,
+        prompt2Question: updated.prompt2Question,
+        prompt2Answer: updated.prompt2Answer,
+        prompt3Question: updated.prompt3Question,
+        prompt3Answer: updated.prompt3Answer,
       },
     });
   } catch (error) {
