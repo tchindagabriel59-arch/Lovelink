@@ -13,7 +13,30 @@ import {
   Plus,
   X,
   ImageIcon,
+  MessageSquareQuote,
 } from "lucide-react";
+const promptQuestions = [
+  "Ma passion secrète est...",
+  "Le meilleur moment de ma journée...",
+  "On ne devinerait jamais que...",
+  "Je cherche quelqu'un qui...",
+  "Mon rêve le plus fou...",
+  "Ce qui me rend heureux/se...",
+  "Ma qualité principale est...",
+  "Mon plat préféré...",
+  "Ma destination de rêve...",
+  "Une chose que j'adore faire le week-end...",
+  "Mon film/série préféré...",
+  "Si j'avais un super-pouvoir...",
+  "Ma citation préférée...",
+  "Mon dernier fou rire c'était...",
+  "Ce que je recherche vraiment...",
+  "Mon plus grand accomplissement...",
+  "Une chose que je ne peux pas vivre sans...",
+  "Ce qui me fait sourire à coup sûr...",
+  "Mon endroit préféré au monde...",
+  "Ma boisson favorite...",
+];
 
 const interestOptions = [
   "Voyages", "Musique", "Cinema", "Sport", "Cuisine", "Lecture",
@@ -41,7 +64,7 @@ export default function ProfilePage() {
   const photo3Ref = useRef<HTMLInputElement>(null);
   const photo4Ref = useRef<HTMLInputElement>(null);
 
-  const [form, setForm] = useState({
+const [form, setForm] = useState({
     bio: user?.bio || "",
     city: user?.city || "",
     country: user?.country || "",
@@ -54,6 +77,12 @@ export default function ProfilePage() {
     interests: user?.interests || "",
     occupation: user?.occupation || "",
     lookingFor: user?.lookingFor || "relationship",
+    prompt1Question: (user as any)?.prompt1Question || "",
+    prompt1Answer: (user as any)?.prompt1Answer || "",
+    prompt2Question: (user as any)?.prompt2Question || "",
+    prompt2Answer: (user as any)?.prompt2Answer || "",
+    prompt3Question: (user as any)?.prompt3Question || "",
+    prompt3Answer: (user as any)?.prompt3Answer || "",
   });
 
   const handleChange = (
@@ -517,6 +546,84 @@ export default function ProfilePage() {
                         ? "bg-gradient-to-r from-rose-500 to-purple-600 text-white shadow-md"
                         : "bg-slate-100 text-slate-600 hover:bg-rose-50 hover:text-rose-600"
                     }`}
+                    {/* 🆕 PROMPTS style Hinge */}
+<div className="bg-white rounded-2xl p-6 border border-slate-100">
+  <h3 className="text-lg font-semibold mb-2 flex items-center gap-2">
+    <MessageSquareQuote className="w-5 h-5 text-purple-500" />
+    Mes réponses
+  </h3>
+  <p className="text-sm text-slate-500 mb-4">
+    💡 Choisis jusqu&apos;à 3 questions et réponds-y pour te démarquer !
+  </p>
+
+  <div className="space-y-4">
+    {[1, 2, 3].map((num) => {
+      const questionKey = `prompt${num}Question` as keyof typeof form;
+      const answerKey = `prompt${num}Answer` as keyof typeof form;
+      const question = form[questionKey] as string;
+      const answer = form[answerKey] as string;
+
+      return (
+        <div key={num} className="p-4 bg-gradient-to-br from-purple-50 to-rose-50 rounded-xl border border-purple-100">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-bold text-purple-600 uppercase tracking-wider">
+              Question {num}
+            </span>
+            {question && (
+              <button
+                type="button"
+                onClick={() => {
+                  setForm({
+                    ...form,
+                    [questionKey]: "",
+                    [answerKey]: "",
+                  });
+                  setSaved(false);
+                }}
+                className="text-xs text-red-500 hover:text-red-600 font-medium"
+              >
+                Retirer
+              </button>
+            )}
+          </div>
+
+          <select
+            value={question}
+            onChange={(e) => {
+              setForm({ ...form, [questionKey]: e.target.value });
+              setSaved(false);
+            }}
+            className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-purple-400 focus:ring-2 focus:ring-purple-100 transition bg-white mb-3 font-medium"
+          >
+            <option value="">✨ Choisis une question...</option>
+            {promptQuestions.map((q) => (
+              <option key={q} value={q}>{q}</option>
+            ))}
+          </select>
+
+          {question && (
+            <textarea
+              value={answer}
+              onChange={(e) => {
+                setForm({ ...form, [answerKey]: e.target.value });
+                setSaved(false);
+              }}
+              rows={2}
+              maxLength={200}
+              placeholder="Ta réponse..."
+              className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-purple-400 focus:ring-2 focus:ring-purple-100 transition bg-white resize-none"
+            />
+          )}
+          {question && (
+            <p className="text-xs text-slate-400 text-right mt-1">
+              {answer.length}/200
+            </p>
+          )}
+        </div>
+      );
+    })}
+  </div>
+</div>
                   >
                     {interest}
                   </button>
