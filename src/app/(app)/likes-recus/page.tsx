@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useUser } from "../layout";
 import {
   Heart,
   Star,
@@ -10,6 +11,10 @@ import {
   X,
   Crown,
   MessageCircle,
+  Lock,
+  Gem,
+  Eye,
+  Sparkles,
 } from "lucide-react";
 
 interface LikeReceived {
@@ -53,6 +58,9 @@ const gradients = [
 ];
 
 export default function LikesRecusPage() {
+  const { user } = useUser();
+  const isPremium = user?.isPremium || false;
+
   const [likes, setLikes] = useState<LikeReceived[]>([]);
   const [loading, setLoading] = useState(true);
   const [matchPopup, setMatchPopup] = useState<{ firstName: string; photoUrl: string | null } | null>(null);
@@ -77,6 +85,7 @@ export default function LikesRecusPage() {
   }
 
   async function handleLikeBack(userId: number, firstName: string, photoUrl: string | null) {
+    if (!isPremium) return; // Bloqué pour non-Premium
     setProcessing(userId);
     try {
       const res = await fetch("/api/like", {
@@ -100,6 +109,7 @@ export default function LikesRecusPage() {
   }
 
   async function handlePass(userId: number) {
+    if (!isPremium) return; // Bloqué pour non-Premium
     setProcessing(userId);
     try {
       const res = await fetch("/api/like", {
@@ -135,6 +145,7 @@ export default function LikesRecusPage() {
 
   return (
     <div className="p-6 lg:p-8 max-w-6xl mx-auto">
+      
       {/* Match Popup */}
       {matchPopup && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
@@ -182,7 +193,7 @@ export default function LikesRecusPage() {
       )}
 
       {/* Header */}
-      <div className="mb-8">
+      <div className="mb-6">
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 bg-gradient-to-br from-rose-500 to-purple-600 rounded-xl flex items-center justify-center">
             <Heart className="w-6 h-6 text-white fill-white" />
@@ -203,6 +214,40 @@ export default function LikesRecusPage() {
           </div>
         </div>
       </div>
+
+      {/* 🔒 BANNIÈRE PREMIUM si non-Premium et il y a des likes */}
+      {!isPremium && likes.length > 0 && (
+        <div className="mb-6 relative overflow-hidden rounded-3xl bg-gradient-to-r from-yellow-400 via-orange-500 to-yellow-500 p-6 shadow-2xl">
+          <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-32 translate-x-32" />
+          <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/10 rounded-full translate-y-24 -translate-x-24" />
+          
+          <div className="relative z-10 flex flex-col md:flex-row items-center gap-6">
+            <div className="flex-shrink-0">
+              <div className="w-20 h-20 bg-white/20 backdrop-blur rounded-2xl flex items-center justify-center">
+                <Lock className="w-10 h-10 text-white" />
+              </div>
+            </div>
+            
+            <div className="flex-1 text-white text-center md:text-left">
+              <h3 className="text-2xl font-black mb-2 flex items-center gap-2 justify-center md:justify-start">
+                <Gem className="w-6 h-6" />
+                {likes.length} {likes.length > 1 ? "personnes" : "personne"} ont craqué sur toi !
+              </h3>
+              <p className="text-white/90 text-sm md:text-base">
+                Débloque leurs profils et matche instantanément avec Premium 👑
+              </p>
+            </div>
+            
+            <Link
+              href="/premium"
+              className="flex-shrink-0 bg-white text-orange-600 font-black px-6 py-3 rounded-xl shadow-lg hover:scale-105 transition-transform flex items-center gap-2"
+            >
+              <Sparkles className="w-5 h-5" />
+              Passer Premium
+            </Link>
+          </div>
+        </div>
+      )}
 
       {likes.length === 0 ? (
         <div className="text-center py-16 bg-white rounded-2xl border border-slate-100">
@@ -242,6 +287,7 @@ export default function LikesRecusPage() {
                     onPass={handlePass}
                     processing={processing === like.user.id}
                     isSuperLike
+                    isLocked={!isPremium}
                   />
                 ))}
               </div>
@@ -265,9 +311,30 @@ export default function LikesRecusPage() {
                     onLikeBack={handleLikeBack}
                     onPass={handlePass}
                     processing={processing === like.user.id}
+                    isLocked={!isPremium}
                   />
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* CTA final si non-Premium */}
+          {!isPremium && (
+            <div className="text-center py-8 bg-gradient-to-br from-yellow-50 to-orange-50 rounded-3xl border-2 border-yellow-200">
+              <Crown className="w-16 h-16 text-yellow-500 fill-yellow-500 mx-auto mb-4" />
+              <h3 className="text-2xl font-black text-slate-900 mb-2">
+                Ne rate aucune opportunité ! 💕
+              </h3>
+              <p className="text-slate-600 mb-6 max-w-md mx-auto">
+                Avec Premium, tu vois exactement qui t&apos;a liké et tu peux matcher instantanément.
+              </p>
+              <Link
+                href="/premium"
+                className="inline-flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-yellow-500 to-orange-500 text-white rounded-2xl font-bold shadow-lg hover:shadow-xl transition-all hover:scale-105"
+              >
+                <Gem className="w-5 h-5" />
+                Découvrir Premium
+              </Link>
             </div>
           )}
         </div>
@@ -282,12 +349,14 @@ function ProfileCard({
   onPass,
   processing,
   isSuperLike,
+  isLocked,
 }: {
   like: LikeReceived;
   onLikeBack: (id: number, name: string, photo: string | null) => void;
   onPass: (id: number) => void;
   processing: boolean;
   isSuperLike?: boolean;
+  isLocked?: boolean;
 }) {
   const gradient = gradients[like.user.id % gradients.length];
   const isPremium = like.user.isPremium;
@@ -302,7 +371,7 @@ function ProfileCard({
     }`}>
       
       {/* Ruban Premium en haut */}
-      {isPremium && (
+      {isPremium && !isLocked && (
         <div className="absolute top-0 left-0 right-0 z-20 bg-gradient-to-r from-yellow-400 via-orange-500 to-yellow-400 text-white text-center py-1 text-[10px] font-black tracking-widest flex items-center justify-center gap-1 shadow-md">
           <Crown className="w-3 h-3 fill-white" />
           PREMIUM
@@ -312,7 +381,7 @@ function ProfileCard({
 
       {/* Badge Super Like */}
       {isSuperLike && (
-        <div className={`absolute right-3 z-10 ${isPremium ? "top-8" : "top-3"}`}>
+        <div className={`absolute right-3 z-30 ${isPremium && !isLocked ? "top-8" : "top-3"}`}>
           <div className="w-10 h-10 bg-gradient-to-br from-blue-400 to-cyan-500 rounded-full flex items-center justify-center shadow-lg border-2 border-white">
             <Star className="w-5 h-5 text-white fill-white" />
           </div>
@@ -320,81 +389,133 @@ function ProfileCard({
       )}
 
       {/* Photo */}
-      <div className={`aspect-square bg-gradient-to-br ${gradient} relative ${isPremium ? "mt-5" : ""}`}>
+      <div className={`aspect-square bg-gradient-to-br ${gradient} relative overflow-hidden ${isPremium && !isLocked ? "mt-5" : ""}`}>
         {like.user.photoUrl ? (
           <img
             src={like.user.photoUrl}
             alt={like.user.firstName}
-            className="w-full h-full object-cover"
+            className={`w-full h-full object-cover transition-all ${
+              isLocked ? "blur-2xl scale-110" : ""
+            }`}
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center">
-            <span className="text-6xl font-bold text-white/80">
+            <span className={`text-6xl font-bold text-white/80 ${isLocked ? "blur-xl" : ""}`}>
               {like.user.firstName.charAt(0)}
             </span>
           </div>
         )}
 
+        {/* 🔒 OVERLAY DE VERROUILLAGE */}
+        {isLocked && (
+          <Link
+            href="/premium"
+            className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-gradient-to-br from-yellow-500/40 via-orange-500/40 to-yellow-500/40 backdrop-blur-sm cursor-pointer hover:from-yellow-500/60 hover:to-orange-500/60 transition-all"
+          >
+            <div className="w-14 h-14 bg-white rounded-full flex items-center justify-center shadow-2xl mb-2">
+              <Lock className="w-7 h-7 text-orange-500" />
+            </div>
+            <div className="bg-white/95 backdrop-blur rounded-full px-3 py-1 shadow-lg">
+              <p className="text-xs font-black text-orange-600 flex items-center gap-1">
+                <Crown className="w-3 h-3 fill-orange-500" />
+                Voir avec Premium
+              </p>
+            </div>
+          </Link>
+        )}
+
         {/* En ligne */}
-        {like.user.isOnline && (
+        {like.user.isOnline && !isLocked && (
           <div className="absolute bottom-3 right-3 w-3 h-3 bg-green-500 rounded-full border-2 border-white" />
         )}
 
-        {/* Overlay avec nom */}
-        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-3">
-          <div className="flex items-center gap-1.5">
-            <p className="text-white font-bold text-lg drop-shadow">
-              {like.user.firstName}, {getAge(like.user.birthDate)}
-            </p>
-            {isPremium && (
-              <Crown className="w-4 h-4 text-yellow-400 fill-yellow-400 drop-shadow flex-shrink-0" />
+        {/* Overlay avec nom (masqué si verrouillé) */}
+        {!isLocked && (
+          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-3 z-10">
+            <div className="flex items-center gap-1.5">
+              <p className="text-white font-bold text-lg drop-shadow">
+                {like.user.firstName}, {getAge(like.user.birthDate)}
+              </p>
+              {isPremium && (
+                <Crown className="w-4 h-4 text-yellow-400 fill-yellow-400 drop-shadow flex-shrink-0" />
+              )}
+            </div>
+            {like.user.city && (
+              <p className="text-white/90 text-xs flex items-center gap-1 drop-shadow">
+                <MapPin className="w-3 h-3" />
+                {like.user.city}
+              </p>
             )}
           </div>
-          {like.user.city && (
-            <p className="text-white/90 text-xs flex items-center gap-1 drop-shadow">
-              <MapPin className="w-3 h-3" />
-              {like.user.city}
+        )}
+
+        {/* Nom masqué si verrouillé */}
+        {isLocked && (
+          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-3 z-10">
+            <p className="text-white font-bold text-lg drop-shadow">
+              ??? , {getAge(like.user.birthDate)}
             </p>
-          )}
-        </div>
+            <p className="text-white/80 text-xs drop-shadow">
+              📍 Localisation cachée
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Info */}
       <div className="p-3">
-        {like.user.occupation && (
+        {!isLocked && like.user.occupation && (
           <p className="text-xs text-slate-600 flex items-center gap-1 mb-2 truncate">
             <Briefcase className="w-3 h-3" />
             {like.user.occupation}
           </p>
         )}
-        {like.user.bio && (
+        {!isLocked && like.user.bio && (
           <p className="text-xs text-slate-500 line-clamp-2 mb-3">
             {like.user.bio}
           </p>
         )}
+        {isLocked && (
+          <div className="mb-3 space-y-1">
+            <div className="h-3 bg-slate-100 rounded animate-pulse" />
+            <div className="h-3 bg-slate-100 rounded animate-pulse w-3/4" />
+          </div>
+        )}
 
         {/* Boutons */}
         <div className="flex gap-2">
-          <button
-            onClick={() => onPass(like.user.id)}
-            disabled={processing}
-            className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-slate-600 hover:text-slate-800 transition disabled:opacity-50 flex items-center justify-center"
-            title="Passer"
-          >
-            <X className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => onLikeBack(like.user.id, like.user.firstName, like.user.photoUrl)}
-            disabled={processing}
-            className={`flex-1 py-2 rounded-lg text-white transition disabled:opacity-50 flex items-center justify-center hover:shadow-lg ${
-              isPremium
-                ? "bg-gradient-to-r from-yellow-500 to-orange-500 hover:shadow-orange-500/30"
-                : "bg-gradient-to-r from-rose-500 to-pink-500"
-            }`}
-            title="Liker en retour"
-          >
-            <Heart className="w-4 h-4 fill-white" />
-          </button>
+          {isLocked ? (
+            <Link
+              href="/premium"
+              className="flex-1 py-2 bg-gradient-to-r from-yellow-500 to-orange-500 hover:shadow-lg text-white rounded-lg transition flex items-center justify-center gap-1 text-xs font-bold"
+            >
+              <Eye className="w-3.5 h-3.5" />
+              Découvrir
+            </Link>
+          ) : (
+            <>
+              <button
+                onClick={() => onPass(like.user.id)}
+                disabled={processing}
+                className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-slate-600 hover:text-slate-800 transition disabled:opacity-50 flex items-center justify-center"
+                title="Passer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => onLikeBack(like.user.id, like.user.firstName, like.user.photoUrl)}
+                disabled={processing}
+                className={`flex-1 py-2 rounded-lg text-white transition disabled:opacity-50 flex items-center justify-center hover:shadow-lg ${
+                  isPremium
+                    ? "bg-gradient-to-r from-yellow-500 to-orange-500 hover:shadow-orange-500/30"
+                    : "bg-gradient-to-r from-rose-500 to-pink-500"
+                }`}
+                title="Liker en retour"
+              >
+                <Heart className="w-4 h-4 fill-white" />
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>
