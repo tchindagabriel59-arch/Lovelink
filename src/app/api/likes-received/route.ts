@@ -38,7 +38,7 @@ export async function GET() {
         likeId: likes.id,
         isSuperLike: likes.isSuperLike,
         createdAt: likes.createdAt,
-        user: {
+           user: {
           id: users.id,
           firstName: users.firstName,
           lastName: users.lastName,
@@ -53,6 +53,7 @@ export async function GET() {
           occupation: users.occupation,
           isOnline: users.isOnline,
           isPremium: users.isPremium,
+          isVerified: users.isVerified,
         },
       })
       .from(likes)
