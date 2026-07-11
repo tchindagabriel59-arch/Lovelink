@@ -340,6 +340,7 @@ export default function DiscoverPage() {
 
   return (
     <div className="flex items-center justify-center min-h-[calc(100vh-100px)] p-4">
+      {/* Modal de signalement et Popup de match gardés à l'identique... */}
       {showReportModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
           <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl">
@@ -462,7 +463,9 @@ export default function DiscoverPage() {
       <div className="w-full max-w-md">
         <div
           className={`relative bg-white rounded-3xl shadow-2xl overflow-hidden transition-all duration-300 ${
-            currentProfile.hasSuperLikedMe
+            currentProfile.isPremium 
+              ? "ring-4 ring-yellow-400 shadow-yellow-500/30" 
+              : currentProfile.hasSuperLikedMe
               ? "ring-4 ring-blue-400 ring-offset-2 shadow-blue-500/30"
               : currentProfile.hasLikedMe
               ? "ring-2 ring-rose-400 ring-offset-2"
@@ -478,11 +481,21 @@ export default function DiscoverPage() {
           }`}
           style={{ minHeight: "600px" }}
         >
+          {/* Badge Premium flottant haut droite */}
+          {currentProfile.isPremium && (
+            <div className="absolute top-7 right-4 z-20">
+              <div className="flex items-center gap-1.5 bg-gradient-to-r from-yellow-400 via-orange-500 to-yellow-400 bg-[length:200%_100%] animate-gradient-x rounded-full px-3 py-1.5 shadow-lg border border-white/30">
+                <Crown className="w-3.5 h-3.5 text-white fill-white" />
+                <span className="text-[10px] font-black text-white tracking-widest uppercase">Premium</span>
+              </div>
+            </div>
+          )}
+
           <div
             onClick={handlePhotoTap}
             className={`relative h-[500px] bg-gradient-to-br ${gradient} cursor-pointer select-none`}
           >
-            {/* BADGE SUPER LIKE REÇU */}
+            {/* BADGES REÇUS */}
             {currentProfile.hasSuperLikedMe && (
               <div className="absolute top-16 left-1/2 -translate-x-1/2 z-20 animate-pulse">
                 <div className="bg-gradient-to-r from-blue-500 to-cyan-500 text-white px-4 py-2 rounded-full shadow-2xl flex items-center gap-2 border-2 border-white">
@@ -493,7 +506,6 @@ export default function DiscoverPage() {
               </div>
             )}
 
-            {/* BADGE LIKE REÇU (normal) */}
             {currentProfile.hasLikedMe && !currentProfile.hasSuperLikedMe && (
               <div className="absolute top-16 left-1/2 -translate-x-1/2 z-20">
                 <div className="bg-gradient-to-r from-rose-500 to-pink-500 text-white px-4 py-2 rounded-full shadow-xl flex items-center gap-2 border-2 border-white">
@@ -519,6 +531,7 @@ export default function DiscoverPage() {
 
             <div className="absolute bottom-0 left-0 right-0 h-64 bg-gradient-to-t from-black/90 via-black/50 to-transparent pointer-events-none" />
 
+            {/* Indicateurs de photos */}
             {photos.length > 1 && (
               <div className="absolute top-3 left-3 right-3 flex gap-1 z-10">
                 {photos.map((_, i) => (
@@ -556,15 +569,7 @@ export default function DiscoverPage() {
               </button>
             </div>
 
-            {currentProfile.isPremium && (
-              <div className="absolute top-7 right-4 z-10">
-                <div className="flex items-center gap-1.5 bg-gradient-to-r from-amber-400 to-orange-500 rounded-full px-3 py-1.5 shadow-lg">
-                  <Crown className="w-3.5 h-3.5 text-white fill-white" />
-                  <span className="text-xs font-bold text-white">PREMIUM</span>
-                </div>
-              </div>
-            )}
-
+            {/* Statut En ligne (masqué si premium car badge premium prend la place) */}
             {currentProfile.isOnline && !currentProfile.isPremium && (
               <div className="absolute top-7 right-4 flex items-center gap-2 bg-white/90 backdrop-blur rounded-full px-3 py-1.5 z-10">
                 <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
@@ -572,6 +577,7 @@ export default function DiscoverPage() {
               </div>
             )}
 
+            {/* Navigation photos */}
             {photos.length > 1 && (
               <>
                 <button
@@ -597,10 +603,14 @@ export default function DiscoverPage() {
               </>
             )}
 
+            {/* Infos Overlay */}
             <div className="absolute bottom-4 left-4 right-4 text-white z-10 pointer-events-none">
-              <div className="flex items-baseline gap-2 flex-wrap">
-                <h2 className="text-3xl font-bold drop-shadow-lg">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-3xl font-bold drop-shadow-lg flex items-center gap-2">
                   {currentProfile.firstName}
+                  {currentProfile.isPremium && (
+                    <Crown className="w-6 h-6 text-yellow-400 fill-yellow-400 drop-shadow-md" />
+                  )}
                 </h2>
                 <span className="text-2xl font-light drop-shadow-lg">
                   {getAge(currentProfile.birthDate)}
@@ -627,6 +637,7 @@ export default function DiscoverPage() {
             </div>
           </div>
 
+          {/* Bio, Interests et Prompts gardés à l'identique... */}
           <div className="p-5">
             {currentProfile.bio && (
               <div className="mb-4">
@@ -656,41 +667,41 @@ export default function DiscoverPage() {
                 ))}
               </div>
             )}
-            {/* 🆕 PROMPTS */}
-{(currentProfile.prompt1Answer || currentProfile.prompt2Answer || currentProfile.prompt3Answer) && (
-  <div className="mt-4 space-y-3">
-    {currentProfile.prompt1Question && currentProfile.prompt1Answer && (
-      <div className="p-3 bg-gradient-to-br from-purple-50 to-rose-50 rounded-xl border border-purple-100">
-        <p className="text-xs font-bold text-purple-600 uppercase tracking-wider mb-1">
-          {currentProfile.prompt1Question}
-        </p>
-        <p className="text-sm text-slate-800 leading-relaxed">
-          {currentProfile.prompt1Answer}
-        </p>
-      </div>
-    )}
-    {currentProfile.prompt2Question && currentProfile.prompt2Answer && (
-      <div className="p-3 bg-gradient-to-br from-rose-50 to-pink-50 rounded-xl border border-rose-100">
-        <p className="text-xs font-bold text-rose-600 uppercase tracking-wider mb-1">
-          {currentProfile.prompt2Question}
-        </p>
-        <p className="text-sm text-slate-800 leading-relaxed">
-          {currentProfile.prompt2Answer}
-        </p>
-      </div>
-    )}
-    {currentProfile.prompt3Question && currentProfile.prompt3Answer && (
-      <div className="p-3 bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl border border-amber-100">
-        <p className="text-xs font-bold text-amber-600 uppercase tracking-wider mb-1">
-          {currentProfile.prompt3Question}
-        </p>
-        <p className="text-sm text-slate-800 leading-relaxed">
-          {currentProfile.prompt3Answer}
-        </p>
-      </div>
-    )}
-  </div>
-)}
+
+            {(currentProfile.prompt1Answer || currentProfile.prompt2Answer || currentProfile.prompt3Answer) && (
+              <div className="mt-4 space-y-3">
+                {currentProfile.prompt1Question && currentProfile.prompt1Answer && (
+                  <div className="p-3 bg-gradient-to-br from-purple-50 to-rose-50 rounded-xl border border-purple-100">
+                    <p className="text-xs font-bold text-purple-600 uppercase tracking-wider mb-1">
+                      {currentProfile.prompt1Question}
+                    </p>
+                    <p className="text-sm text-slate-800 leading-relaxed">
+                      {currentProfile.prompt1Answer}
+                    </p>
+                  </div>
+                )}
+                {currentProfile.prompt2Question && currentProfile.prompt2Answer && (
+                  <div className="p-3 bg-gradient-to-br from-rose-50 to-pink-50 rounded-xl border border-rose-100">
+                    <p className="text-xs font-bold text-rose-600 uppercase tracking-wider mb-1">
+                      {currentProfile.prompt2Question}
+                    </p>
+                    <p className="text-sm text-slate-800 leading-relaxed">
+                      {currentProfile.prompt2Answer}
+                    </p>
+                  </div>
+                )}
+                {currentProfile.prompt3Question && currentProfile.prompt3Answer && (
+                  <div className="p-3 bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl border border-amber-100">
+                    <p className="text-xs font-bold text-amber-600 uppercase tracking-wider mb-1">
+                      {currentProfile.prompt3Question}
+                    </p>
+                    <p className="text-sm text-slate-800 leading-relaxed">
+                      {currentProfile.prompt3Answer}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
 
             <p className="text-center text-xs text-slate-400 mt-4">
               {currentIndex + 1} / {profiles.length}
@@ -699,7 +710,7 @@ export default function DiscoverPage() {
           </div>
         </div>
 
-        {/* BOUTONS ACTIONS AVEC REWIND + SUPER LIKE */}
+        {/* Boutons Actions */}
         <div className="flex items-center justify-center gap-3 mt-6">
           <button
             onClick={handleRewind}
