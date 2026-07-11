@@ -40,6 +40,12 @@ interface Profile {
   distance: number | null;
   hasLikedMe: boolean;
   hasSuperLikedMe: boolean;
+  prompt1Question: string | null;
+  prompt1Answer: string | null;
+  prompt2Question: string | null;
+  prompt2Answer: string | null;
+  prompt3Question: string | null;
+  prompt3Answer: string | null;
 }
 
 function getAge(birthDate: string): number {
@@ -650,6 +656,41 @@ export default function DiscoverPage() {
                 ))}
               </div>
             )}
+            {/* 🆕 PROMPTS */}
+{(currentProfile.prompt1Answer || currentProfile.prompt2Answer || currentProfile.prompt3Answer) && (
+  <div className="mt-4 space-y-3">
+    {currentProfile.prompt1Question && currentProfile.prompt1Answer && (
+      <div className="p-3 bg-gradient-to-br from-purple-50 to-rose-50 rounded-xl border border-purple-100">
+        <p className="text-xs font-bold text-purple-600 uppercase tracking-wider mb-1">
+          {currentProfile.prompt1Question}
+        </p>
+        <p className="text-sm text-slate-800 leading-relaxed">
+          {currentProfile.prompt1Answer}
+        </p>
+      </div>
+    )}
+    {currentProfile.prompt2Question && currentProfile.prompt2Answer && (
+      <div className="p-3 bg-gradient-to-br from-rose-50 to-pink-50 rounded-xl border border-rose-100">
+        <p className="text-xs font-bold text-rose-600 uppercase tracking-wider mb-1">
+          {currentProfile.prompt2Question}
+        </p>
+        <p className="text-sm text-slate-800 leading-relaxed">
+          {currentProfile.prompt2Answer}
+        </p>
+      </div>
+    )}
+    {currentProfile.prompt3Question && currentProfile.prompt3Answer && (
+      <div className="p-3 bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl border border-amber-100">
+        <p className="text-xs font-bold text-amber-600 uppercase tracking-wider mb-1">
+          {currentProfile.prompt3Question}
+        </p>
+        <p className="text-sm text-slate-800 leading-relaxed">
+          {currentProfile.prompt3Answer}
+        </p>
+      </div>
+    )}
+  </div>
+)}
 
             <p className="text-center text-xs text-slate-400 mt-4">
               {currentIndex + 1} / {profiles.length}
