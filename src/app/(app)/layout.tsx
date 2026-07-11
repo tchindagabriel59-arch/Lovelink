@@ -17,6 +17,7 @@ import {
   Star,
   Gem,
   Zap,
+  ShieldCheck,
 } from "lucide-react";
 
 interface UserData {
@@ -82,7 +83,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     router.push("/");
   };
 
-  const navItems = [
+const navItems = [
     { href: "/dashboard", label: "Accueil", icon: <Sparkles className="w-5 h-5" /> },
     { href: "/discover", label: "Découvrir", icon: <Compass className="w-5 h-5" /> },
     { href: "/likes-recus", label: "Qui m'a liké", icon: <Star className="w-5 h-5" /> },
@@ -91,6 +92,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     { href: "/profile", label: "Profil", icon: <User className="w-5 h-5" /> },
     { href: "/preferences", label: "Préférences", icon: <Settings className="w-5 h-5" /> },
     { href: "/boost", label: "Boost", icon: <Zap className="w-5 h-5" /> },
+    { href: "/verification", label: "Vérification", icon: <ShieldCheck className="w-5 h-5" /> },
   ];
 
   // Sur mobile : afficher moins d'items dans la barre du bas (max 5)
