@@ -15,10 +15,13 @@ import {
   TrendingUp,
   Bell,
   Zap,
-  Users,
   Trophy,
-  Target,
   Camera,
+  Crown,
+  Gem,
+  Lock,
+  Rocket,
+  Eye,
 } from "lucide-react";
 
 interface DashboardStats {
@@ -77,6 +80,7 @@ const gradients = [
 
 export default function DashboardPage() {
   const { user } = useUser();
+  const isPremium = user?.isPremium || false;
   const [dashData, setDashData] = useState<DashboardStats | null>(null);
   const [recentMatches, setRecentMatches] = useState<MatchData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -167,30 +171,111 @@ export default function DashboardPage() {
   return (
     <div className="p-6 lg:p-8 max-w-6xl mx-auto">
       {/* HEADER */}
-      <div className="mb-8">
+      <div className="mb-6">
         <div className="flex items-center gap-4">
-          {user?.photoUrl ? (
-            <img
-              src={user.photoUrl}
-              alt={user.firstName}
-              className="w-16 h-16 rounded-2xl object-cover shadow-md"
-            />
-          ) : (
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-rose-500 to-purple-600 flex items-center justify-center text-white font-bold text-2xl shadow-md">
-              {user?.firstName?.charAt(0)}
-              {user?.lastName?.charAt(0)}
-            </div>
-          )}
+          <div className="relative">
+            {user?.photoUrl ? (
+              <img
+                src={user.photoUrl}
+                alt={user.firstName}
+                className={`w-16 h-16 rounded-2xl object-cover shadow-md ${
+                  isPremium ? "ring-4 ring-yellow-400" : ""
+                }`}
+              />
+            ) : (
+              <div className={`w-16 h-16 rounded-2xl bg-gradient-to-br from-rose-500 to-purple-600 flex items-center justify-center text-white font-bold text-2xl shadow-md ${
+                isPremium ? "ring-4 ring-yellow-400" : ""
+              }`}>
+                {user?.firstName?.charAt(0)}
+                {user?.lastName?.charAt(0)}
+              </div>
+            )}
+            {isPremium && (
+              <div className="absolute -top-2 -right-2 w-7 h-7 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full flex items-center justify-center shadow-lg border-2 border-white">
+                <Crown className="w-4 h-4 text-white fill-white" />
+              </div>
+            )}
+          </div>
           <div>
-            <h1 className="text-3xl font-bold text-slate-900">
-              Bonjour, <span className="gradient-text">{user?.firstName}</span> 👋
-            </h1>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-3xl font-bold text-slate-900">
+                Bonjour, <span className="gradient-text">{user?.firstName}</span> 👋
+              </h1>
+              {isPremium && (
+                <span className="inline-flex items-center gap-1 bg-gradient-to-r from-yellow-100 to-orange-100 text-yellow-700 rounded-full px-3 py-1 text-xs font-black border border-yellow-300">
+                  <Crown className="w-3 h-3 fill-yellow-500" />
+                  PREMIUM
+                </span>
+              )}
+            </div>
             <p className="mt-1 text-slate-600">
-              Prêt(e) à faire de nouvelles rencontres ?
+              {isPremium
+                ? "Ton statut Premium te donne accès à tout ! 👑"
+                : "Prêt(e) à faire de nouvelles rencontres ?"}
             </p>
           </div>
         </div>
       </div>
+
+      {/* 💎 BANNIÈRE PREMIUM (si non-Premium et il y a des likes/matches à débloquer) */}
+      {!isPremium && ((stats?.likesReceived || 0) > 0 || (stats?.superLikesReceived || 0) > 0) && (
+        <div className="mb-6 relative overflow-hidden rounded-3xl bg-gradient-to-r from-yellow-400 via-orange-500 to-yellow-500 p-6 shadow-2xl">
+          <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-32 translate-x-32" />
+          <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/10 rounded-full translate-y-24 -translate-x-24" />
+          
+          <div className="relative z-10 flex flex-col md:flex-row items-center gap-6">
+            <div className="flex-shrink-0">
+              <div className="w-20 h-20 bg-white/20 backdrop-blur rounded-2xl flex items-center justify-center animate-pulse">
+                <Crown className="w-10 h-10 text-white fill-white" />
+              </div>
+            </div>
+            
+            <div className="flex-1 text-white text-center md:text-left">
+              <div className="flex items-center gap-2 mb-2 justify-center md:justify-start">
+                <Gem className="w-5 h-5" />
+                <span className="text-xs font-black uppercase tracking-widest bg-white/20 px-2 py-0.5 rounded-full">
+                  Offre spéciale
+                </span>
+              </div>
+              <h3 className="text-2xl font-black mb-2">
+                {stats?.likesReceived} personne{(stats?.likesReceived || 0) > 1 ? "s ont" : " a"} craqué sur toi !
+              </h3>
+              <p className="text-white/90 text-sm md:text-base">
+                Découvre qui + Super Likes illimités + Boosts 3x/jour avec Premium 👑
+              </p>
+            </div>
+            
+            <Link
+              href="/premium"
+              className="flex-shrink-0 bg-white text-orange-600 font-black px-6 py-3 rounded-xl shadow-lg hover:scale-105 transition-transform flex items-center gap-2 whitespace-nowrap"
+            >
+              <Sparkles className="w-5 h-5" />
+              Découvrir
+            </Link>
+          </div>
+        </div>
+      )}
+
+      {/* 👑 BANDEAU PREMIUM ACTIF */}
+      {isPremium && (
+        <div className="mb-6 bg-gradient-to-r from-yellow-50 via-orange-50 to-yellow-50 border-2 border-yellow-300 rounded-2xl p-4 flex items-center gap-3">
+          <Crown className="w-6 h-6 text-yellow-500 fill-yellow-500 flex-shrink-0" />
+          <div className="flex-1">
+            <p className="font-black text-slate-900 text-sm">
+              Tu es <span className="text-orange-600">Premium</span> ! 🎉
+            </p>
+            <p className="text-xs text-slate-600">
+              Profite de tous les avantages : Super Likes illimités, Boosts 3x/jour, et bien plus.
+            </p>
+          </div>
+          <Link
+            href="/premium"
+            className="text-xs font-bold text-orange-600 hover:underline whitespace-nowrap"
+          >
+            Voir avantages →
+          </Link>
+        </div>
+      )}
 
       {/* STATS PRINCIPALES */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
@@ -292,43 +377,44 @@ export default function DashboardPage() {
             </div>
           )}
 
-      {/* ACTIONS RAPIDES */}
-<div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-  <ActionCard
-    href="/discover"
-    icon={<Compass className="w-6 h-6" />}
-    label="Découvrir"
-    gradient="from-rose-500 to-pink-500"
-  />
-  <ActionCard
-    href="/likes-recus"
-    icon={<Star className="w-6 h-6" />}
-    label="Qui m'a liké"
-    gradient="from-blue-500 to-cyan-500"
-    badge={stats?.likesReceived}
-  />
-  <ActionCard
-    href="/matches"
-    icon={<Heart className="w-6 h-6" />}
-    label="Mes matchs"
-    gradient="from-purple-500 to-violet-500"
-    badge={stats?.matches}
-  />
-  <ActionCard
-    href="/messages"
-    icon={<MessageCircle className="w-6 h-6" />}
-    label="Messages"
-    gradient="from-emerald-500 to-teal-500"
-    badge={stats?.unreadMessages}
-    alert
-  />
-  <ActionCard
-    href="/boost"
-    icon={<Zap className="w-6 h-6" />}
-    label="Booster 🚀"
-    gradient="from-amber-500 to-orange-500"
-  />
-</div>
+          {/* ACTIONS RAPIDES */}
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            <ActionCard
+              href="/discover"
+              icon={<Compass className="w-6 h-6" />}
+              label="Découvrir"
+              gradient="from-rose-500 to-pink-500"
+            />
+            <ActionCard
+              href="/likes-recus"
+              icon={<Star className="w-6 h-6" />}
+              label="Qui m'a liké"
+              gradient="from-blue-500 to-cyan-500"
+              badge={stats?.likesReceived}
+              locked={!isPremium && (stats?.likesReceived || 0) > 0}
+            />
+            <ActionCard
+              href="/matches"
+              icon={<Heart className="w-6 h-6" />}
+              label="Mes matchs"
+              gradient="from-purple-500 to-violet-500"
+              badge={stats?.matches}
+            />
+            <ActionCard
+              href="/messages"
+              icon={<MessageCircle className="w-6 h-6" />}
+              label="Messages"
+              gradient="from-emerald-500 to-teal-500"
+              badge={stats?.unreadMessages}
+              alert
+            />
+            <ActionCard
+              href="/boost"
+              icon={<Zap className="w-6 h-6" />}
+              label="Booster 🚀"
+              gradient="from-amber-500 to-orange-500"
+            />
+          </div>
 
           {/* MATCHS RÉCENTS */}
           <div className="bg-white rounded-2xl p-6 border border-slate-100">
@@ -404,6 +490,44 @@ export default function DashboardPage() {
               </div>
             )}
           </div>
+
+          {/* 💰 SECTION AVANTAGES PREMIUM (si non-Premium) */}
+          {!isPremium && (
+            <div className="bg-white rounded-2xl p-6 border-2 border-yellow-300 shadow-xl relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-yellow-200/40 rounded-full blur-3xl" />
+              <div className="relative">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-12 h-12 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-xl flex items-center justify-center shadow-lg">
+                    <Crown className="w-6 h-6 text-white fill-white" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-black text-slate-900">Débloque tout ton potentiel</h3>
+                    <p className="text-xs text-slate-500">Passe Premium et multiplie tes chances</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 mb-4">
+                  <PremiumFeature icon="👀" title="Vois qui t'a liké" desc="Débloque les profils" />
+                  <PremiumFeature icon="⭐" title="5 Super Likes/jour" desc="Au lieu de 1" />
+                  <PremiumFeature icon="🚀" title="3 Boosts/jour" desc="Au lieu de 1/24h" />
+                  <PremiumFeature icon="🕵️" title="Mode incognito" desc="Navigue en secret" />
+                </div>
+
+                <Link
+                  href="/premium"
+                  className="w-full flex items-center justify-center gap-2 py-3 bg-gradient-to-r from-yellow-500 to-orange-500 text-white rounded-xl font-bold hover:shadow-lg transition"
+                >
+                  <Gem className="w-5 h-5" />
+                  Découvrir Premium
+                  <ArrowRight className="w-4 h-4" />
+                </Link>
+
+                <p className="text-center text-xs text-slate-500 mt-3">
+                  💎 À partir de <strong>4.99€/mois</strong> • Annulable à tout moment
+                </p>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* COLONNE DROITE (1/3) */}
@@ -509,6 +633,40 @@ export default function DashboardPage() {
             </div>
           </div>
 
+          {/* MINI CTA PREMIUM (Colonne droite - si non-Premium) */}
+          {!isPremium && (
+            <div className="bg-gradient-to-br from-yellow-400 via-orange-500 to-yellow-500 rounded-2xl p-5 text-white shadow-2xl relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full -translate-y-12 translate-x-12" />
+              <div className="relative">
+                <div className="flex items-center gap-2 mb-3">
+                  <Crown className="w-6 h-6 fill-white" />
+                  <h3 className="font-black text-lg">Passe Premium</h3>
+                </div>
+                <ul className="space-y-1.5 text-sm mb-4">
+                  <li className="flex items-center gap-2">
+                    <Eye className="w-4 h-4" />
+                    Vois qui t&apos;a liké
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <Star className="w-4 h-4 fill-white" />
+                    Super Likes illimités
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <Rocket className="w-4 h-4" />
+                    Boosts 3x/jour
+                  </li>
+                </ul>
+                <Link
+                  href="/premium"
+                  className="w-full flex items-center justify-center gap-2 py-2.5 bg-white text-orange-600 rounded-xl font-black text-sm hover:scale-105 transition-transform"
+                >
+                  <Gem className="w-4 h-4" />
+                  Découvrir
+                </Link>
+              </div>
+            </div>
+          )}
+
           {/* MON PROFIL - Aperçu rapide */}
           <div className="bg-white rounded-2xl p-6 border border-slate-100">
             <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
@@ -516,21 +674,37 @@ export default function DashboardPage() {
               Mon profil
             </h3>
             <div className="text-center">
-              {user?.photoUrl ? (
-                <img
-                  src={user.photoUrl}
-                  alt={user.firstName}
-                  className="w-20 h-20 rounded-2xl object-cover mx-auto mb-3 shadow-md"
-                />
-              ) : (
-                <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-rose-400 to-purple-500 flex items-center justify-center text-white text-2xl font-bold mx-auto mb-3 shadow-md">
-                  {user?.firstName?.charAt(0)}
-                  {user?.lastName?.charAt(0)}
-                </div>
-              )}
-              <p className="font-bold text-slate-900">
-                {user?.firstName} {user?.lastName}
-              </p>
+              <div className="relative inline-block">
+                {user?.photoUrl ? (
+                  <img
+                    src={user.photoUrl}
+                    alt={user.firstName}
+                    className={`w-20 h-20 rounded-2xl object-cover mx-auto mb-3 shadow-md ${
+                      isPremium ? "ring-4 ring-yellow-400" : ""
+                    }`}
+                  />
+                ) : (
+                  <div className={`w-20 h-20 rounded-2xl bg-gradient-to-br from-rose-400 to-purple-500 flex items-center justify-center text-white text-2xl font-bold mx-auto mb-3 shadow-md ${
+                    isPremium ? "ring-4 ring-yellow-400" : ""
+                  }`}>
+                    {user?.firstName?.charAt(0)}
+                    {user?.lastName?.charAt(0)}
+                  </div>
+                )}
+                {isPremium && (
+                  <div className="absolute -top-1 -right-1 w-6 h-6 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full flex items-center justify-center shadow-lg border-2 border-white">
+                    <Crown className="w-3 h-3 text-white fill-white" />
+                  </div>
+                )}
+              </div>
+              <div className="flex items-center justify-center gap-1">
+                <p className="font-bold text-slate-900">
+                  {user?.firstName} {user?.lastName}
+                </p>
+                {isPremium && (
+                  <Crown className="w-4 h-4 text-yellow-500 fill-yellow-500" />
+                )}
+              </div>
               {user?.city && (
                 <p className="text-sm text-slate-500 flex items-center justify-center gap-1 mt-1">
                   <MapPin className="w-3 h-3" />
@@ -598,6 +772,7 @@ function ActionCard({
   gradient,
   badge,
   alert,
+  locked,
 }: {
   href: string;
   icon: React.ReactNode;
@@ -605,6 +780,7 @@ function ActionCard({
   gradient: string;
   badge?: number;
   alert?: boolean;
+  locked?: boolean;
 }) {
   return (
     <Link
@@ -616,10 +792,25 @@ function ActionCard({
           {badge > 9 ? "9+" : badge}
         </div>
       )}
+      {locked && (
+        <div className="absolute -top-1 -left-1 w-5 h-5 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full flex items-center justify-center shadow-lg">
+          <Lock className="w-3 h-3 text-white" />
+        </div>
+      )}
       <div className={`w-12 h-12 bg-gradient-to-br ${gradient} rounded-xl flex items-center justify-center text-white mb-2 group-hover:scale-110 transition`}>
         {icon}
       </div>
       <p className="text-sm font-bold text-slate-900">{label}</p>
     </Link>
+  );
+}
+
+function PremiumFeature({ icon, title, desc }: { icon: string; title: string; desc: string }) {
+  return (
+    <div className="p-3 bg-gradient-to-br from-yellow-50 to-orange-50 rounded-xl border border-yellow-200">
+      <div className="text-2xl mb-1">{icon}</div>
+      <p className="text-xs font-bold text-slate-900">{title}</p>
+      <p className="text-[10px] text-slate-500">{desc}</p>
+    </div>
   );
 }
