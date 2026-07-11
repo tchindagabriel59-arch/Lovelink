@@ -1,0 +1,222 @@
+import { NextResponse } from "next/server";
+import { db } from "@/db";
+import { users, likes, matches, messages, notifications } from "@/db/schema";
+import { and, eq, or, sql, gte, desc } from "drizzle-orm";
+import { getCurrentUserId } from "@/lib/auth";
+
+export async function GET() {
+  try {
+    const userId = await getCurrentUserId();
+    if (!userId) {
+      return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
+    }
+
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const weekAgo = new Date(today);
+    weekAgo.setDate(weekAgo.getDate() - 7);
+
+    // Récupérer l'utilisateur complet
+    const [currentUser] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+
+    // Likes envoyés
+    const [likesGiven] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(likes)
+      .where(and(eq(likes.fromUserId, userId), eq(likes.isLike, true)));
+
+    const [likesGivenToday] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(likes)
+      .where(
+        and(
+          eq(likes.fromUserId, userId),
+          eq(likes.isLike, true),
+          gte(likes.createdAt, today)
+        )
+      );
+
+    // Likes reçus
+    const [likesReceived] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(likes)
+      .where(and(eq(likes.toUserId, userId), eq(likes.isLike, true)));
+
+    const [likesReceivedThisWeek] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(likes)
+      .where(
+        and(
+          eq(likes.toUserId, userId),
+          eq(likes.isLike, true),
+          gte(likes.createdAt, weekAgo)
+        )
+      );
+
+    // Super likes reçus
+    const [superLikesReceived] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(likes)
+      .where(
+        and(
+          eq(likes.toUserId, userId),
+          eq(likes.isLike, true),
+          eq(likes.isSuperLike, true)
+        )
+      );
+
+    // Matchs
+    const [matchCount] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(matches)
+      .where(or(eq(matches.user1Id, userId), eq(matches.user2Id, userId)));
+
+    const [matchesThisWeek] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(matches)
+      .where(
+        and(
+          or(eq(matches.user1Id, userId), eq(matches.user2Id, userId)),
+          gte(matches.createdAt, weekAgo)
+        )
+      );
+
+    // Messages envoyés
+    const [messagesSent] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(messages)
+      .where(eq(messages.senderId, userId));
+
+    // Messages non lus
+    const [unreadMessages] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(messages)
+      .innerJoin(matches, eq(messages.matchId, matches.id))
+      .where(
+        and(
+          or(eq(matches.user1Id, userId), eq(matches.user2Id, userId)),
+          eq(messages.isRead, false),
+          sql`${messages.senderId} != ${userId}`
+        )
+      );
+
+    // Notifications non lues
+    const [unreadNotifs] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(notifications)
+      .where(and(eq(notifications.userId, userId), eq(notifications.isRead, false)));
+
+    // Calcul complétude du profil
+    let completionScore = 0;
+    if (currentUser?.firstName) completionScore += 5;
+    if (currentUser?.lastName) completionScore += 5;
+    if (currentUser?.bio && currentUser.bio.length > 20) completionScore += 15;
+    if (currentUser?.city) completionScore += 10;
+    if (currentUser?.country) completionScore += 5;
+    if (currentUser?.occupation) completionScore += 10;
+    if (currentUser?.interests && currentUser.interests.length > 0) completionScore += 10;
+    if (currentUser?.photoUrl) completionScore += 15;
+    if (currentUser?.coverPhotoUrl) completionScore += 5;
+    if (currentUser?.photo1Url) completionScore += 5;
+    if (currentUser?.photo2Url) completionScore += 5;
+    if (currentUser?.prompt1Answer) completionScore += 5;
+    if (currentUser?.prompt2Answer) completionScore += 5;
+
+    // Suggestions d'amélioration
+    const suggestions: Array<{ icon: string; text: string; link: string }> = [];
+    if (!currentUser?.photoUrl) {
+      suggestions.push({
+        icon: "📸",
+        text: "Ajoute une photo de profil pour +80% de matchs",
+        link: "/profile",
+      });
+    }
+    if (!currentUser?.coverPhotoUrl) {
+      suggestions.push({
+        icon: "🖼️",
+        text: "Ajoute une photo de couverture pour te démarquer",
+        link: "/profile",
+      });
+    }
+    if (!currentUser?.bio || currentUser.bio.length < 20) {
+      suggestions.push({
+        icon: "✍️",
+        text: "Écris une bio plus détaillée (min 20 caractères)",
+        link: "/profile",
+      });
+    }
+    if (!currentUser?.prompt1Answer) {
+      suggestions.push({
+        icon: "💬",
+        text: "Réponds aux prompts pour rendre ton profil plus attractif",
+        link: "/profile",
+      });
+    }
+    if (!currentUser?.occupation) {
+      suggestions.push({
+        icon: "💼",
+        text: "Ajoute ta profession pour créer de l'intérêt",
+        link: "/profile",
+      });
+    }
+    if (!currentUser?.interests || currentUser.interests.length === 0) {
+      suggestions.push({
+        icon: "✨",
+        text: "Sélectionne tes centres d'intérêt",
+        link: "/profile",
+      });
+    }
+    if (currentUser?.latitude == null) {
+      suggestions.push({
+        icon: "📍",
+        text: "Active ta localisation pour trouver des profils près de toi",
+        link: "/preferences",
+      });
+    }
+
+    // Dernières notifications
+    const recentNotifs = await db
+      .select({
+        id: notifications.id,
+        type: notifications.type,
+        content: notifications.content,
+        isRead: notifications.isRead,
+        createdAt: notifications.createdAt,
+        fromUser: {
+          id: users.id,
+          firstName: users.firstName,
+          photoUrl: users.photoUrl,
+        },
+      })
+      .from(notifications)
+      .leftJoin(users, eq(notifications.fromUserId, users.id))
+      .where(eq(notifications.userId, userId))
+      .orderBy(desc(notifications.createdAt))
+      .limit(5);
+
+    return NextResponse.json({
+      stats: {
+        likesGiven: likesGiven.count,
+        likesGivenToday: likesGivenToday.count,
+        likesReceived: likesReceived.count,
+        likesReceivedThisWeek: likesReceivedThisWeek.count,
+        superLikesReceived: superLikesReceived.count,
+        matches: matchCount.count,
+        matchesThisWeek: matchesThisWeek.count,
+        messagesSent: messagesSent.count,
+        unreadMessages: unreadMessages.count,
+        unreadNotifs: unreadNotifs.count,
+      },
+      completion: completionScore,
+      suggestions: suggestions.slice(0, 4),
+      recentNotifs,
+    });
+  } catch (error) {
+    console.error("Dashboard stats error:", error);
+    return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
+  }
+}
