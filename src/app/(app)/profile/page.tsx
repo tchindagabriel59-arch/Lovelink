@@ -15,6 +15,13 @@ import {
   ImageIcon,
   MessageSquareQuote,
 } from "lucide-react";
+
+const interestOptions = [
+  "Voyages", "Musique", "Cinema", "Sport", "Cuisine", "Lecture",
+  "Art", "Photographie", "Danse", "Jeux vidéo", "Nature", "Yoga",
+  "Animaux", "Tech", "Mode", "Gastronomie",
+];
+
 const promptQuestions = [
   "Ma passion secrète est...",
   "Le meilleur moment de ma journée...",
@@ -38,12 +45,6 @@ const promptQuestions = [
   "Ma boisson favorite...",
 ];
 
-const interestOptions = [
-  "Voyages", "Musique", "Cinema", "Sport", "Cuisine", "Lecture",
-  "Art", "Photographie", "Danse", "Jeux vidéo", "Nature", "Yoga",
-  "Animaux", "Tech", "Mode", "Gastronomie",
-];
-
 const gradients = [
   "from-rose-400 to-pink-500",
   "from-purple-400 to-violet-500",
@@ -56,7 +57,7 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [uploadingField, setUploadingField] = useState<string | null>(null);
-  
+
   const profilePhotoRef = useRef<HTMLInputElement>(null);
   const coverPhotoRef = useRef<HTMLInputElement>(null);
   const photo1Ref = useRef<HTMLInputElement>(null);
@@ -64,7 +65,7 @@ export default function ProfilePage() {
   const photo3Ref = useRef<HTMLInputElement>(null);
   const photo4Ref = useRef<HTMLInputElement>(null);
 
-const [form, setForm] = useState({
+  const [form, setForm] = useState({
     bio: user?.bio || "",
     city: user?.city || "",
     country: user?.country || "",
@@ -107,7 +108,6 @@ const [form, setForm] = useState({
     ? form.interests.split(",").map((s) => s.trim()).filter(Boolean)
     : [];
 
-  // 🆕 UPLOAD PHOTO GÉNÉRIQUE (fonctionne pour tous les champs)
   const handlePhotoUpload = async (
     e: React.ChangeEvent<HTMLInputElement>,
     fieldName: string
@@ -157,7 +157,6 @@ const [form, setForm] = useState({
     }
   };
 
-  // 🗑️ SUPPRIMER UNE PHOTO
   const removePhoto = async (fieldName: string) => {
     if (!confirm("Supprimer cette photo ?")) return;
     const updatedForm = { ...form, [fieldName]: "" };
@@ -201,7 +200,6 @@ const [form, setForm] = useState({
 
   const gradient = gradients[(user?.id ?? 0) % gradients.length];
 
-  // Composant réutilisable pour les cases photos
   const PhotoBox = ({
     url,
     fieldName,
@@ -274,7 +272,7 @@ const [form, setForm] = useState({
         </p>
       </div>
 
-      {/* 🖼️ SECTION PHOTOS (STYLE TINDER) */}
+      {/* SECTION PHOTOS */}
       <div className="bg-white rounded-2xl p-6 border border-slate-100 mb-6">
         <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
           <ImageIcon className="w-5 h-5 text-rose-500" />
@@ -338,9 +336,7 @@ const [form, setForm] = useState({
           </div>
         </div>
 
-        {/* Photo de profil + Galerie */}
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
-          {/* Photo de profil (mise en avant) */}
           <div className="col-span-2 sm:col-span-1">
             <p className="text-xs font-medium text-slate-700 mb-2">Photo principale</p>
             <PhotoBox
@@ -350,8 +346,6 @@ const [form, setForm] = useState({
               label="Photo principale"
             />
           </div>
-
-          {/* Photos supplémentaires */}
           <div>
             <p className="text-xs font-medium text-slate-700 mb-2">Photo 2</p>
             <PhotoBox url={form.photo1Url} fieldName="photo1Url" inputRef={photo1Ref} label="Photo 2" />
@@ -450,6 +444,7 @@ const [form, setForm] = useState({
         {/* Formulaire */}
         <div className="lg:col-span-2">
           <form onSubmit={handleSubmit} className="space-y-6">
+            {/* À propos */}
             <div className="bg-white rounded-2xl p-6 border border-slate-100">
               <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
                 <User className="w-5 h-5 text-rose-500" />
@@ -481,6 +476,7 @@ const [form, setForm] = useState({
               </div>
             </div>
 
+            {/* Localisation */}
             <div className="bg-white rounded-2xl p-6 border border-slate-100">
               <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
                 <MapPin className="w-5 h-5 text-blue-500" />
@@ -512,6 +508,7 @@ const [form, setForm] = useState({
               </div>
             </div>
 
+            {/* Recherche */}
             <div className="bg-white rounded-2xl p-6 border border-slate-100">
               <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
                 <Heart className="w-5 h-5 text-rose-500" />
@@ -530,6 +527,91 @@ const [form, setForm] = useState({
               </select>
             </div>
 
+            {/* PROMPTS style Hinge */}
+            <div className="bg-white rounded-2xl p-6 border border-slate-100">
+              <h3 className="text-lg font-semibold mb-2 flex items-center gap-2">
+                <MessageSquareQuote className="w-5 h-5 text-purple-500" />
+                Mes réponses
+              </h3>
+              <p className="text-sm text-slate-500 mb-4">
+                💡 Choisis jusqu&apos;à 3 questions et réponds-y pour te démarquer !
+              </p>
+
+              <div className="space-y-4">
+                {[1, 2, 3].map((num) => {
+                  const questionKey = `prompt${num}Question` as keyof typeof form;
+                  const answerKey = `prompt${num}Answer` as keyof typeof form;
+                  const question = form[questionKey] as string;
+                  const answer = form[answerKey] as string;
+
+                  return (
+                    <div
+                      key={num}
+                      className="p-4 bg-gradient-to-br from-purple-50 to-rose-50 rounded-xl border border-purple-100"
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-bold text-purple-600 uppercase tracking-wider">
+                          Question {num}
+                        </span>
+                        {question && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setForm({
+                                ...form,
+                                [questionKey]: "",
+                                [answerKey]: "",
+                              });
+                              setSaved(false);
+                            }}
+                            className="text-xs text-red-500 hover:text-red-600 font-medium"
+                          >
+                            Retirer
+                          </button>
+                        )}
+                      </div>
+
+                      <select
+                        value={question}
+                        onChange={(e) => {
+                          setForm({ ...form, [questionKey]: e.target.value });
+                          setSaved(false);
+                        }}
+                        className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-purple-400 focus:ring-2 focus:ring-purple-100 transition bg-white mb-3 font-medium"
+                      >
+                        <option value="">✨ Choisis une question...</option>
+                        {promptQuestions.map((q) => (
+                          <option key={q} value={q}>
+                            {q}
+                          </option>
+                        ))}
+                      </select>
+
+                      {question && (
+                        <>
+                          <textarea
+                            value={answer}
+                            onChange={(e) => {
+                              setForm({ ...form, [answerKey]: e.target.value });
+                              setSaved(false);
+                            }}
+                            rows={2}
+                            maxLength={200}
+                            placeholder="Ta réponse..."
+                            className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-purple-400 focus:ring-2 focus:ring-purple-100 transition bg-white resize-none"
+                          />
+                          <p className="text-xs text-slate-400 text-right mt-1">
+                            {answer.length}/200
+                          </p>
+                        </>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Intérêts */}
             <div className="bg-white rounded-2xl p-6 border border-slate-100">
               <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
                 <Sparkles className="w-5 h-5 text-amber-500" />
@@ -546,84 +628,6 @@ const [form, setForm] = useState({
                         ? "bg-gradient-to-r from-rose-500 to-purple-600 text-white shadow-md"
                         : "bg-slate-100 text-slate-600 hover:bg-rose-50 hover:text-rose-600"
                     }`}
-                    {/* 🆕 PROMPTS style Hinge */}
-<div className="bg-white rounded-2xl p-6 border border-slate-100">
-  <h3 className="text-lg font-semibold mb-2 flex items-center gap-2">
-    <MessageSquareQuote className="w-5 h-5 text-purple-500" />
-    Mes réponses
-  </h3>
-  <p className="text-sm text-slate-500 mb-4">
-    💡 Choisis jusqu&apos;à 3 questions et réponds-y pour te démarquer !
-  </p>
-
-  <div className="space-y-4">
-    {[1, 2, 3].map((num) => {
-      const questionKey = `prompt${num}Question` as keyof typeof form;
-      const answerKey = `prompt${num}Answer` as keyof typeof form;
-      const question = form[questionKey] as string;
-      const answer = form[answerKey] as string;
-
-      return (
-        <div key={num} className="p-4 bg-gradient-to-br from-purple-50 to-rose-50 rounded-xl border border-purple-100">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-bold text-purple-600 uppercase tracking-wider">
-              Question {num}
-            </span>
-            {question && (
-              <button
-                type="button"
-                onClick={() => {
-                  setForm({
-                    ...form,
-                    [questionKey]: "",
-                    [answerKey]: "",
-                  });
-                  setSaved(false);
-                }}
-                className="text-xs text-red-500 hover:text-red-600 font-medium"
-              >
-                Retirer
-              </button>
-            )}
-          </div>
-
-          <select
-            value={question}
-            onChange={(e) => {
-              setForm({ ...form, [questionKey]: e.target.value });
-              setSaved(false);
-            }}
-            className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-purple-400 focus:ring-2 focus:ring-purple-100 transition bg-white mb-3 font-medium"
-          >
-            <option value="">✨ Choisis une question...</option>
-            {promptQuestions.map((q) => (
-              <option key={q} value={q}>{q}</option>
-            ))}
-          </select>
-
-          {question && (
-            <textarea
-              value={answer}
-              onChange={(e) => {
-                setForm({ ...form, [answerKey]: e.target.value });
-                setSaved(false);
-              }}
-              rows={2}
-              maxLength={200}
-              placeholder="Ta réponse..."
-              className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-purple-400 focus:ring-2 focus:ring-purple-100 transition bg-white resize-none"
-            />
-          )}
-          {question && (
-            <p className="text-xs text-slate-400 text-right mt-1">
-              {answer.length}/200
-            </p>
-          )}
-        </div>
-      );
-    })}
-  </div>
-</div>
                   >
                     {interest}
                   </button>
@@ -631,6 +635,7 @@ const [form, setForm] = useState({
               </div>
             </div>
 
+            {/* Boutons */}
             <div className="flex items-center gap-4">
               <button
                 type="submit"
