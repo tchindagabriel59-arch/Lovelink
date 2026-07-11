@@ -39,6 +39,12 @@ export async function GET() {
         prefMaxDistance: users.prefMaxDistance,
         latitude: users.latitude,
         longitude: users.longitude,
+        prompt1Question: users.prompt1Question,
+        prompt1Answer: users.prompt1Answer,
+        prompt2Question: users.prompt2Question,
+        prompt2Answer: users.prompt2Answer,
+        prompt3Question: users.prompt3Question,
+        prompt3Answer: users.prompt3Answer,
       })
       .from(users)
       .where(eq(users.id, userId))
