@@ -12,7 +12,7 @@ export const contentType = "image/png";
 
 export default async function Image() {
   // Charger l'image et la convertir en base64 pour être sûr qu'elle s'affiche
-  const imageUrl = "const imageUrl = "https://i.ibb.co/vCYcn42T/lovelink.jpg";";
+  const imageUrl = "const imageUrl = "https://i.ibb.co/vCYcn42T/lovelink.jpg";
 
   return new ImageResponse(
     (
