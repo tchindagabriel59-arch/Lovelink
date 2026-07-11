@@ -15,6 +15,7 @@ import {
   Gem,
   Eye,
   Sparkles,
+  BadgeCheck,
 } from "lucide-react";
 
 interface LikeReceived {
@@ -36,6 +37,7 @@ interface LikeReceived {
     occupation: string | null;
     isOnline: boolean;
     isPremium: boolean;
+    isVerified: boolean;
   };
 }
 
@@ -432,10 +434,13 @@ function ProfileCard({
         {/* Overlay avec nom (masqué si verrouillé) */}
         {!isLocked && (
           <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-3 z-10">
-            <div className="flex items-center gap-1.5">
+           <div className="flex items-center gap-1.5">
               <p className="text-white font-bold text-lg drop-shadow">
                 {like.user.firstName}, {getAge(like.user.birthDate)}
               </p>
+              {like.user.isVerified && (
+                <BadgeCheck className="w-4 h-4 text-blue-400 fill-blue-500 drop-shadow flex-shrink-0" />
+              )}
               {isPremium && (
                 <Crown className="w-4 h-4 text-yellow-400 fill-yellow-400 drop-shadow flex-shrink-0" />
               )}
