@@ -7,7 +7,6 @@ import {
   Star,
   MapPin,
   Briefcase,
-  Sparkles,
   X,
   Crown,
   MessageCircle,
@@ -91,7 +90,6 @@ export default function LikesRecusPage() {
         if (data.isMatch) {
           setMatchPopup({ firstName, photoUrl });
         }
-        // Retirer de la liste
         setLikes((prev) => prev.filter((l) => l.user.id !== userId));
       }
     } catch {
@@ -122,6 +120,7 @@ export default function LikesRecusPage() {
 
   const superLikes = likes.filter((l) => l.isSuperLike);
   const regularLikes = likes.filter((l) => !l.isSuperLike);
+  const premiumCount = likes.filter((l) => l.user.isPremium).length;
 
   if (loading) {
     return (
@@ -194,6 +193,12 @@ export default function LikesRecusPage() {
             </h1>
             <p className="mt-1 text-slate-600">
               {likes.length} {likes.length > 1 ? "personnes" : "personne"} attendent ta réponse
+              {premiumCount > 0 && (
+                <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 bg-gradient-to-r from-yellow-100 to-orange-100 text-yellow-700 rounded-full text-xs font-bold border border-yellow-200">
+                  <Crown className="w-3 h-3 fill-yellow-500" />
+                  {premiumCount} Premium
+                </span>
+              )}
             </p>
           </div>
         </div>
@@ -285,31 +290,37 @@ function ProfileCard({
   isSuperLike?: boolean;
 }) {
   const gradient = gradients[like.user.id % gradients.length];
+  const isPremium = like.user.isPremium;
 
   return (
-    <div className={`relative bg-white rounded-2xl overflow-hidden border-2 shadow-lg hover:shadow-xl transition ${
-      isSuperLike ? "border-blue-400 shadow-blue-200" : "border-slate-100"
+    <div className={`relative bg-white rounded-2xl overflow-hidden shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 ${
+      isPremium 
+        ? "ring-2 ring-yellow-400 shadow-yellow-500/20" 
+        : isSuperLike 
+        ? "border-2 border-blue-400 shadow-blue-200" 
+        : "border-2 border-slate-100"
     }`}>
+      
+      {/* Ruban Premium en haut */}
+      {isPremium && (
+        <div className="absolute top-0 left-0 right-0 z-20 bg-gradient-to-r from-yellow-400 via-orange-500 to-yellow-400 text-white text-center py-1 text-[10px] font-black tracking-widest flex items-center justify-center gap-1 shadow-md">
+          <Crown className="w-3 h-3 fill-white" />
+          PREMIUM
+          <Crown className="w-3 h-3 fill-white" />
+        </div>
+      )}
+
       {/* Badge Super Like */}
       {isSuperLike && (
-        <div className="absolute top-3 right-3 z-10">
-          <div className="w-10 h-10 bg-gradient-to-br from-blue-400 to-cyan-500 rounded-full flex items-center justify-center shadow-lg">
+        <div className={`absolute right-3 z-10 ${isPremium ? "top-8" : "top-3"}`}>
+          <div className="w-10 h-10 bg-gradient-to-br from-blue-400 to-cyan-500 rounded-full flex items-center justify-center shadow-lg border-2 border-white">
             <Star className="w-5 h-5 text-white fill-white" />
           </div>
         </div>
       )}
 
-      {/* Badge Premium */}
-      {like.user.isPremium && (
-        <div className="absolute top-3 left-3 z-10">
-          <div className="flex items-center gap-1 bg-gradient-to-r from-amber-400 to-orange-500 rounded-full px-2 py-1 shadow-lg">
-            <Crown className="w-3 h-3 text-white fill-white" />
-          </div>
-        </div>
-      )}
-
       {/* Photo */}
-      <div className={`aspect-square bg-gradient-to-br ${gradient} relative`}>
+      <div className={`aspect-square bg-gradient-to-br ${gradient} relative ${isPremium ? "mt-5" : ""}`}>
         {like.user.photoUrl ? (
           <img
             src={like.user.photoUrl}
@@ -331,9 +342,14 @@ function ProfileCard({
 
         {/* Overlay avec nom */}
         <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-3">
-          <p className="text-white font-bold text-lg drop-shadow">
-            {like.user.firstName}, {getAge(like.user.birthDate)}
-          </p>
+          <div className="flex items-center gap-1.5">
+            <p className="text-white font-bold text-lg drop-shadow">
+              {like.user.firstName}, {getAge(like.user.birthDate)}
+            </p>
+            {isPremium && (
+              <Crown className="w-4 h-4 text-yellow-400 fill-yellow-400 drop-shadow flex-shrink-0" />
+            )}
+          </div>
           {like.user.city && (
             <p className="text-white/90 text-xs flex items-center gap-1 drop-shadow">
               <MapPin className="w-3 h-3" />
@@ -370,7 +386,11 @@ function ProfileCard({
           <button
             onClick={() => onLikeBack(like.user.id, like.user.firstName, like.user.photoUrl)}
             disabled={processing}
-            className="flex-1 py-2 bg-gradient-to-r from-rose-500 to-pink-500 hover:shadow-lg text-white rounded-lg transition disabled:opacity-50 flex items-center justify-center"
+            className={`flex-1 py-2 rounded-lg text-white transition disabled:opacity-50 flex items-center justify-center hover:shadow-lg ${
+              isPremium
+                ? "bg-gradient-to-r from-yellow-500 to-orange-500 hover:shadow-orange-500/30"
+                : "bg-gradient-to-r from-rose-500 to-pink-500"
+            }`}
             title="Liker en retour"
           >
             <Heart className="w-4 h-4 fill-white" />
