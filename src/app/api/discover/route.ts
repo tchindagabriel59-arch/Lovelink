@@ -129,7 +129,7 @@ export async function GET() {
       );
     }
 
-    const allProfiles = await db
+      const allProfiles = await db
       .select({
         id: users.id,
         firstName: users.firstName,
@@ -150,6 +150,7 @@ export async function GET() {
         isOnline: users.isOnline,
         lastSeen: users.lastSeen,
         isPremium: users.isPremium,
+        isVerified: users.isVerified,
         latitude: users.latitude,
         longitude: users.longitude,
         prompt1Question: users.prompt1Question,
