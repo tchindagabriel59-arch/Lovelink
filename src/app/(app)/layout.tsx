@@ -34,6 +34,7 @@ interface UserData {
   gender?: string;
   birthDate?: string;
   isPremium?: boolean;
+  isAdmin?: boolean;
 }
 
 const UserContext = createContext<{
