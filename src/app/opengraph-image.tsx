@@ -10,6 +10,9 @@ export const size = {
 
 export const contentType = "image/png";
 
+// URL de la photo de fond (couple romantique)
+const BACKGROUND_IMAGE = "https://images.unsplash.com/photo-1519741497674-611481863552?w=1200&q=80";
+
 export default async function Image() {
   return new ImageResponse(
     (
@@ -21,11 +24,38 @@ export default async function Image() {
           flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
-          background: "linear-gradient(135deg, #f43f5e 0%, #a855f7 50%, #ec4899 100%)",
           position: "relative",
           fontFamily: "sans-serif",
         }}
       >
+        {/* Image de fond floutée */}
+        <img
+          src={BACKGROUND_IMAGE}
+          alt=""
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            filter: "blur(8px)",
+          }}
+        />
+
+        {/* Overlay dégradé rose/violet par-dessus */}
+        <div
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            width: "100%",
+            height: "100%",
+            background: "linear-gradient(135deg, rgba(244, 63, 94, 0.85) 0%, rgba(168, 85, 247, 0.85) 50%, rgba(236, 72, 153, 0.85) 100%)",
+            display: "flex",
+          }}
+        />
+
         {/* Cercles décoratifs */}
         <div
           style={{
@@ -87,7 +117,8 @@ export default async function Image() {
               background: "rgba(255, 255, 255, 0.25)",
               backdropFilter: "blur(10px)",
               marginBottom: 30,
-              boxShadow: "0 20px 60px rgba(0, 0, 0, 0.2)",
+              boxShadow: "0 20px 60px rgba(0, 0, 0, 0.3)",
+              border: "3px solid rgba(255, 255, 255, 0.4)",
             }}
           >
             <div
@@ -107,7 +138,7 @@ export default async function Image() {
               fontWeight: 900,
               color: "white",
               letterSpacing: "-4px",
-              textShadow: "0 4px 20px rgba(0, 0, 0, 0.2)",
+              textShadow: "0 4px 30px rgba(0, 0, 0, 0.4)",
               display: "flex",
               marginBottom: 20,
             }}
@@ -118,13 +149,13 @@ export default async function Image() {
           {/* Slogan */}
           <div
             style={{
-              fontSize: 40,
-              fontWeight: 600,
+              fontSize: 42,
+              fontWeight: 700,
               color: "white",
               textAlign: "center",
-              marginBottom: 30,
+              marginBottom: 25,
               display: "flex",
-              opacity: 0.95,
+              textShadow: "0 2px 15px rgba(0, 0, 0, 0.4)",
             }}
           >
             Trouvez votre âme sœur
@@ -138,8 +169,9 @@ export default async function Image() {
               textAlign: "center",
               maxWidth: 900,
               display: "flex",
-              opacity: 0.9,
+              opacity: 0.95,
               lineHeight: 1.4,
+              textShadow: "0 2px 10px rgba(0, 0, 0, 0.3)",
             }}
           >
             L'amour • L'amitié • De belles rencontres partout dans le monde
@@ -158,12 +190,14 @@ export default async function Image() {
                 display: "flex",
                 alignItems: "center",
                 gap: 10,
-                background: "rgba(255, 255, 255, 0.2)",
+                background: "rgba(255, 255, 255, 0.25)",
+                backdropFilter: "blur(10px)",
                 padding: "12px 24px",
                 borderRadius: 30,
                 fontSize: 22,
                 color: "white",
-                fontWeight: 600,
+                fontWeight: 700,
+                border: "2px solid rgba(255, 255, 255, 0.3)",
               }}
             >
               ⭐ Super Like
@@ -173,12 +207,14 @@ export default async function Image() {
                 display: "flex",
                 alignItems: "center",
                 gap: 10,
-                background: "rgba(255, 255, 255, 0.2)",
+                background: "rgba(255, 255, 255, 0.25)",
+                backdropFilter: "blur(10px)",
                 padding: "12px 24px",
                 borderRadius: 30,
                 fontSize: 22,
                 color: "white",
-                fontWeight: 600,
+                fontWeight: 700,
+                border: "2px solid rgba(255, 255, 255, 0.3)",
               }}
             >
               🔒 100% Sécurisé
@@ -188,12 +224,14 @@ export default async function Image() {
                 display: "flex",
                 alignItems: "center",
                 gap: 10,
-                background: "rgba(255, 255, 255, 0.2)",
+                background: "rgba(255, 255, 255, 0.25)",
+                backdropFilter: "blur(10px)",
                 padding: "12px 24px",
                 borderRadius: 30,
                 fontSize: 22,
                 color: "white",
-                fontWeight: 600,
+                fontWeight: 700,
+                border: "2px solid rgba(255, 255, 255, 0.3)",
               }}
             >
               🎁 Gratuit
@@ -207,9 +245,10 @@ export default async function Image() {
             position: "absolute",
             bottom: 30,
             display: "flex",
-            fontSize: 20,
-            color: "rgba(255, 255, 255, 0.8)",
-            fontWeight: 500,
+            fontSize: 22,
+            color: "white",
+            fontWeight: 600,
+            textShadow: "0 2px 10px rgba(0, 0, 0, 0.4)",
           }}
         >
           lovelink-omega.vercel.app
