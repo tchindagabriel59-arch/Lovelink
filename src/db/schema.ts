@@ -37,6 +37,14 @@ export const users = pgTable("users", {
   isAdmin: boolean("is_admin").default(false),
   isBanned: boolean("is_banned").default(false),
   isPremium: boolean("is_premium").default(false),
+  // 💙 VÉRIFICATION PROFIL
+  isVerified: boolean("is_verified").default(false).notNull(),
+  verificationStatus: varchar("verification_status", { length: 20 }),
+  verificationPhotoUrl: text("verification_photo_url"),
+  verificationSubmittedAt: timestamp("verification_submitted_at"),
+  verificationReviewedAt: timestamp("verification_reviewed_at"),
+  verificationRejectedReason: text("verification_rejected_reason"),
+  // PRÉFÉRENCES
   prefGender: varchar("pref_gender", { length: 20 }).default("all"),
   prefAgeMin: integer("pref_age_min").default(18),
   prefAgeMax: integer("pref_age_max").default(99),
@@ -93,12 +101,14 @@ export const reports = pgTable("reports", {
   status: varchar("status", { length: 20 }).default("pending"),
   createdAt: timestamp("created_at").defaultNow(),
 });
+
 export const blocks = pgTable("blocks", {
   id: serial("id").primaryKey(),
   blockerUserId: integer("blocker_user_id").notNull().references(() => users.id),
   blockedUserId: integer("blocked_user_id").notNull().references(() => users.id),
   createdAt: timestamp("created_at").defaultNow(),
 });
+
 export const notifications = pgTable("notifications", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull().references(() => users.id),
