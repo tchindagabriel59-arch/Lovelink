@@ -103,7 +103,6 @@ function MessagesContent() {
 
   useEffect(() => {
     fetchMatchesList();
-    // Actualiser la liste toutes les 15 secondes
     const interval = setInterval(fetchMatchesList, 15000);
     return () => clearInterval(interval);
   }, [fetchMatchesList]);
@@ -206,7 +205,6 @@ function MessagesContent() {
 
     setUploadingImage(true);
     try {
-      // Upload à ImgBB
       const uploadRes = await fetch(
         `/api/upload?filename=${encodeURIComponent(file.name)}`,
         {
@@ -220,7 +218,6 @@ function MessagesContent() {
       const blob = await uploadRes.json();
       const imageUrl = blob.url;
 
-      // Envoyer comme message avec URL formattée
       const res = await fetch(`/api/messages/${selectedMatch}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -257,15 +254,16 @@ function MessagesContent() {
     if (hours < 24) return `${hours}h`;
     const days = Math.floor(hours / 24);
     if (days < 7) return `${days}j`;
-    return new Date(dateStr).toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+    return new Date(dateStr).toLocaleDateString("fr-FR", {
+      day: "numeric",
+      month: "short",
+    });
   }
 
-  // Séparer nouveaux matchs (sans messages) et conversations
   const newMatches = matchesList.filter((m) => !m.lastMessage);
   const conversations = matchesList.filter((m) => m.lastMessage);
 
-  // Fonction pour render un message (texte ou image)
-  const renderMessageContent = (content: string, isMine: boolean) => {
+  const renderMessageContent = (content: string, _isMine: boolean) => {
     if (content.startsWith("[IMAGE]")) {
       const imageUrl = content.replace("[IMAGE]", "");
       return (
@@ -277,8 +275,9 @@ function MessagesContent() {
         />
       );
     }
-    // Détecter si c'est juste un ou plusieurs emojis
+
     const isEmojiOnly = /^\p{Emoji}+$/u.test(content) && content.length <= 4;
+
     return (
       <p className={`leading-relaxed ${isEmojiOnly ? "text-4xl" : "text-sm"}`}>
         {content}
@@ -321,7 +320,7 @@ function MessagesContent() {
           </div>
         ) : (
           <div className="flex-1 overflow-y-auto">
-            {/* Section NOUVEAUX MATCHS style Instagram Stories */}
+            {/* Nouveaux matchs */}
             {newMatches.length > 0 && (
               <div className="p-4 border-b border-slate-100">
                 <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">
@@ -330,6 +329,8 @@ function MessagesContent() {
                 <div className="flex gap-3 overflow-x-auto pb-2">
                   {newMatches.map((match) => {
                     const gradient = gradients[match.user.id % gradients.length];
+                    const isPremium = match.user.isPremium;
+
                     return (
                       <button
                         key={match.matchId}
@@ -337,7 +338,13 @@ function MessagesContent() {
                         className="flex flex-col items-center gap-1 flex-shrink-0"
                       >
                         <div className="relative">
-                          <div className="p-0.5 rounded-full bg-gradient-to-r from-rose-500 via-purple-500 to-pink-500">
+                          <div
+                            className={`p-0.5 rounded-full ${
+                              isPremium
+                                ? "bg-gradient-to-r from-yellow-400 via-orange-500 to-yellow-400 shadow-lg shadow-yellow-500/30"
+                                : "bg-gradient-to-r from-rose-500 via-purple-500 to-pink-500"
+                            }`}
+                          >
                             {match.user.photoUrl ? (
                               <img
                                 src={match.user.photoUrl}
@@ -352,11 +359,23 @@ function MessagesContent() {
                               </div>
                             )}
                           </div>
+
+                          {isPremium && (
+                            <div className="absolute -top-1 -right-1 w-6 h-6 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full flex items-center justify-center border-2 border-white shadow-md">
+                              <Crown className="w-3 h-3 text-white fill-white" />
+                            </div>
+                          )}
+
                           {match.user.isOnline && (
                             <div className="absolute bottom-0.5 right-0.5 w-3.5 h-3.5 bg-green-500 rounded-full border-2 border-white" />
                           )}
                         </div>
-                        <span className="text-xs font-medium text-slate-700 max-w-[64px] truncate">
+
+                        <span
+                          className={`text-xs font-medium max-w-[70px] truncate ${
+                            isPremium ? "text-amber-700" : "text-slate-700"
+                          }`}
+                        >
                           {match.user.firstName}
                         </span>
                       </button>
@@ -366,7 +385,7 @@ function MessagesContent() {
               </div>
             )}
 
-            {/* Section CONVERSATIONS */}
+            {/* Conversations */}
             {conversations.length > 0 && (
               <div>
                 {newMatches.length > 0 && (
@@ -374,60 +393,93 @@ function MessagesContent() {
                     💬 Conversations
                   </h3>
                 )}
+
                 {conversations.map((match) => {
                   const gradient = gradients[match.user.id % gradients.length];
                   const lastMsgIsMine = match.lastMessage?.senderId === user?.id;
+                  const isPremium = match.user.isPremium;
+                  const isSelected = selectedMatch === match.matchId;
+
                   return (
                     <button
                       key={match.matchId}
                       onClick={() => setSelectedMatch(match.matchId)}
-                      className={`flex items-center gap-3 w-full p-4 hover:bg-slate-50 transition text-left ${
-                        selectedMatch === match.matchId
-                          ? "bg-rose-50 border-r-4 border-rose-500"
-                          : ""
+                      className={`flex items-center gap-3 w-full p-4 transition text-left ${
+                        isSelected
+                          ? isPremium
+                            ? "bg-yellow-50 border-r-4 border-yellow-500"
+                            : "bg-rose-50 border-r-4 border-rose-500"
+                          : isPremium
+                          ? "hover:bg-yellow-50/60"
+                          : "hover:bg-slate-50"
                       }`}
                     >
-                      <div className="relative flex-shrink-0">
+                      <div
+                        className={`relative flex-shrink-0 ${
+                          isPremium
+                            ? "p-0.5 rounded-full bg-gradient-to-r from-yellow-400 via-orange-500 to-yellow-400 shadow-md shadow-yellow-500/20"
+                            : ""
+                        }`}
+                      >
                         {match.user.photoUrl ? (
                           <img
                             src={match.user.photoUrl}
                             alt={match.user.firstName}
-                            className="w-14 h-14 rounded-full object-cover"
+                            className={`w-14 h-14 rounded-full object-cover ${
+                              isPremium ? "border-2 border-white" : ""
+                            }`}
                           />
                         ) : (
                           <div
-                            className={`w-14 h-14 rounded-full bg-gradient-to-br ${gradient} flex items-center justify-center text-white font-bold text-lg`}
+                            className={`w-14 h-14 rounded-full bg-gradient-to-br ${gradient} flex items-center justify-center text-white font-bold text-lg ${
+                              isPremium ? "border-2 border-white" : ""
+                            }`}
                           >
                             {match.user.firstName?.charAt(0)}
                           </div>
                         )}
+
                         {match.user.isOnline && (
                           <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 rounded-full border-2 border-white" />
                         )}
-                        {match.user.isPremium && (
-                          <div className="absolute -top-1 -right-1 w-5 h-5 bg-gradient-to-br from-amber-400 to-orange-500 rounded-full flex items-center justify-center border-2 border-white">
+
+                        {isPremium && (
+                          <div className="absolute -top-1 -right-1 w-5 h-5 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full flex items-center justify-center border-2 border-white shadow-md">
                             <Crown className="w-2.5 h-2.5 text-white fill-white" />
                           </div>
                         )}
                       </div>
+
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between">
-                          <p className="font-semibold text-slate-900 truncate">
-                            {match.user.firstName}
-                          </p>
+                          <div className="flex items-center gap-1 min-w-0">
+                            <p className="font-semibold text-slate-900 truncate">
+                              {match.user.firstName}
+                            </p>
+                            {isPremium && (
+                              <Crown className="w-3.5 h-3.5 text-yellow-500 fill-yellow-500 flex-shrink-0" />
+                            )}
+                          </div>
+
                           {match.lastMessage && (
                             <span className="text-xs text-slate-400 flex-shrink-0 ml-2">
                               {timeAgo(match.lastMessage.createdAt)}
                             </span>
                           )}
                         </div>
+
                         {match.lastMessage && (
-                          <p className={`text-sm truncate mt-0.5 flex items-center gap-1 ${
-                            match.unreadCount > 0 && !lastMsgIsMine
-                              ? "text-slate-900 font-semibold"
-                              : "text-slate-500"
-                          }`}>
-                            {lastMsgIsMine && <span className="text-slate-400">Toi:</span>}
+                          <p
+                            className={`text-sm truncate mt-0.5 flex items-center gap-1 ${
+                              match.unreadCount > 0 && !lastMsgIsMine
+                                ? "text-slate-900 font-semibold"
+                                : "text-slate-500"
+                            }`}
+                          >
+                            {lastMsgIsMine && (
+                              <span className="text-slate-400">Toi:</span>
+                            )}
+
                             {match.lastMessage.content.startsWith("[IMAGE]") ? (
                               <span className="flex items-center gap-1">
                                 <ImageIcon className="w-3.5 h-3.5" />
@@ -439,6 +491,7 @@ function MessagesContent() {
                           </p>
                         )}
                       </div>
+
                       {match.unreadCount > 0 && !lastMsgIsMine && (
                         <span className="w-6 h-6 bg-gradient-to-br from-rose-500 to-pink-500 text-white rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 shadow-md">
                           {match.unreadCount > 9 ? "9+" : match.unreadCount}
@@ -457,44 +510,74 @@ function MessagesContent() {
       {selectedMatch ? (
         <div className="flex-1 flex flex-col bg-gradient-to-br from-slate-50 to-rose-50/30">
           {/* Chat Header */}
-          <div className="p-4 bg-white border-b border-slate-100 flex items-center gap-3 shadow-sm">
+          <div
+            className={`p-4 bg-white border-b flex items-center gap-3 shadow-sm ${
+              otherUser?.isPremium ? "border-yellow-200" : "border-slate-100"
+            }`}
+          >
             <button
               onClick={() => setSelectedMatch(null)}
               className="md:hidden p-1 text-slate-400 hover:text-slate-600"
             >
               <ArrowLeft className="w-5 h-5" />
             </button>
+
             {otherUser && (
               <>
-                <div className="relative">
+                <div
+                  className={`relative ${
+                    otherUser.isPremium
+                      ? "p-0.5 rounded-full bg-gradient-to-r from-yellow-400 via-orange-500 to-yellow-400 shadow-md shadow-yellow-500/30"
+                      : ""
+                  }`}
+                >
                   {otherUser.photoUrl ? (
                     <img
                       src={otherUser.photoUrl}
                       alt={otherUser.firstName}
-                      className="w-11 h-11 rounded-full object-cover"
+                      className={`w-11 h-11 rounded-full object-cover ${
+                        otherUser.isPremium ? "border-2 border-white" : ""
+                      }`}
                     />
                   ) : (
                     <div
                       className={`w-11 h-11 rounded-full bg-gradient-to-br ${
                         gradients[otherUser.id % gradients.length]
-                      } flex items-center justify-center text-white font-bold`}
+                      } flex items-center justify-center text-white font-bold ${
+                        otherUser.isPremium ? "border-2 border-white" : ""
+                      }`}
                     >
                       {otherUser.firstName?.charAt(0)}
                     </div>
                   )}
+
                   {otherUser.isOnline && (
                     <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-white" />
                   )}
+
+                  {otherUser.isPremium && (
+                    <div className="absolute -top-1 -right-1 w-5 h-5 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full flex items-center justify-center border-2 border-white shadow-md">
+                      <Crown className="w-2.5 h-2.5 text-white fill-white" />
+                    </div>
+                  )}
                 </div>
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <p className="font-semibold text-slate-900">
+
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="font-semibold text-slate-900 truncate">
                       {otherUser.firstName} {otherUser.lastName}
                     </p>
+
                     {otherUser.isPremium && (
-                      <Crown className="w-4 h-4 text-amber-500 fill-amber-500" />
+                      <>
+                        <Crown className="w-4 h-4 text-yellow-500 fill-yellow-500 flex-shrink-0" />
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gradient-to-r from-yellow-100 to-orange-100 text-yellow-700 text-[10px] font-black uppercase tracking-wider border border-yellow-200">
+                          Premium
+                        </span>
+                      </>
                     )}
                   </div>
+
                   <p className="text-xs text-slate-500">
                     {otherUser.isOnline ? (
                       <span className="flex items-center gap-1">
@@ -536,15 +619,16 @@ function MessagesContent() {
               chatMessages.map((msg, index) => {
                 const isMine = msg.senderId === user?.id;
                 const prevMsg = index > 0 ? chatMessages[index - 1] : null;
-                const nextMsg = index < chatMessages.length - 1 ? chatMessages[index + 1] : null;
+                const nextMsg =
+                  index < chatMessages.length - 1
+                    ? chatMessages[index + 1]
+                    : null;
+
                 const isSameSenderAsPrev = prevMsg?.senderId === msg.senderId;
                 const isSameSenderAsNext = nextMsg?.senderId === msg.senderId;
 
-                // Grouper les messages : première, milieu, dernière du groupe
                 const isFirstOfGroup = !isSameSenderAsPrev;
                 const isLastOfGroup = !isSameSenderAsNext;
-
-                // Afficher l'heure seulement au dernier message du groupe
                 const showTime = isLastOfGroup;
                 const isImage = msg.content.startsWith("[IMAGE]");
 
@@ -555,7 +639,7 @@ function MessagesContent() {
                       isFirstOfGroup ? "mt-3" : "mt-0.5"
                     }`}
                   >
-                    <div className={`max-w-[75%] ${isImage ? "" : ""}`}>
+                    <div className="max-w-[75%]">
                       <div
                         className={`${isImage ? "p-1" : "px-4 py-2.5"} ${
                           isMine
@@ -581,18 +665,23 @@ function MessagesContent() {
                       >
                         {renderMessageContent(msg.content, isMine)}
                       </div>
+
                       {showTime && (
-                        <div className={`flex items-center gap-1 mt-1 ${isMine ? "justify-end" : "justify-start"}`}>
+                        <div
+                          className={`flex items-center gap-1 mt-1 ${
+                            isMine ? "justify-end" : "justify-start"
+                          }`}
+                        >
                           <span className="text-[10px] text-slate-400">
                             {formatMessageTime(msg.createdAt)}
                           </span>
-                          {isMine && (
-                            msg.isRead ? (
+
+                          {isMine &&
+                            (msg.isRead ? (
                               <CheckCheck className="w-3 h-3 text-blue-500" />
                             ) : (
                               <Check className="w-3 h-3 text-slate-400" />
-                            )
-                          )}
+                            ))}
                         </div>
                       )}
                     </div>
@@ -600,6 +689,7 @@ function MessagesContent() {
                 );
               })
             )}
+
             <div ref={messagesEndRef} />
           </div>
 
@@ -621,12 +711,8 @@ function MessagesContent() {
           )}
 
           {/* Message Input */}
-          <form
-            onSubmit={handleSend}
-            className="p-3 bg-white border-t border-slate-100"
-          >
+          <form onSubmit={handleSend} className="p-3 bg-white border-t border-slate-100">
             <div className="flex items-center gap-2">
-              {/* Bouton emoji */}
               <button
                 type="button"
                 onClick={() => setShowEmojis(!showEmojis)}
@@ -640,7 +726,6 @@ function MessagesContent() {
                 <Smile className="w-5 h-5" />
               </button>
 
-              {/* Bouton image */}
               <input
                 type="file"
                 ref={fileInputRef}
@@ -648,6 +733,7 @@ function MessagesContent() {
                 onChange={handleImageUpload}
                 className="hidden"
               />
+
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
@@ -662,7 +748,6 @@ function MessagesContent() {
                 )}
               </button>
 
-              {/* Input texte */}
               <input
                 type="text"
                 value={newMessage}
@@ -671,11 +756,14 @@ function MessagesContent() {
                 className="flex-1 px-4 py-2.5 bg-slate-100 rounded-full focus:bg-white focus:ring-2 focus:ring-rose-200 transition text-sm outline-none"
               />
 
-              {/* Bouton envoyer */}
               <button
                 type="submit"
                 disabled={!newMessage.trim() || sending}
-                className="w-11 h-11 bg-gradient-to-r from-rose-500 to-purple-600 rounded-full flex items-center justify-center text-white hover:shadow-lg hover:scale-105 transition disabled:opacity-30 disabled:hover:scale-100"
+                className={`w-11 h-11 rounded-full flex items-center justify-center text-white hover:shadow-lg hover:scale-105 transition disabled:opacity-30 disabled:hover:scale-100 ${
+                  otherUser?.isPremium
+                    ? "bg-gradient-to-r from-yellow-400 to-orange-500 shadow-yellow-500/30"
+                    : "bg-gradient-to-r from-rose-500 to-purple-600"
+                }`}
               >
                 <Send className="w-4 h-4" />
               </button>
