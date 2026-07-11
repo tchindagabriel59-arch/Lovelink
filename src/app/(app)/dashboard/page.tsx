@@ -292,37 +292,43 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* ACTIONS RAPIDES */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <ActionCard
-              href="/discover"
-              icon={<Compass className="w-6 h-6" />}
-              label="Découvrir"
-              gradient="from-rose-500 to-pink-500"
-            />
-            <ActionCard
-              href="/likes-recus"
-              icon={<Star className="w-6 h-6" />}
-              label="Qui m'a liké"
-              gradient="from-blue-500 to-cyan-500"
-              badge={stats?.likesReceived}
-            />
-            <ActionCard
-              href="/matches"
-              icon={<Heart className="w-6 h-6" />}
-              label="Mes matchs"
-              gradient="from-purple-500 to-violet-500"
-              badge={stats?.matches}
-            />
-            <ActionCard
-              href="/messages"
-              icon={<MessageCircle className="w-6 h-6" />}
-              label="Messages"
-              gradient="from-emerald-500 to-teal-500"
-              badge={stats?.unreadMessages}
-              alert
-            />
-          </div>
+      {/* ACTIONS RAPIDES */}
+<div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+  <ActionCard
+    href="/discover"
+    icon={<Compass className="w-6 h-6" />}
+    label="Découvrir"
+    gradient="from-rose-500 to-pink-500"
+  />
+  <ActionCard
+    href="/likes-recus"
+    icon={<Star className="w-6 h-6" />}
+    label="Qui m'a liké"
+    gradient="from-blue-500 to-cyan-500"
+    badge={stats?.likesReceived}
+  />
+  <ActionCard
+    href="/matches"
+    icon={<Heart className="w-6 h-6" />}
+    label="Mes matchs"
+    gradient="from-purple-500 to-violet-500"
+    badge={stats?.matches}
+  />
+  <ActionCard
+    href="/messages"
+    icon={<MessageCircle className="w-6 h-6" />}
+    label="Messages"
+    gradient="from-emerald-500 to-teal-500"
+    badge={stats?.unreadMessages}
+    alert
+  />
+  <ActionCard
+    href="/boost"
+    icon={<Zap className="w-6 h-6" />}
+    label="Booster 🚀"
+    gradient="from-amber-500 to-orange-500"
+  />
+</div>
 
           {/* MATCHS RÉCENTS */}
           <div className="bg-white rounded-2xl p-6 border border-slate-100">
