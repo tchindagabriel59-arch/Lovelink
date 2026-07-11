@@ -27,6 +27,8 @@ export async function GET() {
         interests: users.interests,
         occupation: users.occupation,
         isOnline: users.isOnline,
+        isPremium: users.isPremium,
+        isAdmin: users.isAdmin,
         createdAt: users.createdAt,
       })
       .from(users)
