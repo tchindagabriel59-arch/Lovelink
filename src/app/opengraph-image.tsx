@@ -10,10 +10,10 @@ export const size = {
 
 export const contentType = "image/png";
 
-// URL de la photo de fond (couple romantique)
-const BACKGROUND_IMAGE = "https://images.unsplash.com/photo-1519741497674-611481863552?w=1200&q=80";
-
 export default async function Image() {
+  // Charger l'image et la convertir en base64 pour être sûr qu'elle s'affiche
+  const imageUrl = "https://images.unsplash.com/photo-1516589091380-5d8e87df6999?w=1200&q=80&auto=format";
+
   return new ImageResponse(
     (
       <div
@@ -26,12 +26,14 @@ export default async function Image() {
           justifyContent: "center",
           position: "relative",
           fontFamily: "sans-serif",
+          background: "#1a0033",
         }}
       >
-        {/* Image de fond floutée */}
+        {/* Image de fond - PLEINE VISIBILITÉ */}
         <img
-          src={BACKGROUND_IMAGE}
-          alt=""
+          src={imageUrl}
+          width={1200}
+          height={630}
           style={{
             position: "absolute",
             top: 0,
@@ -39,11 +41,10 @@ export default async function Image() {
             width: "100%",
             height: "100%",
             objectFit: "cover",
-            filter: "blur(8px)",
           }}
         />
 
-        {/* Overlay dégradé rose/violet par-dessus */}
+        {/* Overlay dégradé SEMI-TRANSPARENT (plus léger) */}
         <div
           style={{
             position: "absolute",
@@ -51,7 +52,7 @@ export default async function Image() {
             left: 0,
             width: "100%",
             height: "100%",
-            background: "linear-gradient(135deg, rgba(244, 63, 94, 0.85) 0%, rgba(168, 85, 247, 0.85) 50%, rgba(236, 72, 153, 0.85) 100%)",
+            background: "linear-gradient(135deg, rgba(244, 63, 94, 0.65) 0%, rgba(168, 85, 247, 0.65) 50%, rgba(236, 72, 153, 0.65) 100%)",
             display: "flex",
           }}
         />
@@ -81,18 +82,6 @@ export default async function Image() {
             display: "flex",
           }}
         />
-        <div
-          style={{
-            position: "absolute",
-            top: 100,
-            right: 100,
-            width: 150,
-            height: 150,
-            borderRadius: 75,
-            background: "rgba(255, 255, 255, 0.15)",
-            display: "flex",
-          }}
-        />
 
         {/* Contenu principal */}
         <div
@@ -114,11 +103,10 @@ export default async function Image() {
               width: 140,
               height: 140,
               borderRadius: 70,
-              background: "rgba(255, 255, 255, 0.25)",
-              backdropFilter: "blur(10px)",
+              background: "rgba(255, 255, 255, 0.3)",
               marginBottom: 30,
-              boxShadow: "0 20px 60px rgba(0, 0, 0, 0.3)",
-              border: "3px solid rgba(255, 255, 255, 0.4)",
+              boxShadow: "0 20px 60px rgba(0, 0, 0, 0.4)",
+              border: "4px solid rgba(255, 255, 255, 0.5)",
             }}
           >
             <div
@@ -134,11 +122,11 @@ export default async function Image() {
           {/* Titre LoveLink */}
           <div
             style={{
-              fontSize: 120,
+              fontSize: 130,
               fontWeight: 900,
               color: "white",
               letterSpacing: "-4px",
-              textShadow: "0 4px 30px rgba(0, 0, 0, 0.4)",
+              textShadow: "0 4px 40px rgba(0, 0, 0, 0.6)",
               display: "flex",
               marginBottom: 20,
             }}
@@ -149,13 +137,13 @@ export default async function Image() {
           {/* Slogan */}
           <div
             style={{
-              fontSize: 42,
+              fontSize: 44,
               fontWeight: 700,
               color: "white",
               textAlign: "center",
               marginBottom: 25,
               display: "flex",
-              textShadow: "0 2px 15px rgba(0, 0, 0, 0.4)",
+              textShadow: "0 2px 20px rgba(0, 0, 0, 0.6)",
             }}
           >
             Trouvez votre âme sœur
@@ -164,14 +152,14 @@ export default async function Image() {
           {/* Description */}
           <div
             style={{
-              fontSize: 26,
+              fontSize: 28,
               color: "white",
               textAlign: "center",
               maxWidth: 900,
               display: "flex",
-              opacity: 0.95,
               lineHeight: 1.4,
-              textShadow: "0 2px 10px rgba(0, 0, 0, 0.3)",
+              textShadow: "0 2px 15px rgba(0, 0, 0, 0.5)",
+              fontWeight: 500,
             }}
           >
             L'amour • L'amitié • De belles rencontres partout dans le monde
@@ -190,14 +178,14 @@ export default async function Image() {
                 display: "flex",
                 alignItems: "center",
                 gap: 10,
-                background: "rgba(255, 255, 255, 0.25)",
-                backdropFilter: "blur(10px)",
-                padding: "12px 24px",
+                background: "rgba(255, 255, 255, 0.3)",
+                padding: "14px 28px",
                 borderRadius: 30,
-                fontSize: 22,
+                fontSize: 24,
                 color: "white",
                 fontWeight: 700,
-                border: "2px solid rgba(255, 255, 255, 0.3)",
+                border: "2px solid rgba(255, 255, 255, 0.4)",
+                boxShadow: "0 10px 30px rgba(0, 0, 0, 0.2)",
               }}
             >
               ⭐ Super Like
@@ -207,14 +195,14 @@ export default async function Image() {
                 display: "flex",
                 alignItems: "center",
                 gap: 10,
-                background: "rgba(255, 255, 255, 0.25)",
-                backdropFilter: "blur(10px)",
-                padding: "12px 24px",
+                background: "rgba(255, 255, 255, 0.3)",
+                padding: "14px 28px",
                 borderRadius: 30,
-                fontSize: 22,
+                fontSize: 24,
                 color: "white",
                 fontWeight: 700,
-                border: "2px solid rgba(255, 255, 255, 0.3)",
+                border: "2px solid rgba(255, 255, 255, 0.4)",
+                boxShadow: "0 10px 30px rgba(0, 0, 0, 0.2)",
               }}
             >
               🔒 100% Sécurisé
@@ -224,14 +212,14 @@ export default async function Image() {
                 display: "flex",
                 alignItems: "center",
                 gap: 10,
-                background: "rgba(255, 255, 255, 0.25)",
-                backdropFilter: "blur(10px)",
-                padding: "12px 24px",
+                background: "rgba(255, 255, 255, 0.3)",
+                padding: "14px 28px",
                 borderRadius: 30,
-                fontSize: 22,
+                fontSize: 24,
                 color: "white",
                 fontWeight: 700,
-                border: "2px solid rgba(255, 255, 255, 0.3)",
+                border: "2px solid rgba(255, 255, 255, 0.4)",
+                boxShadow: "0 10px 30px rgba(0, 0, 0, 0.2)",
               }}
             >
               🎁 Gratuit
@@ -243,12 +231,15 @@ export default async function Image() {
         <div
           style={{
             position: "absolute",
-            bottom: 30,
+            bottom: 25,
             display: "flex",
             fontSize: 22,
             color: "white",
-            fontWeight: 600,
-            textShadow: "0 2px 10px rgba(0, 0, 0, 0.4)",
+            fontWeight: 700,
+            textShadow: "0 2px 15px rgba(0, 0, 0, 0.6)",
+            background: "rgba(0, 0, 0, 0.3)",
+            padding: "8px 20px",
+            borderRadius: 20,
           }}
         >
           lovelink-omega.vercel.app
