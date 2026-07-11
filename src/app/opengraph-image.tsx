@@ -12,7 +12,7 @@ export const contentType = "image/png";
 
 export default async function Image() {
   // Charger l'image et la convertir en base64 pour être sûr qu'elle s'affiche
-  const imageUrl = "https://images.unsplash.com/photo-1522543558187-768b6df7c25c?w=1200&q=80&auto=format";
+  const imageUrl = "https://ibb.co/fVvXwdmy";
 
   return new ImageResponse(
     (
