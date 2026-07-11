@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { matches, users, messages } from "@/db/schema";
-import { eq, or, and, desc, sql } from "drizzle-orm";
+import { matches, users, messages, blocks } from "@/db/schema";
+import { eq, or, and, desc, sql, notInArray } from "drizzle-orm";
 import { getCurrentUserId } from "@/lib/auth";
 
 export async function GET() {
@@ -10,6 +10,21 @@ export async function GET() {
     if (!userId) {
       return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
     }
+
+    // Exclure les utilisateurs bloqués
+    const myBlocks = await db
+      .select({ blockedUserId: blocks.blockedUserId })
+      .from(blocks)
+      .where(eq(blocks.blockerUserId, userId));
+    const iBlocked = myBlocks.map((b) => b.blockedUserId);
+
+    const blockedByOthers = await db
+      .select({ blockerUserId: blocks.blockerUserId })
+      .from(blocks)
+      .where(eq(blocks.blockedUserId, userId));
+    const blockedMe = blockedByOthers.map((b) => b.blockerUserId);
+
+    const blockedIds = [...new Set([...iBlocked, ...blockedMe])];
 
     const userMatches = await db
       .select({
@@ -27,6 +42,9 @@ export async function GET() {
     for (const m of userMatches) {
       const otherId = m.user1Id === userId ? m.user2Id : m.user1Id;
 
+      // Skip si l'autre utilisateur est bloqué
+      if (blockedIds.includes(otherId)) continue;
+
       const [otherUser] = await db
         .select({
           id: users.id,
@@ -36,12 +54,17 @@ export async function GET() {
           isOnline: users.isOnline,
           lastSeen: users.lastSeen,
           city: users.city,
+          isPremium: users.isPremium,
+          isBanned: users.isBanned,
         })
         .from(users)
         .where(eq(users.id, otherId))
         .limit(1);
 
-      // Get last message
+      // Skip si l'autre est banni
+      if (!otherUser || otherUser.isBanned) continue;
+
+      // Dernier message
       const [lastMsg] = await db
         .select({
           content: messages.content,
@@ -54,7 +77,7 @@ export async function GET() {
         .orderBy(desc(messages.createdAt))
         .limit(1);
 
-      // Count unread messages
+      // Compter messages non lus
       const [unreadResult] = await db
         .select({ count: sql<number>`count(*)::int` })
         .from(messages)
@@ -78,9 +101,6 @@ export async function GET() {
     return NextResponse.json({ matches: result });
   } catch (error) {
     console.error("Matches error:", error);
-    return NextResponse.json(
-      { error: "Erreur serveur" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
   }
 }
