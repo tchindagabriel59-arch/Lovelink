@@ -14,6 +14,7 @@ import {
   Smile,
   Check,
   CheckCheck,
+  BadgeCheck,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -28,6 +29,7 @@ interface MatchData {
     isOnline: boolean;
     city: string | null;
     isPremium: boolean;
+    isVerified: boolean;
   };
   lastMessage: {
     content: string;
@@ -53,6 +55,7 @@ interface OtherUser {
   photoUrl: string | null;
   isOnline: boolean;
   isPremium: boolean;
+  isVerified: boolean;
   lastSeen: string | null;
 }
 
@@ -338,10 +341,12 @@ function MessagesContent() {
                         className="flex flex-col items-center gap-1 flex-shrink-0"
                       >
                         <div className="relative">
-                          <div
+                         <div
                             className={`p-0.5 rounded-full ${
                               isPremium
                                 ? "bg-gradient-to-r from-yellow-400 via-orange-500 to-yellow-400 shadow-lg shadow-yellow-500/30"
+                                : match.user.isVerified
+                                ? "bg-gradient-to-r from-blue-400 via-cyan-500 to-blue-400 shadow-lg shadow-blue-500/30"
                                 : "bg-gradient-to-r from-rose-500 via-purple-500 to-pink-500"
                             }`}
                           >
@@ -451,11 +456,14 @@ function MessagesContent() {
                       </div>
 
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between">
                           <div className="flex items-center gap-1 min-w-0">
                             <p className="font-semibold text-slate-900 truncate">
                               {match.user.firstName}
                             </p>
+                            {match.user.isVerified && (
+                              <BadgeCheck className="w-3.5 h-3.5 text-blue-500 fill-blue-500 flex-shrink-0" />
+                            )}
                             {isPremium && (
                               <Crown className="w-3.5 h-3.5 text-yellow-500 fill-yellow-500 flex-shrink-0" />
                             )}
@@ -562,11 +570,15 @@ function MessagesContent() {
                   )}
                 </div>
 
-                <div className="flex-1 min-w-0">
+                  <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <p className="font-semibold text-slate-900 truncate">
                       {otherUser.firstName} {otherUser.lastName}
                     </p>
+
+                    {otherUser.isVerified && (
+                      <BadgeCheck className="w-4 h-4 text-blue-500 fill-blue-500 flex-shrink-0" />
+                    )}
 
                     {otherUser.isPremium && (
                       <>
