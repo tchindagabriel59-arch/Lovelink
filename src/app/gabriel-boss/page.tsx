@@ -9,11 +9,11 @@ import {
   Crown,
   Ban,
   TrendingUp,
-  UserPlus,
   DollarSign,
   Activity,
   Shield,
   BarChart3,
+  ShieldCheck,
 } from "lucide-react";
 
 interface Stats {
@@ -44,12 +44,17 @@ interface Stats {
 
 export default function AdminDashboard() {
   const [stats, setStats] = useState<Stats | null>(null);
+  const [pendingVerifications, setPendingVerifications] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
   useEffect(() => {
     fetchStats();
-    const interval = setInterval(fetchStats, 30000); // refresh toutes les 30s
+    fetchVerifications();
+    const interval = setInterval(() => {
+      fetchStats();
+      fetchVerifications();
+    }, 30000);
     return () => clearInterval(interval);
   }, []);
 
@@ -69,6 +74,18 @@ export default function AdminDashboard() {
       setError(true);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function fetchVerifications() {
+    try {
+      const res = await fetch("/api/admin/verifications?filter=pending");
+      if (res.ok) {
+        const data = await res.json();
+        setPendingVerifications(data.pendingCount || 0);
+      }
+    } catch {
+      // silently fail
     }
   }
 
@@ -98,7 +115,7 @@ export default function AdminDashboard() {
             href="/"
             className="inline-block px-6 py-3 bg-gradient-to-r from-rose-500 to-purple-600 text-white rounded-xl font-semibold hover:shadow-lg transition"
           >
-            Retour à l'accueil
+            Retour à l&apos;accueil
           </a>
         </div>
       </div>
@@ -167,6 +184,36 @@ export default function AdminDashboard() {
             alert={stats.reports.pending > 0}
           />
         </div>
+
+        {/* 🆕 ALERTE VÉRIFICATIONS EN ATTENTE */}
+        {pendingVerifications > 0 && (
+          <div className="bg-gradient-to-r from-blue-500/20 to-cyan-500/20 border-2 border-blue-500/50 rounded-2xl p-6 relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-3xl" />
+            <div className="relative flex items-center justify-between flex-wrap gap-4">
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-2xl flex items-center justify-center shadow-lg animate-pulse">
+                  <ShieldCheck className="w-8 h-8 text-white fill-white" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold flex items-center gap-2">
+                    {pendingVerifications} demande{pendingVerifications > 1 ? "s" : ""} de vérification 
+                    <span className="text-xs bg-blue-500 text-white px-2 py-0.5 rounded-full">NEW</span>
+                  </h3>
+                  <p className="text-sm text-slate-400">
+                    Des utilisateurs attendent la validation de leur badge bleu 💙
+                  </p>
+                </div>
+              </div>
+              <a
+                href="/gabriel-boss/verifications"
+                className="px-6 py-3 bg-gradient-to-r from-blue-500 to-cyan-500 hover:shadow-lg text-white rounded-xl font-bold transition flex items-center gap-2"
+              >
+                <ShieldCheck className="w-5 h-5" />
+                Examiner
+              </a>
+            </div>
+          </div>
+        )}
 
         {/* Croissance */}
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
@@ -298,10 +345,30 @@ export default function AdminDashboard() {
 
         {/* Actions rapides */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <QuickAction href="/gabriel-boss/utilisateurs" icon={<Users />} label="Gérer les utilisateurs" />
-          <QuickAction href="/gabriel-boss/signalements" icon={<Flag />} label="Signalements" />
-          <QuickAction href="/gabriel-boss/abonnes" icon={<Crown />} label="Abonnés Premium" />
-          <QuickAction href="/gabriel-boss/parametres" icon={<Shield />} label="Paramètres du site" />
+          <QuickAction 
+            href="/gabriel-boss/utilisateurs" 
+            icon={<Users />} 
+            label="Utilisateurs" 
+          />
+          <QuickAction 
+            href="/gabriel-boss/signalements" 
+            icon={<Flag />} 
+            label="Signalements"
+            badge={stats.reports.pending > 0 ? stats.reports.pending : undefined}
+            alert
+          />
+          <QuickAction 
+            href="/gabriel-boss/verifications" 
+            icon={<ShieldCheck />} 
+            label="Vérifications"
+            badge={pendingVerifications > 0 ? pendingVerifications : undefined}
+            highlight
+          />
+          <QuickAction 
+            href="/gabriel-boss/abonnes" 
+            icon={<Crown />} 
+            label="Abonnés Premium" 
+          />
         </div>
 
         <p className="text-center text-xs text-slate-600 mt-8">
@@ -365,17 +432,42 @@ function QuickAction({
   href,
   icon,
   label,
+  badge,
+  alert,
+  highlight,
 }: {
   href: string;
   icon: React.ReactNode;
   label: string;
+  badge?: number;
+  alert?: boolean;
+  highlight?: boolean;
 }) {
   return (
     <a
       href={href}
-      className="bg-slate-900 border border-slate-800 hover:border-purple-500/50 rounded-2xl p-5 transition group"
+      className={`relative bg-slate-900 border rounded-2xl p-5 transition group ${
+        highlight 
+          ? "border-blue-500/50 hover:border-blue-500" 
+          : alert 
+          ? "border-red-500/50 hover:border-red-500" 
+          : "border-slate-800 hover:border-purple-500/50"
+      }`}
     >
-      <div className="w-10 h-10 bg-purple-500/10 rounded-lg flex items-center justify-center text-purple-400 mb-3 group-hover:scale-110 transition">
+      {badge !== undefined && badge > 0 && (
+        <div className={`absolute -top-2 -right-2 min-w-[24px] h-6 ${
+          alert ? "bg-red-500" : highlight ? "bg-blue-500" : "bg-purple-500"
+        } text-white text-xs font-bold rounded-full flex items-center justify-center px-2 shadow-lg animate-pulse`}>
+          {badge > 9 ? "9+" : badge}
+        </div>
+      )}
+      <div className={`w-10 h-10 rounded-lg flex items-center justify-center mb-3 group-hover:scale-110 transition ${
+        highlight 
+          ? "bg-blue-500/10 text-blue-400"
+          : alert
+          ? "bg-red-500/10 text-red-400"
+          : "bg-purple-500/10 text-purple-400"
+      }`}>
         {icon}
       </div>
       <p className="font-semibold text-sm">{label}</p>
