@@ -12,6 +12,7 @@ import {
   Trash2,
   MoreVertical,
   Compass,
+  BadgeCheck,
 } from "lucide-react";
 
 interface MatchItem {
@@ -25,6 +26,7 @@ interface MatchItem {
     isOnline: boolean;
     city: string | null;
     isPremium: boolean;
+    isVerified: boolean;
   };
   lastMessage: {
     content: string;
@@ -401,12 +403,15 @@ function MatchCard({
           </div>
         )}
 
-        {/* Info nom + ville */}
+               {/* Info nom + ville */}
         <div className="absolute bottom-3 left-3 right-3 text-white z-[1]">
           <div className="flex items-center gap-1.5">
             <p className="font-bold text-lg drop-shadow-lg truncate">
               {match.user.firstName}
             </p>
+            {match.user.isVerified && (
+              <BadgeCheck className="w-4 h-4 text-blue-400 fill-blue-500 drop-shadow-md flex-shrink-0" />
+            )}
             {isPremium && (
               <Crown className="w-4 h-4 text-yellow-400 fill-yellow-400 drop-shadow-md flex-shrink-0" />
             )}
