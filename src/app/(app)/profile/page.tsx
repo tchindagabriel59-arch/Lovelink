@@ -2,6 +2,7 @@
 
 import { useState, useRef } from "react";
 import { useUser } from "../layout";
+import PushNotifButton from "../../components/PushNotifButton";
 import {
   User,
   MapPin,
@@ -610,6 +611,9 @@ export default function ProfilePage() {
                 })}
               </div>
             </div>
+
+                       {/* 🔔 NOTIFICATIONS PUSH */}
+            <PushNotifButton />
 
             {/* Intérêts */}
             <div className="bg-white rounded-2xl p-6 border border-slate-100">
