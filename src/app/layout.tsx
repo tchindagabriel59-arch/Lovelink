@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import "./globals.css";
 import CookieBanner from "./components/CookieBanner";
 
-const SITE_URL = "https://lovelink-omega.vercel.app";
+const SITE_URL = "https://lovelink237.com";
 const SITE_NAME = "LoveLink";
 const DESCRIPTION = "LoveLink est la plateforme de rencontre en ligne pour trouver l'amour, l'amitié ou faire de nouvelles connaissances partout dans le monde. Inscription gratuite en 2 minutes.";
 
@@ -24,9 +24,12 @@ export const metadata: Metadata = {
     "sénégal",
     "afrique",
     "dakar",
+    "cameroun",
     "rencontre gratuite",
     "match",
     "tinder alternative",
+    "lovelink",
+    "lovelink237",
   ],
   authors: [{ name: "Gabriel Tchinda" }],
   creator: "Marketing de Boutique Numérique",
