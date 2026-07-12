@@ -33,10 +33,12 @@ export const users = pgTable("users", {
   photo4Url: text("photo_4_url").default(""),
   interests: text("interests").default(""),
   occupation: varchar("occupation", { length: 150 }).default(""),
-  isOnline: boolean("is_online").default(false),
+    isOnline: boolean("is_online").default(false),
   isAdmin: boolean("is_admin").default(false),
   isBanned: boolean("is_banned").default(false),
   isPremium: boolean("is_premium").default(false),
+  // 🕵️ MODE INCOGNITO (Premium)
+  isIncognito: boolean("is_incognito").default(false).notNull(),
   // 💙 VÉRIFICATION PROFIL
   isVerified: boolean("is_verified").default(false).notNull(),
   verificationStatus: varchar("verification_status", { length: 20 }),
