@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { messages, matches, users } from "@/db/schema";
 import { eq, and, asc } from "drizzle-orm";
-import { getAuthUser } from "@/lib/auth";
+import { getCurrentUserId } from "@/lib/auth";
 import { createNotification } from "@/lib/notifications";
 import { sendPushToUser, PushTemplates } from "@/lib/push";
 
@@ -11,17 +11,17 @@ export async function GET(
   { params }: { params: { matchId: string } }
 ) {
   try {
-    const authUser = await getAuthUser(req);
-    if (!authUser) {
+    const userId = await getCurrentUserId();
+    if (!userId) {
       return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
     }
 
     const matchId = parseInt(params.matchId);
+
     if (isNaN(matchId)) {
       return NextResponse.json({ error: "Match invalide" }, { status: 400 });
     }
 
-    // Vérifier que l'utilisateur fait partie du match
     const match = await db
       .select()
       .from(matches)
@@ -33,21 +33,17 @@ export async function GET(
     }
 
     const matchData = match[0];
-    if (
-      matchData.user1Id !== authUser.id &&
-      matchData.user2Id !== authUser.id
-    ) {
+
+    if (matchData.user1Id !== userId && matchData.user2Id !== userId) {
       return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
     }
 
-    // Récupérer les messages
     const allMessages = await db
       .select()
       .from(messages)
       .where(eq(messages.matchId, matchId))
       .orderBy(asc(messages.createdAt));
 
-    // Marquer les messages comme lus
     await db
       .update(messages)
       .set({ isRead: true })
@@ -58,11 +54,8 @@ export async function GET(
         )
       );
 
-    // Récupérer infos de l'autre utilisateur
     const otherUserId =
-      matchData.user1Id === authUser.id
-        ? matchData.user2Id
-        : matchData.user1Id;
+      matchData.user1Id === userId ? matchData.user2Id : matchData.user1Id;
 
     const otherUser = await db
       .select({
@@ -95,22 +88,23 @@ export async function POST(
   { params }: { params: { matchId: string } }
 ) {
   try {
-    const authUser = await getAuthUser(req);
-    if (!authUser) {
+    const userId = await getCurrentUserId();
+    if (!userId) {
       return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
     }
 
     const matchId = parseInt(params.matchId);
+
     if (isNaN(matchId)) {
       return NextResponse.json({ error: "Match invalide" }, { status: 400 });
     }
 
     const { content } = await req.json();
+
     if (!content || content.trim() === "") {
       return NextResponse.json({ error: "Message vide" }, { status: 400 });
     }
 
-    // Vérifier que l'utilisateur fait partie du match
     const match = await db
       .select()
       .from(matches)
@@ -122,20 +116,14 @@ export async function POST(
     }
 
     const matchData = match[0];
-    if (
-      matchData.user1Id !== authUser.id &&
-      matchData.user2Id !== authUser.id
-    ) {
+
+    if (matchData.user1Id !== userId && matchData.user2Id !== userId) {
       return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
     }
 
-    // Destinataire = l'autre utilisateur
     const recipientId =
-      matchData.user1Id === authUser.id
-        ? matchData.user2Id
-        : matchData.user1Id;
+      matchData.user1Id === userId ? matchData.user2Id : matchData.user1Id;
 
-    // Récupérer infos de l'expéditeur
     const senderData = await db
       .select({
         id: users.id,
@@ -144,46 +132,43 @@ export async function POST(
         photoUrl: users.photoUrl,
       })
       .from(users)
-      .where(eq(users.id, authUser.id))
+      .where(eq(users.id, userId))
       .limit(1);
 
     const sender = senderData[0];
 
-    // Insérer le message
+    const cleanContent = content.trim();
+
     const newMessage = await db
       .insert(messages)
       .values({
         matchId,
-        senderId: authUser.id,
-        content: content.trim(),
+        senderId: userId,
+        content: cleanContent,
         isRead: false,
       })
       .returning();
 
-    // Notification in-app
-    const isPhoto = content.trim().startsWith("[IMAGE]");
+    const isPhoto = cleanContent.startsWith("[IMAGE]");
+
     const notifContent = isPhoto
       ? `📷 ${sender?.firstName ?? "Quelqu'un"} vous a envoyé une photo`
-      : `💬 ${sender?.firstName ?? "Quelqu'un"} : ${content.trim().substring(0, 50)}${content.trim().length > 50 ? "..." : ""}`;
+      : `💬 ${sender?.firstName ?? "Quelqu'un"} : ${cleanContent.substring(0, 50)}${cleanContent.length > 50 ? "..." : ""}`;
 
     await createNotification({
       userId: recipientId,
       type: "message",
-      fromUserId: authUser.id,
+      fromUserId: userId,
       content: notifContent,
     });
 
-    // 🔔 Push notification MESSAGE
     const pushContent = isPhoto
       ? "📷 Vous a envoyé une photo"
-      : content.trim().substring(0, 100);
+      : cleanContent.substring(0, 100);
 
     await sendPushToUser(
       recipientId,
-      PushTemplates.message(
-        sender?.firstName ?? "Quelqu'un",
-        pushContent
-      )
+      PushTemplates.message(sender?.firstName ?? "Quelqu'un", pushContent)
     );
 
     return NextResponse.json({
