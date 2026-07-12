@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { likes, matches, users, notifications } from "@/db/schema";
-import { eq, and, desc } from "drizzle-orm";
-import { getAuthUser } from "@/lib/auth";
+import { likes, matches, users } from "@/db/schema";
+import { eq, and } from "drizzle-orm";
+import { getCurrentUserId } from "@/lib/auth";
 import { createNotification } from "@/lib/notifications";
 import { sendPushToUser, PushTemplates } from "@/lib/push";
 
@@ -11,10 +11,10 @@ const SUPER_LIKE_LIMITS = {
   premium: 5,
 };
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   try {
-    const authUser = await getAuthUser(req);
-    if (!authUser) {
+    const userId = await getCurrentUserId();
+    if (!userId) {
       return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
     }
 
@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
       .from(likes)
       .where(
         and(
-          eq(likes.fromUserId, authUser.id),
+          eq(likes.fromUserId, userId),
           eq(likes.isSuperLike, true)
         )
       );
@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
     const currentUser = await db
       .select()
       .from(users)
-      .where(eq(users.id, authUser.id))
+      .where(eq(users.id, userId))
       .limit(1);
 
     const isPremium = currentUser[0]?.isPremium ?? false;
@@ -60,8 +60,8 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const authUser = await getAuthUser(req);
-    if (!authUser) {
+    const userId = await getCurrentUserId();
+    if (!userId) {
       return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
     }
 
@@ -76,7 +76,7 @@ export async function POST(req: NextRequest) {
       const currentUser = await db
         .select()
         .from(users)
-        .where(eq(users.id, authUser.id))
+        .where(eq(users.id, userId))
         .limit(1);
 
       const isPremium = currentUser[0]?.isPremium ?? false;
@@ -90,7 +90,7 @@ export async function POST(req: NextRequest) {
         .from(likes)
         .where(
           and(
-            eq(likes.fromUserId, authUser.id),
+            eq(likes.fromUserId, userId),
             eq(likes.isSuperLike, true)
           )
         );
@@ -119,7 +119,7 @@ export async function POST(req: NextRequest) {
       .from(likes)
       .where(
         and(
-          eq(likes.fromUserId, authUser.id),
+          eq(likes.fromUserId, userId),
           eq(likes.toUserId, toUserId)
         )
       )
@@ -133,14 +133,14 @@ export async function POST(req: NextRequest) {
     const fromUser = await db
       .select()
       .from(users)
-      .where(eq(users.id, authUser.id))
+      .where(eq(users.id, userId))
       .limit(1);
 
     const fromUserData = fromUser[0];
 
     // Insérer le like
     await db.insert(likes).values({
-      fromUserId: authUser.id,
+      fromUserId: userId,
       toUserId,
       isLike,
       isSuperLike: isSuperLike ?? false,
@@ -157,7 +157,7 @@ export async function POST(req: NextRequest) {
         .where(
           and(
             eq(likes.fromUserId, toUserId),
-            eq(likes.toUserId, authUser.id),
+            eq(likes.toUserId, userId),
             eq(likes.isLike, true)
           )
         )
@@ -170,8 +170,8 @@ export async function POST(req: NextRequest) {
           .from(matches)
           .where(
             and(
-              eq(matches.user1Id, Math.min(authUser.id, toUserId)),
-              eq(matches.user2Id, Math.max(authUser.id, toUserId))
+              eq(matches.user1Id, Math.min(userId, toUserId)),
+              eq(matches.user2Id, Math.max(userId, toUserId))
             )
           )
           .limit(1);
@@ -181,8 +181,8 @@ export async function POST(req: NextRequest) {
           const newMatch = await db
             .insert(matches)
             .values({
-              user1Id: Math.min(authUser.id, toUserId),
-              user2Id: Math.max(authUser.id, toUserId),
+              user1Id: Math.min(userId, toUserId),
+              user2Id: Math.max(userId, toUserId),
             })
             .returning();
 
@@ -202,12 +202,12 @@ export async function POST(req: NextRequest) {
           await createNotification({
             userId: toUserId,
             type: "match",
-            fromUserId: authUser.id,
+            fromUserId: userId,
             content: `🎉 Vous avez un nouveau match avec ${fromUserData?.firstName ?? "quelqu'un"} !`,
           });
 
           await createNotification({
-            userId: authUser.id,
+            userId: userId,
             type: "match",
             fromUserId: toUserId,
             content: `🎉 Vous avez un nouveau match avec ${toUserData?.firstName ?? "quelqu'un"} !`,
@@ -220,7 +220,7 @@ export async function POST(req: NextRequest) {
           );
 
           await sendPushToUser(
-            authUser.id,
+            userId,
             PushTemplates.match(toUserData?.firstName ?? "Quelqu'un")
           );
         }
@@ -230,7 +230,7 @@ export async function POST(req: NextRequest) {
           await createNotification({
             userId: toUserId,
             type: "super_like",
-            fromUserId: authUser.id,
+            fromUserId: userId,
             content: `⭐ ${fromUserData?.firstName ?? "Quelqu'un"} vous a envoyé un Super Like !`,
           });
 
@@ -243,7 +243,7 @@ export async function POST(req: NextRequest) {
           await createNotification({
             userId: toUserId,
             type: "like",
-            fromUserId: authUser.id,
+            fromUserId: userId,
             content: `💜 ${fromUserData?.firstName ?? "Quelqu'un"} vous a liké !`,
           });
 
