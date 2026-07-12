@@ -17,8 +17,10 @@ export default function robots(): MetadataRoute.Robots {
         "/likes-recus",
         "/bloques",
         "/boost",
+        "/premium",
+        "/verification",
       ],
     },
-    sitemap: "https://lovelink-omega.vercel.app/sitemap.xml",
+    sitemap: "https://lovelink237.com/sitemap.xml",
   };
 }
