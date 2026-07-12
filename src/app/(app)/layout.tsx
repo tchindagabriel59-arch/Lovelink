@@ -19,6 +19,7 @@ import {
   Zap,
   ShieldCheck,
   BadgeCheck,
+  EyeOff,
 } from "lucide-react";
 
 interface UserData {
@@ -37,6 +38,7 @@ interface UserData {
   birthDate?: string;
   isPremium?: boolean;
   isVerified?: boolean;
+  isIncognito?: boolean;
   isAdmin?: boolean;
 }
 
@@ -179,8 +181,8 @@ const navItems = [
                   </>
                 )}
               </div>
-                <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1">
+                              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1 flex-wrap">
                   <p className="text-sm font-semibold truncate">
                     {user?.firstName} {user?.lastName}
                   </p>
@@ -190,8 +192,17 @@ const navItems = [
                   {user?.isPremium && (
                     <span className="text-yellow-500 text-xs">👑</span>
                   )}
+                  {user?.isIncognito && (
+                    <EyeOff className="w-3.5 h-3.5 text-purple-500 flex-shrink-0" />
+                  )}
                 </div>
                 <p className="text-xs text-slate-500 truncate">{user?.email}</p>
+                {user?.isIncognito && (
+                  <p className="text-[10px] text-purple-600 font-black mt-0.5 flex items-center gap-1">
+                    <EyeOff className="w-2.5 h-2.5" />
+                    MODE INCOGNITO
+                  </p>
+                )}
               </div>
               <button
                 onClick={handleLogout}
@@ -205,11 +216,17 @@ const navItems = [
         </aside>
 
         {/* ========== MOBILE HEADER ========== */}
-        <div className="lg:hidden fixed top-0 left-0 right-0 z-30 glass-card border-b border-slate-100">
+               <div className="lg:hidden fixed top-0 left-0 right-0 z-30 glass-card border-b border-slate-100">
           <div className="flex items-center justify-between px-4 py-3">
             <Link href="/dashboard" className="flex items-center gap-2">
               <Heart className="w-6 h-6 text-rose-500 fill-rose-500" />
               <span className="text-lg font-bold gradient-text">LoveLink</span>
+              {user?.isIncognito && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full text-[10px] font-black">
+                  <EyeOff className="w-2.5 h-2.5" />
+                  INCOGNITO
+                </span>
+              )}
             </Link>
             <div className="flex items-center gap-2">
               <Notifications />
@@ -305,8 +322,18 @@ const navItems = [
           </div>
         </div>
 
-        {/* ========== MAIN CONTENT ========== */}
+           {/* ========== MAIN CONTENT ========== */}
         <main className="flex-1 lg:ml-72 pt-16 pb-20 lg:pt-0 lg:pb-0 min-h-screen">
+          {/* 🕵️ Bandeau Incognito discret en haut */}
+          {user?.isIncognito && (
+            <div className="bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-600 text-white text-center py-1.5 px-4 text-xs font-black tracking-wider flex items-center justify-center gap-2 shadow-md">
+              <EyeOff className="w-3.5 h-3.5" />
+              MODE INCOGNITO ACTIVÉ • TU ES INVISIBLE DANS DISCOVER
+              <Link href="/preferences" className="ml-2 underline hover:no-underline">
+                Gérer
+              </Link>
+            </div>
+          )}
           {children}
         </main>
 
