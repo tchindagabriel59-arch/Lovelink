@@ -8,7 +8,7 @@ import { sendPushToUser, PushTemplates } from "@/lib/push";
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { matchId: string } }
+  { params }: { params: Promise<{ matchId: string }> }
 ) {
   try {
     const userId = await getCurrentUserId();
@@ -16,7 +16,8 @@ export async function GET(
       return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
     }
 
-    const matchId = parseInt(params.matchId);
+    const { matchId: matchIdParam } = await params;
+    const matchId = parseInt(matchIdParam);
 
     if (isNaN(matchId)) {
       return NextResponse.json({ error: "Match invalide" }, { status: 400 });
@@ -85,7 +86,7 @@ export async function GET(
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { matchId: string } }
+  { params }: { params: Promise<{ matchId: string }> }
 ) {
   try {
     const userId = await getCurrentUserId();
@@ -93,7 +94,8 @@ export async function POST(
       return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
     }
 
-    const matchId = parseInt(params.matchId);
+    const { matchId: matchIdParam } = await params;
+    const matchId = parseInt(matchIdParam);
 
     if (isNaN(matchId)) {
       return NextResponse.json({ error: "Match invalide" }, { status: 400 });
