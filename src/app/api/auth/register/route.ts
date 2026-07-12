@@ -6,6 +6,22 @@ import bcrypt from "bcryptjs";
 import { createToken } from "@/lib/auth";
 import { sendWelcomeEmail } from "@/lib/emails";
 
+// 🎯 Auto-définir la préférence de genre selon le genre de l'utilisateur
+// Logique HÉTÉRO par défaut (le plus courant), modifiable ensuite dans /preferences
+function getDefaultPrefGender(userGender: string): "male" | "female" | "non_binary" | "other" | null {
+  switch (userGender) {
+    case "male":
+      return "female"; // Homme → voit des femmes par défaut
+    case "female":
+      return "male"; // Femme → voit des hommes par défaut
+    case "non_binary":
+    case "other":
+      return null; // null = "all" (voit tout le monde)
+    default:
+      return null;
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -33,6 +49,9 @@ export async function POST(req: NextRequest) {
 
     const passwordHash = await bcrypt.hash(password, 12);
 
+    // 🎯 Définir automatiquement la préférence de genre
+    const defaultPrefGender = getDefaultPrefGender(gender);
+
     const [newUser] = await db
       .insert(users)
       .values({
@@ -42,6 +61,9 @@ export async function POST(req: NextRequest) {
         lastName,
         birthDate,
         gender,
+        prefGender: defaultPrefGender, // 🎯 Auto-défini
+        prefAgeMin: 18,
+        prefAgeMax: 99,
       })
       .returning();
 
