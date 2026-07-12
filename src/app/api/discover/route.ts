@@ -115,6 +115,7 @@ export async function GET() {
     const conditions = [
       notInArray(users.id, excludeIds),
       eq(users.isBanned, false),
+      eq(users.isIncognito, false), // 🕵️ Cacher les profils en mode incognito
       lte(users.birthDate, maxBirthDate),
       gte(users.birthDate, minBirthDate),
     ];
