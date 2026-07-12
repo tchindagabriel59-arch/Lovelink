@@ -8,7 +8,7 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
   const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
   const rawData = atob(base64);
-  const outputArray = new Uint8Array(rawData.length);
+  const outputArray = new Uint8Array(new ArrayBuffer(rawData.length));
   for (let i = 0; i < rawData.length; ++i) {
     outputArray[i] = rawData.charCodeAt(i);
   }
@@ -29,7 +29,6 @@ export default function PushNotifButton() {
 
   async function checkSupport() {
     try {
-      // Vérifier le support du navigateur
       if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) {
         setSupported(false);
         setLoading(false);
@@ -39,15 +38,12 @@ export default function PushNotifButton() {
       setSupported(true);
       setPermission(Notification.permission);
 
-      // Enregistrer le service worker
       const registration = await navigator.serviceWorker.register("/sw.js");
-      console.log("[Push] Service Worker enregistré");
+      console.log("[Push] Service Worker enregistré", registration);
 
-      // Vérifier si déjà abonné
       const subscription = await registration.pushManager.getSubscription();
       setSubscribed(!!subscription);
 
-      // Vérifier côté serveur aussi
       if (subscription) {
         const res = await fetch("/api/push/subscribe");
         if (res.ok) {
@@ -67,7 +63,6 @@ export default function PushNotifButton() {
     setMessage(null);
 
     try {
-      // Demander la permission
       const permission = await Notification.requestPermission();
       setPermission(permission);
 
@@ -80,7 +75,6 @@ export default function PushNotifButton() {
         return;
       }
 
-      // Récupérer la clé publique VAPID
       const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
       if (!publicKey) {
         setMessage({ type: "error", text: "Configuration manquante" });
@@ -88,14 +82,16 @@ export default function PushNotifButton() {
         return;
       }
 
-      // S'abonner via le Service Worker
       const registration = await navigator.serviceWorker.ready;
+      
+      // Conversion explicite pour éviter l'erreur TypeScript
+      const applicationServerKey = urlBase64ToUint8Array(publicKey);
+      
       const subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(publicKey),
+        applicationServerKey: applicationServerKey as BufferSource,
       });
 
-      // Envoyer l'abonnement au serveur
       const res = await fetch("/api/push/subscribe", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -112,7 +108,6 @@ export default function PushNotifButton() {
           text: "🎉 Notifications activées !",
         });
 
-        // Notification de bienvenue
         setTimeout(() => {
           registration.showNotification("LoveLink 💕", {
             body: "Les notifications sont activées ! Tu ne rateras plus rien 🔥",
@@ -126,7 +121,6 @@ export default function PushNotifButton() {
       } else {
         const err = await res.json();
         setMessage({ type: "error", text: err.error || "Erreur" });
-        // Rollback : désabonner le navigateur
         await subscription.unsubscribe();
       }
     } catch (err) {
@@ -148,17 +142,14 @@ export default function PushNotifButton() {
       const subscription = await registration.pushManager.getSubscription();
 
       if (subscription) {
-        // Supprimer côté serveur
         await fetch("/api/push/subscribe", {
           method: "DELETE",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ endpoint: subscription.endpoint }),
         });
 
-        // Désabonner côté navigateur
         await subscription.unsubscribe();
       } else {
-        // Pas d'abonnement local, on nettoie tout côté serveur
         await fetch("/api/push/subscribe", {
           method: "DELETE",
           headers: { "Content-Type": "application/json" },
@@ -177,7 +168,6 @@ export default function PushNotifButton() {
     }
   }
 
-  // Loader
   if (loading) {
     return (
       <div className="bg-white rounded-2xl p-6 border border-slate-100">
@@ -188,7 +178,6 @@ export default function PushNotifButton() {
     );
   }
 
-  // Navigateur non supporté
   if (!supported) {
     return (
       <div className="bg-amber-50 border-2 border-amber-200 rounded-2xl p-6">
@@ -205,7 +194,6 @@ export default function PushNotifButton() {
     );
   }
 
-  // Permission refusée définitivement
   if (permission === "denied") {
     return (
       <div className="bg-red-50 border-2 border-red-200 rounded-2xl p-6">
@@ -228,7 +216,6 @@ export default function PushNotifButton() {
     );
   }
 
-  // ==== ABONNÉ ====
   if (subscribed) {
     return (
       <div className="bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl p-6 text-white shadow-xl relative overflow-hidden">
@@ -284,7 +271,6 @@ export default function PushNotifButton() {
     );
   }
 
-  // ==== NON ABONNÉ ====
   return (
     <div className="bg-white rounded-2xl p-6 border-2 border-purple-200 shadow-lg relative overflow-hidden">
       <div className="absolute top-0 right-0 w-32 h-32 bg-purple-100/40 rounded-full blur-3xl" />
@@ -307,7 +293,6 @@ export default function PushNotifButton() {
           </div>
         </div>
 
-        {/* Avantages */}
         <div className="grid grid-cols-2 gap-2 mb-4">
           <div className="p-2 bg-rose-50 rounded-lg text-center">
             <div className="text-lg">💕</div>
