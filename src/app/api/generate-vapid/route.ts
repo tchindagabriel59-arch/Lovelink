@@ -1,24 +1,21 @@
 import { NextResponse } from "next/server";
-import crypto from "crypto";
+import webpush from "web-push";
 
 export async function GET() {
-  // Générer une paire de clés VAPID
-  const curve = crypto.createECDH("prime256v1");
-  curve.generateKeys();
-
-  const publicKey = curve.getPublicKey().toString("base64url");
-  const privateKey = curve.getPrivateKey().toString("base64url");
+  const vapidKeys = webpush.generateVAPIDKeys();
 
   return NextResponse.json({
-    success: true,
-    message: "🔑 Voici tes clés VAPID ! COPIE-LES DANS VERCEL puis SUPPRIME ce fichier !",
-    publicKey,
-    privateKey,
+    message: "🔑 Nouvelles clés VAPID générées ! Copie-les dans Vercel puis SUPPRIME ce fichier.",
+    publicKey: vapidKeys.publicKey,
+    privateKey: vapidKeys.privateKey,
+    email: "mailto:lovelink237@gmail.com",
     instructions: [
-      "1. Copie NEXT_PUBLIC_VAPID_PUBLIC_KEY = " + publicKey,
-      "2. Copie VAPID_PRIVATE_KEY = " + privateKey,
-      "3. Ajoute VAPID_EMAIL = mailto:lovelink237@gmail.com",
-      "4. SUPPRIME ce fichier après pour la sécurité !",
+      "1. Va sur Vercel → Settings → Environment Variables",
+      "2. Remplace NEXT_PUBLIC_VAPID_PUBLIC_KEY par la valeur 'publicKey' ci-dessus",
+      "3. Remplace VAPID_PRIVATE_KEY par la valeur 'privateKey' ci-dessus",
+      "4. Vérifie que VAPID_EMAIL = mailto:lovelink237@gmail.com",
+      "5. Redéploie",
+      "6. SUPPRIME ce fichier generate-vapid IMMÉDIATEMENT !",
     ],
   });
 }
