@@ -32,7 +32,7 @@ export async function GET() {
       );
 
     const todaySuperLikes = superLikesToday.filter(
-      (l) => new Date(l.createdAt) >= today
+      (l) => l.createdAt && new Date(l.createdAt) >= today
     );
 
     const currentUser = await db
@@ -96,7 +96,7 @@ export async function POST(req: NextRequest) {
         );
 
       const todayCount = superLikesToday.filter(
-        (l) => new Date(l.createdAt) >= today
+        (l) => l.createdAt && new Date(l.createdAt) >= today
       ).length;
 
       if (todayCount >= limit) {
