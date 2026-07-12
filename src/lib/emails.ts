@@ -2,18 +2,10 @@ import { Resend } from "resend";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-// ⚠️ En mode test Resend, on utilise "onboarding@resend.dev"
-// Quand tu auras un domaine, remplace par "noreply@tondomaine.com"
-const FROM_EMAIL = "LoveLink <onboarding@resend.dev>";
-
-// ⚠️ En mode test, tous les emails vont à ton email admin
-// Quand tu auras un domaine, mets à false pour envoyer aux vrais utilisateurs
-const TEST_MODE = true;
-const TEST_EMAIL = "lovelink237@gmail.com";
-
-function getRecipient(userEmail: string): string {
-  return TEST_MODE ? TEST_EMAIL : userEmail;
-}
+// ✅ MODE PRODUCTION : emails envoyés depuis ton domaine lovelink237.com
+const FROM_EMAIL = "LoveLink <noreply@lovelink237.com>";
+const REPLY_TO = "lovelink237@gmail.com";
+const SITE_URL = "https://lovelink237.com";
 
 // 📧 Email de bienvenue
 export async function sendWelcomeEmail(
@@ -23,7 +15,8 @@ export async function sendWelcomeEmail(
   try {
     const { data, error } = await resend.emails.send({
       from: FROM_EMAIL,
-      to: getRecipient(userEmail),
+      to: userEmail,
+      replyTo: REPLY_TO,
       subject: `Bienvenue sur LoveLink, ${firstName} ! 💜`,
       html: welcomeEmailTemplate(firstName),
     });
@@ -49,7 +42,8 @@ export async function sendMatchEmail(
   try {
     const { data, error } = await resend.emails.send({
       from: FROM_EMAIL,
-      to: getRecipient(userEmail),
+      to: userEmail,
+      replyTo: REPLY_TO,
       subject: `🎉 C'est un match avec ${matchFirstName} !`,
       html: matchEmailTemplate(userFirstName, matchFirstName),
     });
@@ -74,7 +68,8 @@ export async function sendMessageEmail(
   try {
     const { data, error } = await resend.emails.send({
       from: FROM_EMAIL,
-      to: getRecipient(userEmail),
+      to: userEmail,
+      replyTo: REPLY_TO,
       subject: `💬 Nouveau message de ${senderFirstName}`,
       html: messageEmailTemplate(userFirstName, senderFirstName),
     });
@@ -110,10 +105,14 @@ const baseFooter = `
         Dakar, Sénégal
       </p>
       <div style="margin-top: 20px;">
-        <a href="https://lovelink-omega.vercel.app/cgu" style="color: #94a3b8; font-size: 12px; margin: 0 8px; text-decoration: none;">CGU</a>
-        <a href="https://lovelink-omega.vercel.app/confidentialite" style="color: #94a3b8; font-size: 12px; margin: 0 8px; text-decoration: none;">Confidentialité</a>
+        <a href="${SITE_URL}/cgu" style="color: #94a3b8; font-size: 12px; margin: 0 8px; text-decoration: none;">CGU</a>
+        <a href="${SITE_URL}/confidentialite" style="color: #94a3b8; font-size: 12px; margin: 0 8px; text-decoration: none;">Confidentialité</a>
         <a href="mailto:lovelink237@gmail.com" style="color: #94a3b8; font-size: 12px; margin: 0 8px; text-decoration: none;">Contact</a>
       </div>
+      <p style="color: #475569; font-size: 11px; margin: 20px 0 0;">
+        Tu reçois cet email car tu es inscrit sur LoveLink.<br>
+        Pour te désinscrire, connecte-toi à ton compte.
+      </p>
     </div>
   </div>
 `;
@@ -142,7 +141,7 @@ function welcomeEmailTemplate(firstName: string): string {
       </div>
 
       <div style="text-align: center; margin: 32px 0;">
-        <a href="https://lovelink-omega.vercel.app/profile" style="display: inline-block; background: linear-gradient(135deg, #f43f5e 0%, #a855f7 100%); color: white; padding: 14px 32px; border-radius: 12px; text-decoration: none; font-weight: 600; font-size: 16px;">
+        <a href="${SITE_URL}/profile" style="display: inline-block; background: linear-gradient(135deg, #f43f5e 0%, #a855f7 100%); color: white; padding: 14px 32px; border-radius: 12px; text-decoration: none; font-weight: 600; font-size: 16px;">
           Compléter mon profil →
         </a>
       </div>
@@ -174,7 +173,7 @@ function matchEmailTemplate(userFirstName: string, matchFirstName: string): stri
       </div>
 
       <div style="margin: 32px 0;">
-        <a href="https://lovelink-omega.vercel.app/messages" style="display: inline-block; background: linear-gradient(135deg, #f43f5e 0%, #a855f7 100%); color: white; padding: 14px 32px; border-radius: 12px; text-decoration: none; font-weight: 600; font-size: 16px;">
+        <a href="${SITE_URL}/messages" style="display: inline-block; background: linear-gradient(135deg, #f43f5e 0%, #a855f7 100%); color: white; padding: 14px 32px; border-radius: 12px; text-decoration: none; font-weight: 600; font-size: 16px;">
           Envoyer un message 💬
         </a>
       </div>
@@ -196,7 +195,7 @@ function messageEmailTemplate(userFirstName: string, senderFirstName: string): s
       </p>
 
       <div style="text-align: center; margin: 32px 0;">
-        <a href="https://lovelink-omega.vercel.app/messages" style="display: inline-block; background: linear-gradient(135deg, #f43f5e 0%, #a855f7 100%); color: white; padding: 14px 32px; border-radius: 12px; text-decoration: none; font-weight: 600; font-size: 16px;">
+        <a href="${SITE_URL}/messages" style="display: inline-block; background: linear-gradient(135deg, #f43f5e 0%, #a855f7 100%); color: white; padding: 14px 32px; border-radius: 12px; text-decoration: none; font-weight: 600; font-size: 16px;">
           Lire le message →
         </a>
       </div>
