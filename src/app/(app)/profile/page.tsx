@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useUser } from "../layout";
 import PushNotifButton from "../../components/PushNotifButton";
 import {
@@ -67,25 +67,51 @@ export default function ProfilePage() {
   const photo4Ref = useRef<HTMLInputElement>(null);
 
   const [form, setForm] = useState({
-    bio: user?.bio || "",
-    city: user?.city || "",
-    country: user?.country || "",
-    photoUrl: user?.photoUrl || "",
-    coverPhotoUrl: (user as any)?.coverPhotoUrl || "",
-    photo1Url: (user as any)?.photo1Url || "",
-    photo2Url: (user as any)?.photo2Url || "",
-    photo3Url: (user as any)?.photo3Url || "",
-    photo4Url: (user as any)?.photo4Url || "",
-    interests: user?.interests || "",
-    occupation: user?.occupation || "",
-    lookingFor: user?.lookingFor || "relationship",
-    prompt1Question: (user as any)?.prompt1Question || "",
-    prompt1Answer: (user as any)?.prompt1Answer || "",
-    prompt2Question: (user as any)?.prompt2Question || "",
-    prompt2Answer: (user as any)?.prompt2Answer || "",
-    prompt3Question: (user as any)?.prompt3Question || "",
-    prompt3Answer: (user as any)?.prompt3Answer || "",
+    bio: "",
+    city: "",
+    country: "",
+    photoUrl: "",
+    coverPhotoUrl: "",
+    photo1Url: "",
+    photo2Url: "",
+    photo3Url: "",
+    photo4Url: "",
+    interests: "",
+    occupation: "",
+    lookingFor: "relationship",
+    prompt1Question: "",
+    prompt1Answer: "",
+    prompt2Question: "",
+    prompt2Answer: "",
+    prompt3Question: "",
+    prompt3Answer: "",
   });
+
+  // 🔄 Recharger les données du formulaire quand user change
+  useEffect(() => {
+    if (user) {
+      setForm({
+        bio: user.bio || "",
+        city: user.city || "",
+        country: user.country || "",
+        photoUrl: user.photoUrl || "",
+        coverPhotoUrl: (user as any)?.coverPhotoUrl || "",
+        photo1Url: (user as any)?.photo1Url || "",
+        photo2Url: (user as any)?.photo2Url || "",
+        photo3Url: (user as any)?.photo3Url || "",
+        photo4Url: (user as any)?.photo4Url || "",
+        interests: user.interests || "",
+        occupation: user.occupation || "",
+        lookingFor: user.lookingFor || "relationship",
+        prompt1Question: (user as any)?.prompt1Question || "",
+        prompt1Answer: (user as any)?.prompt1Answer || "",
+        prompt2Question: (user as any)?.prompt2Question || "",
+        prompt2Answer: (user as any)?.prompt2Answer || "",
+        prompt3Question: (user as any)?.prompt3Question || "",
+        prompt3Answer: (user as any)?.prompt3Answer || "",
+      });
+    }
+  }, [user]);
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
@@ -612,7 +638,7 @@ export default function ProfilePage() {
               </div>
             </div>
 
-                       {/* 🔔 NOTIFICATIONS PUSH */}
+            {/* 🔔 NOTIFICATIONS PUSH */}
             <PushNotifButton />
 
             {/* Intérêts */}
