@@ -33,10 +33,13 @@ export const users = pgTable("users", {
   photo4Url: text("photo_4_url").default(""),
   interests: text("interests").default(""),
   occupation: varchar("occupation", { length: 150 }).default(""),
-    isOnline: boolean("is_online").default(false),
+  isOnline: boolean("is_online").default(false),
   isAdmin: boolean("is_admin").default(false),
   isBanned: boolean("is_banned").default(false),
   isPremium: boolean("is_premium").default(false),
+  // 💎 PREMIUM (CinetPay)
+  premiumExpiresAt: timestamp("premium_expires_at"),
+  premiumPlan: varchar("premium_plan", { length: 20 }),
   // 🕵️ MODE INCOGNITO (Premium)
   isIncognito: boolean("is_incognito").default(false).notNull(),
   // 💙 VÉRIFICATION PROFIL
@@ -129,6 +132,62 @@ export const pushSubscriptions = pgTable("push_subscriptions", {
   p256dh: text("p256dh").notNull(),
   auth: text("auth").notNull(),
   userAgent: text("user_agent"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// 💎 SUBSCRIPTIONS (Abonnements Premium)
+export const subscriptions = pgTable("subscriptions", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  plan: varchar("plan", { length: 20 }).notNull(), // 'premium' | 'gold'
+  billingPeriod: varchar("billing_period", { length: 20 }).notNull(), // 'monthly' | 'yearly'
+  amount: integer("amount").notNull(), // en FCFA
+  currency: varchar("currency", { length: 10 }).notNull().default("XOF"),
+  status: varchar("status", { length: 20 }).notNull().default("active"), // 'active' | 'expired' | 'cancelled'
+  startsAt: timestamp("starts_at").notNull().defaultNow(),
+  expiresAt: timestamp("expires_at").notNull(),
+  cancelledAt: timestamp("cancelled_at"),
+  autoRenew: boolean("auto_renew").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// 💳 PAYMENTS (Historique des paiements CinetPay)
+export const payments = pgTable("payments", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  subscriptionId: integer("subscription_id").references(() => subscriptions.id, { onDelete: "set null" }),
+
+  // CinetPay IDs
+  merchantTransactionId: varchar("merchant_transaction_id", { length: 50 }).notNull().unique(),
+  cinetpayTransactionId: varchar("cinetpay_transaction_id", { length: 100 }),
+  notifyToken: varchar("notify_token", { length: 255 }),
+  paymentToken: varchar("payment_token", { length: 255 }),
+  paymentUrl: text("payment_url"),
+
+  // Détails du paiement
+  amount: integer("amount").notNull(),
+  currency: varchar("currency", { length: 10 }).notNull().default("XOF"),
+  plan: varchar("plan", { length: 20 }).notNull(), // 'premium' | 'gold'
+  billingPeriod: varchar("billing_period", { length: 20 }).notNull(), // 'monthly' | 'yearly'
+  paymentMethod: varchar("payment_method", { length: 50 }), // 'OM', 'WAVE', 'MTN', 'VISA'...
+
+  // Statut
+  status: varchar("status", { length: 20 }).notNull().default("pending"), // 'pending' | 'success' | 'failed' | 'cancelled'
+  statusMessage: text("status_message"),
+
+  // Client info (snapshot)
+  clientEmail: varchar("client_email", { length: 255 }),
+  clientFirstName: varchar("client_first_name", { length: 100 }),
+  clientLastName: varchar("client_last_name", { length: 100 }),
+  clientPhone: varchar("client_phone", { length: 30 }),
+
+  // Timestamps
+  initiatedAt: timestamp("initiated_at").defaultNow(),
+  completedAt: timestamp("completed_at"),
+  webhookReceivedAt: timestamp("webhook_received_at"),
+  verifiedAt: timestamp("verified_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
