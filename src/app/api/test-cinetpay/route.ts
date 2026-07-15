@@ -6,7 +6,6 @@ import { eq } from "drizzle-orm";
 
 export async function GET() {
   try {
-    // Sécurité : seul l'admin peut tester
     const userId = await getCurrentUserId();
     if (!userId) {
       return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
@@ -22,31 +21,20 @@ export async function GET() {
       return NextResponse.json({ error: "Admin only" }, { status: 403 });
     }
 
-    // Vérifier les variables d'environnement
+    // 🔍 ÉTAPE 1 : Récupérer notre IP publique (celle que Vercel utilise pour sortir)
+    let myIp = "unknown";
+    try {
+      const ipResponse = await fetch("https://api.ipify.org?format=json");
+      const ipData = await ipResponse.json();
+      myIp = ipData.ip;
+    } catch (e) {
+      myIp = "erreur récupération IP";
+    }
+
+    // ÉTAPE 2 : Test CinetPay
     const apiKey = process.env.CINETPAY_API_KEY;
     const apiPassword = process.env.CINETPAY_API_PASSWORD;
-    const mode = process.env.CINETPAY_MODE;
 
-    const diagnostics = {
-      apiKey: {
-        exists: !!apiKey,
-        length: apiKey?.length || 0,
-        startsWith: apiKey?.substring(0, 8) || "N/A",
-        endsWith: apiKey?.substring(apiKey.length - 4) || "N/A",
-        hasSpaceStart: apiKey?.startsWith(" ") || false,
-        hasSpaceEnd: apiKey?.endsWith(" ") || false,
-      },
-      apiPassword: {
-        exists: !!apiPassword,
-        length: apiPassword?.length || 0,
-        hasSpaceStart: apiPassword?.startsWith(" ") || false,
-        hasSpaceEnd: apiPassword?.endsWith(" ") || false,
-      },
-      mode: mode || "N/A",
-    };
-
-    // Test réel : essayer le login
-    console.log("🧪 Test login CinetPay...");
     const loginResponse = await fetch("https://api.cinetpay.net/v1/oauth/login", {
       method: "POST",
       headers: {
@@ -62,20 +50,14 @@ export async function GET() {
     const loginData = await loginResponse.text();
 
     return NextResponse.json({
-      diagnostics,
-      loginTest: {
+      messageImportant: "👉 Ajoute l'IP ci-dessous dans la liste blanche CinetPay",
+      vercelIp: myIp,
+      cinetpayResponse: {
         status: loginResponse.status,
-        statusText: loginResponse.statusText,
-        response: loginData,
+        body: loginData,
       },
     });
   } catch (error: any) {
-    return NextResponse.json(
-      {
-        error: error.message,
-        stack: error.stack,
-      },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
