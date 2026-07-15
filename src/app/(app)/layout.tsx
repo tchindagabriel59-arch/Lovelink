@@ -4,6 +4,7 @@ import { useState, useEffect, createContext, useContext, useCallback } from "rea
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import Notifications from "../components/Notifications";
+import InstallAppButton from "../components/InstallAppButton";
 import {
   Heart,
   User,
@@ -87,7 +88,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     router.push("/");
   };
 
-const navItems = [
+  const navItems = [
     { href: "/dashboard", label: "Accueil", icon: <Sparkles className="w-5 h-5" /> },
     { href: "/discover", label: "Découvrir", icon: <Compass className="w-5 h-5" /> },
     { href: "/likes-recus", label: "Qui m'a liké", icon: <Star className="w-5 h-5" /> },
@@ -181,7 +182,7 @@ const navItems = [
                   </>
                 )}
               </div>
-                              <div className="flex-1 min-w-0">
+              <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1 flex-wrap">
                   <p className="text-sm font-semibold truncate">
                     {user?.firstName} {user?.lastName}
@@ -216,7 +217,7 @@ const navItems = [
         </aside>
 
         {/* ========== MOBILE HEADER ========== */}
-               <div className="lg:hidden fixed top-0 left-0 right-0 z-30 glass-card border-b border-slate-100">
+        <div className="lg:hidden fixed top-0 left-0 right-0 z-30 glass-card border-b border-slate-100">
           <div className="flex items-center justify-between px-4 py-3">
             <Link href="/dashboard" className="flex items-center gap-2">
               <Heart className="w-6 h-6 text-rose-500 fill-rose-500" />
@@ -322,7 +323,7 @@ const navItems = [
           </div>
         </div>
 
-           {/* ========== MAIN CONTENT ========== */}
+        {/* ========== MAIN CONTENT ========== */}
         <main className="flex-1 lg:ml-72 pt-16 pb-20 lg:pt-0 lg:pb-0 min-h-screen">
           {/* 🕵️ Bandeau Incognito discret en haut */}
           {user?.isIncognito && (
@@ -336,6 +337,9 @@ const navItems = [
           )}
           {children}
         </main>
+
+        {/* ========== PWA INSTALL BUTTON (Bandeau flottant global) ========== */}
+        <InstallAppButton />
 
       </div>
     </UserContext.Provider>
