@@ -3,16 +3,15 @@ import { db } from "@/db";
 import { users, payments, subscriptions } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import {
-  verifyCinetPayPayment,
+  verifyPayDunyaInvoice,
   getSubscriptionExpiryDate,
-  type PremiumPlan,
   type BillingPeriod,
-} from "@/lib/cinetpay";
+} from "@/lib/paydunya";
 import { sendMatchEmail } from "@/lib/emails";
 
 // ============================================
 // GET /api/payment/webhook
-// Sonde de santé (CinetPay vérifie que l'URL est joignable)
+// Sonde de santé (PayDunya vérifie que l'URL est joignable)
 // ============================================
 export async function GET() {
   return new NextResponse("OK", { status: 200 });
@@ -20,52 +19,91 @@ export async function GET() {
 
 // ============================================
 // POST /api/payment/webhook
-// Reçoit les notifications de paiement de CinetPay (IPN)
+// Reçoit les notifications de paiement de PayDunya (IPN)
 // ============================================
 export async function POST(req: NextRequest) {
-  // ⚠️ IMPORTANT : Répondre HTTP 200 dans les 10 secondes !
-  // Sinon CinetPay retente et on peut avoir des doublons.
+  // ⚠️ IMPORTANT : Répondre HTTP 200 rapidement !
 
   try {
-    // 1. Récupérer le payload
-    const body = await req.json();
-    console.log("📩 Webhook CinetPay reçu:", body);
+    // 1. Récupérer le payload (peut être JSON ou form-data selon config PayDunya)
+    let body: any;
+    const contentType = req.headers.get("content-type") || "";
 
-    const {
-      notify_token,
-      merchant_transaction_id,
-      transaction_id,
-    } = body;
+    if (contentType.includes("application/json")) {
+      body = await req.json();
+    } else {
+      // PayDunya envoie parfois en form-data
+      const formData = await req.formData();
+      body = Object.fromEntries(formData.entries());
 
-    // 2. Validation basique
-    if (!merchant_transaction_id || !transaction_id) {
-      console.warn("⚠️ Webhook payload incomplet");
+      // Parser les champs data en JSON si présents
+      if (typeof body.data === "string") {
+        try {
+          body.data = JSON.parse(body.data);
+        } catch {
+          // Garder tel quel
+        }
+      }
+    }
+
+    console.log("📩 Webhook PayDunya reçu:", JSON.stringify(body));
+
+    // 2. Extraire les infos importantes
+    // PayDunya envoie : data (objet) OU custom_data + invoice.token
+    const data = body.data || body;
+    const token =
+      data.invoice?.token ||
+      data.token ||
+      body.token ||
+      body["data[invoice][token]"];
+
+    const customData =
+      data.custom_data ||
+      body.custom_data ||
+      {};
+
+    const merchantTransactionId =
+      customData.merchant_transaction_id ||
+      body["data[custom_data][merchant_transaction_id]"];
+
+    // 3. Validation basique
+    if (!token && !merchantTransactionId) {
+      console.warn("⚠️ Webhook payload incomplet - pas de token ni merchant_id");
       return NextResponse.json({ ok: true }, { status: 200 });
     }
 
-    // 3. Retrouver le paiement en base
-    const [payment] = await db
-      .select()
-      .from(payments)
-      .where(eq(payments.merchantTransactionId, merchant_transaction_id))
-      .limit(1);
+    // 4. Retrouver le paiement en base
+    // On cherche d'abord par merchant_transaction_id, sinon par token PayDunya
+    let payment;
+    if (merchantTransactionId) {
+      [payment] = await db
+        .select()
+        .from(payments)
+        .where(eq(payments.merchantTransactionId, merchantTransactionId))
+        .limit(1);
+    }
+
+    if (!payment && token) {
+      [payment] = await db
+        .select()
+        .from(payments)
+        .where(eq(payments.paymentToken, token))
+        .limit(1);
+    }
 
     if (!payment) {
-      console.warn(`⚠️ Paiement introuvable: ${merchant_transaction_id}`);
-      // On répond 200 quand même (CinetPay ne doit pas retenter à l'infini)
+      console.warn(
+        `⚠️ Paiement introuvable - merchant_id=${merchantTransactionId}, token=${token}`
+      );
+      // On répond 200 quand même (PayDunya ne doit pas retenter à l'infini)
       return NextResponse.json({ ok: true }, { status: 200 });
     }
 
-    // 4. IDEMPOTENCE : si déjà traité, ignorer
+    // 5. IDEMPOTENCE : si déjà traité, ignorer
     if (payment.status === "success" || payment.status === "failed") {
-      console.log(`ℹ️ Paiement déjà traité: ${merchant_transaction_id} (${payment.status})`);
-      return NextResponse.json({ ok: true }, { status: 200 });
-    }
-
-    // 5. SÉCURITÉ : Vérifier le notify_token
-    if (payment.notifyToken && notify_token && payment.notifyToken !== notify_token) {
-      console.error(`❌ notify_token invalide pour ${merchant_transaction_id}`);
-      // On répond 200 mais on ne traite pas (protection contre attaques)
+      console.log(
+        `ℹ️ Paiement déjà traité: ${payment.merchantTransactionId} (${payment.status})`
+      );
       return NextResponse.json({ ok: true }, { status: 200 });
     }
 
@@ -74,55 +112,67 @@ export async function POST(req: NextRequest) {
       .update(payments)
       .set({
         webhookReceivedAt: new Date(),
-        cinetpayTransactionId: transaction_id,
         updatedAt: new Date(),
       })
       .where(eq(payments.id, payment.id));
 
     // 7. 🔒 SÉCURITÉ CRITIQUE : NE JAMAIS faire confiance au payload webhook !
-    // Toujours re-vérifier via l'API CinetPay (source de vérité)
-    let verifyResponse;
-    try {
-      verifyResponse = await verifyCinetPayPayment(merchant_transaction_id);
-    } catch (verifyError) {
-      console.error("❌ Erreur vérification CinetPay:", verifyError);
-      // On répond 200 mais on ne finalise pas (on retentera via le success_url ou cron)
+    // Toujours re-vérifier via l'API PayDunya (source de vérité)
+    const verifyToken = payment.paymentToken || token;
+
+    if (!verifyToken) {
+      console.error("❌ Pas de token pour vérifier le paiement");
       return NextResponse.json({ ok: true }, { status: 200 });
     }
 
-    const paymentData = verifyResponse.data;
-    const realStatus = paymentData?.status || "UNKNOWN";
+    let verifyResponse;
+    try {
+      verifyResponse = await verifyPayDunyaInvoice(verifyToken);
+    } catch (verifyError) {
+      console.error("❌ Erreur vérification PayDunya:", verifyError);
+      // On répond 200 mais on ne finalise pas (retentera via success_url ou cron)
+      return NextResponse.json({ ok: true }, { status: 200 });
+    }
 
-    console.log(`🔍 Statut réel CinetPay pour ${merchant_transaction_id}: ${realStatus}`);
+    const realStatus = verifyResponse.status;
+    console.log(
+      `🔍 Statut réel PayDunya pour ${payment.merchantTransactionId}: ${realStatus}`
+    );
 
     // 8. Traiter selon le statut réel
-    if (realStatus === "SUCCESS") {
+    if (realStatus === "completed") {
       // ✅ PAIEMENT RÉUSSI → Activer le Premium
-      await activatePremium(payment.id);
-      console.log(`✅ Premium activé pour user ${payment.userId} (${payment.plan} ${payment.billingPeriod})`);
-    } else if (realStatus === "FAILED" || realStatus === "CANCELLED") {
-      // ❌ PAIEMENT ÉCHOUÉ
+      await activatePremium(payment.id, verifyResponse);
+      console.log(
+        `✅ Premium activé pour user ${payment.userId} (${payment.plan} ${payment.billingPeriod})`
+      );
+    } else if (realStatus === "cancelled" || realStatus === "failed") {
+      // ❌ PAIEMENT ÉCHOUÉ / ANNULÉ
       await db
         .update(payments)
         .set({
           status: "failed",
-          statusMessage: verifyResponse.message || "Paiement échoué",
+          statusMessage:
+            verifyResponse.fail_reason ||
+            verifyResponse.response_text ||
+            "Paiement échoué",
           verifiedAt: new Date(),
           updatedAt: new Date(),
         })
         .where(eq(payments.id, payment.id));
-      console.log(`❌ Paiement échoué: ${merchant_transaction_id}`);
+      console.log(`❌ Paiement échoué: ${payment.merchantTransactionId}`);
     } else {
-      // ⏳ PENDING / WAITING → on attend
-      console.log(`⏳ Paiement en attente: ${merchant_transaction_id} (${realStatus})`);
+      // ⏳ PENDING → on attend
+      console.log(
+        `⏳ Paiement en attente: ${payment.merchantTransactionId} (${realStatus})`
+      );
     }
 
-    // 9. Toujours répondre 200 à CinetPay
+    // 9. Toujours répondre 200 à PayDunya
     return NextResponse.json({ ok: true }, { status: 200 });
   } catch (error: any) {
-    console.error("❌ Erreur webhook CinetPay:", error);
+    console.error("❌ Erreur webhook PayDunya:", error);
     // Même en cas d'erreur, on répond 200 pour éviter les retries infinis
-    // (On log l'erreur pour investigation)
     return NextResponse.json({ ok: true }, { status: 200 });
   }
 }
@@ -130,7 +180,7 @@ export async function POST(req: NextRequest) {
 // ============================================
 // 💎 ACTIVER LE PREMIUM
 // ============================================
-async function activatePremium(paymentId: number) {
+async function activatePremium(paymentId: number, verifyResponse: any) {
   try {
     // 1. Récupérer le paiement
     const [payment] = await db
@@ -157,7 +207,7 @@ async function activatePremium(paymentId: number) {
     }
 
     // 3. Calculer la date d'expiration
-    // Si l'user a déjà un Premium, on ajoute la période à partir de son expiration actuelle
+    // Si l'user a déjà un Premium actif, on prolonge à partir de son expiration
     let expiresAt: Date;
     const now = new Date();
 
@@ -205,13 +255,18 @@ async function activatePremium(paymentId: number) {
       })
       .where(eq(users.id, payment.userId));
 
-    // 6. Mettre à jour le paiement (status success + subscription liée)
+    // 6. Mettre à jour le paiement (status success + subscription liée + méthode paiement)
     await db
       .update(payments)
       .set({
         status: "success",
         subscriptionId: subscription.id,
         statusMessage: "Paiement réussi - Premium activé",
+        paymentMethod: verifyResponse.customer?.name || verifyResponse.mode || null,
+        cinetpayTransactionId:
+          verifyResponse.receipt_identifier ||
+          verifyResponse.provider_reference ||
+          payment.paymentToken,
         completedAt: now,
         verifiedAt: now,
         updatedAt: now,
@@ -222,7 +277,6 @@ async function activatePremium(paymentId: number) {
     try {
       const planLabel = payment.plan === "premium" ? "Premium" : "Gold";
       const periodLabel = payment.billingPeriod === "monthly" ? "1 mois" : "1 an";
-      // On réutilise le template match pour l'instant (à améliorer plus tard)
       await sendMatchEmail(
         user.email,
         user.firstName,
@@ -233,7 +287,9 @@ async function activatePremium(paymentId: number) {
       // On ne bloque pas si l'email échoue
     }
 
-    console.log(`🎉 Premium ${payment.plan} activé pour user ${payment.userId} jusqu'au ${expiresAt.toISOString()}`);
+    console.log(
+      `🎉 Premium ${payment.plan} activé pour user ${payment.userId} jusqu'au ${expiresAt.toISOString()}`
+    );
   } catch (error) {
     console.error("❌ Erreur activatePremium:", error);
     throw error;
