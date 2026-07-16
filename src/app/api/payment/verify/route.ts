@@ -4,15 +4,15 @@ import { users, payments, subscriptions } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { getCurrentUserId } from "@/lib/auth";
 import {
-  verifyCinetPayPayment,
+  verifyPayDunyaInvoice,
   getSubscriptionExpiryDate,
   type BillingPeriod,
-} from "@/lib/cinetpay";
+} from "@/lib/paydunya";
 
 // ============================================
 // GET /api/payment/verify?tx=xxx
 // Vérifie manuellement le statut d'un paiement
-// Utilisé par la page /premium/success au retour de CinetPay
+// Utilisé par la page /premium/success au retour de PayDunya
 // ============================================
 export async function GET(req: NextRequest) {
   try {
@@ -71,12 +71,19 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // 6. Sinon, vérifier auprès de CinetPay (source de vérité)
+    // 6. Sinon, vérifier auprès de PayDunya (source de vérité)
+    if (!payment.paymentToken) {
+      return NextResponse.json(
+        { status: "pending", message: "Token de paiement manquant" },
+        { status: 200 }
+      );
+    }
+
     let verifyResponse;
     try {
-      verifyResponse = await verifyCinetPayPayment(merchantTransactionId);
+      verifyResponse = await verifyPayDunyaInvoice(payment.paymentToken);
     } catch (verifyError: any) {
-      console.error("❌ Erreur vérification CinetPay:", verifyError);
+      console.error("❌ Erreur vérification PayDunya:", verifyError);
       return NextResponse.json(
         {
           status: "pending",
@@ -86,15 +93,16 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const paymentData = verifyResponse.data;
-    const realStatus = paymentData?.status || "UNKNOWN";
+    const realStatus = verifyResponse.status;
 
-    console.log(`🔍 Verify - Statut CinetPay pour ${merchantTransactionId}: ${realStatus}`);
+    console.log(
+      `🔍 Verify - Statut PayDunya pour ${merchantTransactionId}: ${realStatus}`
+    );
 
     // 7. Traiter selon le statut réel
-    if (realStatus === "SUCCESS") {
+    if (realStatus === "completed") {
       // ✅ Activer le Premium (si pas déjà fait par le webhook)
-      await activatePremiumIfNeeded(payment.id);
+      await activatePremiumIfNeeded(payment.id, verifyResponse);
 
       return NextResponse.json({
         status: "success",
@@ -104,13 +112,16 @@ export async function GET(req: NextRequest) {
         amount: payment.amount,
         currency: payment.currency,
       });
-    } else if (realStatus === "FAILED" || realStatus === "CANCELLED") {
+    } else if (realStatus === "cancelled" || realStatus === "failed") {
       // ❌ Marquer comme échoué
       await db
         .update(payments)
         .set({
           status: "failed",
-          statusMessage: verifyResponse.message || "Paiement échoué",
+          statusMessage:
+            verifyResponse.fail_reason ||
+            verifyResponse.response_text ||
+            "Paiement échoué",
           verifiedAt: new Date(),
           updatedAt: new Date(),
         })
@@ -118,7 +129,10 @@ export async function GET(req: NextRequest) {
 
       return NextResponse.json({
         status: "failed",
-        message: verifyResponse.message || "Le paiement a échoué",
+        message:
+          verifyResponse.fail_reason ||
+          verifyResponse.response_text ||
+          "Le paiement a échoué",
         plan: payment.plan,
         billingPeriod: payment.billingPeriod,
       });
@@ -143,7 +157,7 @@ export async function GET(req: NextRequest) {
 // 💎 ACTIVER LE PREMIUM (si pas déjà fait)
 // Version simplifiée du webhook, pour double-sécurité
 // ============================================
-async function activatePremiumIfNeeded(paymentId: number) {
+async function activatePremiumIfNeeded(paymentId: number, verifyResponse: any) {
   try {
     // Récupérer le paiement (peut avoir été mis à jour par le webhook entretemps)
     const [payment] = await db
@@ -221,6 +235,11 @@ async function activatePremiumIfNeeded(paymentId: number) {
         status: "success",
         subscriptionId: subscription.id,
         statusMessage: "Paiement réussi - Premium activé",
+        paymentMethod: verifyResponse?.mode || null,
+        cinetpayTransactionId:
+          verifyResponse?.receipt_identifier ||
+          verifyResponse?.provider_reference ||
+          payment.paymentToken,
         completedAt: now,
         verifiedAt: now,
         updatedAt: now,
