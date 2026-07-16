@@ -4,18 +4,18 @@ import { users, payments } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { getCurrentUserId } from "@/lib/auth";
 import {
-  createCinetPayPayment,
+  createPayDunyaInvoice,
   generateMerchantTransactionId,
   getPaymentUrls,
   getPremiumPrice,
   getPaymentDesignation,
   type PremiumPlan,
   type BillingPeriod,
-} from "@/lib/cinetpay";
+} from "@/lib/paydunya";
 
 // ============================================
 // POST /api/payment/create
-// Crée un paiement CinetPay pour un plan Premium
+// Crée un paiement PayDunya pour un plan Premium
 // ============================================
 export async function POST(req: NextRequest) {
   try {
@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
     const {
       plan,          // 'premium' | 'gold'
       billingPeriod, // 'monthly' | 'yearly'
-      phone,         // numéro Mobile Money (optionnel mais recommandé)
+      phone,         // numéro Mobile Money (optionnel)
     } = body;
 
     // 3. Validation
@@ -89,48 +89,78 @@ export async function POST(req: NextRequest) {
     const merchantTransactionId = generateMerchantTransactionId(userId);
     const urls = getPaymentUrls(merchantTransactionId);
 
-    // 8. Créer le paiement chez CinetPay
-    const cinetpayResponse = await createCinetPayPayment({
-      amount,
-      currency: "XOF",
-      merchant_transaction_id: merchantTransactionId,
-      lang: "fr",
-      designation,
-      client_email: user.email,
-      client_first_name: user.firstName,
-      client_last_name: user.lastName,
-      client_phone_number: phone || undefined,
-      success_url: urls.success_url,
-      failed_url: urls.failed_url,
-      notify_url: urls.notify_url,
-      direct_pay: false, // false = redirection vers page CinetPay
+    // 8. Créer la facture chez PayDunya
+    const paydunyaResponse = await createPayDunyaInvoice({
+      invoice: {
+        total_amount: amount,
+        description: designation,
+        items: {
+          item_0: {
+            name: `LoveLink ${plan === "premium" ? "Premium" : "Gold"}`,
+            quantity: 1,
+            unit_price: String(amount),
+            total_price: String(amount),
+            description: `Abonnement ${billingPeriod === "monthly" ? "mensuel" : "annuel"} - ${plan === "premium" ? "Premium" : "Gold"}`,
+          },
+        },
+      },
+      store: {
+        name: "LoveLink",
+        tagline: "Trouvez l'amour, l'amitié et de belles connexions",
+        website_url: "https://lovelink237.com",
+        phone: "+221778161664",
+      },
+      custom_data: {
+        merchant_transaction_id: merchantTransactionId,
+        user_id: String(userId),
+        plan: plan,
+        billing_period: billingPeriod,
+        user_email: user.email,
+      },
+      actions: {
+        cancel_url: urls.cancel_url,
+        return_url: urls.return_url,
+        callback_url: urls.callback_url,
+      },
     });
 
-    // 9. Enregistrer le paiement en base (statut: pending)
+    // 9. Vérifier la réponse PayDunya
+    if (!paydunyaResponse.token || !paydunyaResponse.invoice_url) {
+      console.error("❌ Réponse PayDunya invalide:", paydunyaResponse);
+      return NextResponse.json(
+        {
+          error: "Erreur lors de la création du paiement PayDunya",
+          details: paydunyaResponse.response_text,
+        },
+        { status: 500 }
+      );
+    }
+
+    // 10. Enregistrer le paiement en base (statut: pending)
     await db.insert(payments).values({
       userId,
       merchantTransactionId,
-      cinetpayTransactionId: cinetpayResponse.transaction_id,
-      notifyToken: cinetpayResponse.notify_token,
-      paymentToken: cinetpayResponse.payment_token,
-      paymentUrl: cinetpayResponse.payment_url,
+      cinetpayTransactionId: paydunyaResponse.token, // On réutilise le champ pour stocker le token PayDunya
+      paymentToken: paydunyaResponse.token,
+      paymentUrl: paydunyaResponse.invoice_url,
       amount,
       currency: "XOF",
       plan,
       billingPeriod,
       status: "pending",
-      statusMessage: cinetpayResponse.details.message,
+      statusMessage: paydunyaResponse.response_text || "Paiement initié",
       clientEmail: user.email,
       clientFirstName: user.firstName,
       clientLastName: user.lastName,
       clientPhone: phone || null,
     });
 
-    // 10. Retourner l'URL de paiement au client
+    // 11. Retourner l'URL de paiement au client
     return NextResponse.json({
       success: true,
-      paymentUrl: cinetpayResponse.payment_url,
+      paymentUrl: paydunyaResponse.invoice_url,
       merchantTransactionId,
+      token: paydunyaResponse.token,
       amount,
       currency: "XOF",
       plan,
