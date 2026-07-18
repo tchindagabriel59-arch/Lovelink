@@ -10,8 +10,8 @@ export async function POST(req: NextRequest) {
   try {
     console.log('=== DEBUT CREATION PAIEMENT ===');
     
-    // CORRECTION ICI : utilisation de getCurrentUserId
-    const userId = await getCurrentUserId(req);
+    // SANS paramètre !
+    const userId = await getCurrentUserId();
     if (!userId) {
       console.log('Erreur: utilisateur non authentifie');
       return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
@@ -54,7 +54,6 @@ export async function POST(req: NextRequest) {
 
     const description = `LoveLink ${planNames[plan]} ${periodNames[billingPeriod]}`;
 
-    // Récupérer les infos de l'utilisateur avec l'ID
     const userResult = await db
       .select()
       .from(users)
@@ -72,7 +71,6 @@ export async function POST(req: NextRequest) {
     const returnUrl = `${siteUrl}/premium/success?txn=${merchantTransactionId}`;
     const cancelUrl = `${siteUrl}/premium/failed?txn=${merchantTransactionId}`;
 
-    // Appel direct PayDunya
     const mode = process.env.PAYDUNYA_MODE || 'test';
     const paydunyaUrl = mode === 'live'
       ? 'https://app.paydunya.com/api/v1/checkout-invoice/create'
@@ -150,7 +148,6 @@ export async function POST(req: NextRequest) {
       ? `https://paydunya.com/checkout/invoice/${paymentToken}`
       : `https://paydunya.com/sandbox-checkout/invoice/${paymentToken}`;
 
-    // Créer subscription pending
     const startsAt = new Date();
     const expiresAt = new Date();
     if (billingPeriod === 'monthly') {
