@@ -1,304 +1,138 @@
-"use client";
+'use client';
 
-import { useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import Link from "next/link";
-import {
-  CheckCircle2,
-  Loader2,
-  Crown,
-  Sparkles,
-  ArrowRight,
-  Heart,
-  Zap,
-  Eye,
-  Star,
-  EyeOff,
-  AlertCircle,
-} from "lucide-react";
-import { useUser } from "../../layout";
+import { useEffect, useState, Suspense } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
 
-type VerifyStatus = "loading" | "success" | "pending" | "failed" | "error";
-
-export default function PremiumSuccessPage() {
-  const router = useRouter();
+function SuccessContent() {
   const searchParams = useSearchParams();
-  const { refreshUser } = useUser();
-
-  const tx = searchParams.get("tx");
-
-  const [status, setStatus] = useState<VerifyStatus>("loading");
-  const [message, setMessage] = useState<string>("");
-  const [plan, setPlan] = useState<string>("");
-  const [billingPeriod, setBillingPeriod] = useState<string>("");
-  const [amount, setAmount] = useState<number>(0);
-  const [retryCount, setRetryCount] = useState(0);
+  const router = useRouter();
+  const [status, setStatus] = useState<'loading' | 'success' | 'pending' | 'failed'>('loading');
+  const [message, setMessage] = useState('Vérification de votre paiement...');
+  const [plan, setPlan] = useState<string>('');
 
   useEffect(() => {
-    if (!tx) {
-      setStatus("error");
-      setMessage("Transaction ID manquant");
+    const txn = searchParams.get('txn');
+    const token = searchParams.get('token');
+
+    if (!txn && !token) {
+      setStatus('failed');
+      setMessage('Transaction ID manquant');
       return;
     }
 
-    verifyPayment();
-  }, [tx]);
+    // Utiliser txn en priorité, sinon token
+    const verifyId = txn || token;
 
-  const verifyPayment = async () => {
-    try {
-      const res = await fetch(`/api/payment/verify?tx=${tx}`);
-      const data = await res.json();
-
-      if (!res.ok) {
-        setStatus("error");
-        setMessage(data.error || "Erreur lors de la vérification");
-        return;
-      }
-
-      setPlan(data.plan || "");
-      setBillingPeriod(data.billingPeriod || "");
-      setAmount(data.amount || 0);
-      setMessage(data.message || "");
-
-      if (data.status === "success") {
-        setStatus("success");
-        // Rafraîchir les infos user (isPremium sera à jour)
-        refreshUser();
-      } else if (data.status === "failed") {
-        setStatus("failed");
-      } else if (data.status === "pending") {
-        setStatus("pending");
-        // Retenter dans 3 secondes (max 10 fois = 30s)
-        if (retryCount < 10) {
-          setTimeout(() => {
-            setRetryCount((c) => c + 1);
-            verifyPayment();
-          }, 3000);
+    fetch(`/api/payment/verify?txn=${verifyId}`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          setStatus('success');
+          setMessage('Paiement réussi ! Votre compte Premium est activé.');
+          setPlan(data.plan || '');
+        } else if (data.status === 'pending') {
+          setStatus('pending');
+          setMessage('Paiement en cours de traitement...');
+          // Réessayer dans 3 secondes
+          setTimeout(() => window.location.reload(), 3000);
+        } else {
+          setStatus('failed');
+          setMessage(data.error || 'Le paiement n\'a pas été confirmé.');
         }
-      }
-    } catch (error) {
-      console.error("Erreur verify:", error);
-      setStatus("error");
-      setMessage("Erreur réseau. Veuillez rafraîchir la page.");
-    }
-  };
+      })
+      .catch(err => {
+        console.error('Erreur vérification:', err);
+        setStatus('failed');
+        setMessage('Erreur lors de la vérification du paiement');
+      });
+  }, [searchParams]);
 
-  const planLabel = plan === "premium" ? "Premium" : "Gold";
-  const periodLabel = billingPeriod === "monthly" ? "1 mois" : "1 an";
-
-  // ============================================
-  // ÉTAT : LOADING / PENDING
-  // ============================================
-  if (status === "loading" || status === "pending") {
-    return (
-      <div className="min-h-[80vh] flex items-center justify-center p-6">
-        <div className="max-w-md w-full bg-white rounded-3xl p-10 border border-slate-100 text-center shadow-xl">
-          <div className="w-20 h-20 mx-auto mb-6 relative">
-            <div className="absolute inset-0 bg-gradient-to-br from-amber-400 to-orange-500 rounded-full animate-pulse"></div>
-            <div className="absolute inset-2 bg-white rounded-full flex items-center justify-center">
-              <Loader2 className="w-10 h-10 text-amber-500 animate-spin" />
-            </div>
-          </div>
-          <h1 className="text-2xl font-bold text-slate-900 mb-3">
-            Vérification en cours...
-          </h1>
-          <p className="text-slate-600 mb-2">
-            Nous vérifions votre paiement auprès de CinetPay.
-          </p>
-          <p className="text-sm text-slate-400">
-            Cela peut prendre quelques secondes.
-          </p>
-          {retryCount > 0 && (
-            <p className="text-xs text-slate-400 mt-4">
-              Tentative {retryCount}/10...
-            </p>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  // ============================================
-  // ÉTAT : FAILED
-  // ============================================
-  if (status === "failed") {
-    return (
-      <div className="min-h-[80vh] flex items-center justify-center p-6">
-        <div className="max-w-md w-full bg-white rounded-3xl p-10 border border-slate-100 text-center shadow-xl">
-          <div className="w-20 h-20 mx-auto mb-6 bg-red-100 rounded-full flex items-center justify-center">
-            <AlertCircle className="w-10 h-10 text-red-500" />
-          </div>
-          <h1 className="text-2xl font-bold text-slate-900 mb-3">
-            Paiement échoué
-          </h1>
-          <p className="text-slate-600 mb-6">
-            {message || "Votre paiement n'a pas pu être finalisé."}
-          </p>
-          <div className="flex flex-col gap-3">
-            <Link
-              href="/premium"
-              className="px-6 py-3 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-xl font-semibold hover:shadow-lg transition-all"
-            >
-              Réessayer
-            </Link>
-            <Link
-              href="/dashboard"
-              className="px-6 py-3 bg-slate-100 text-slate-700 rounded-xl font-semibold hover:bg-slate-200 transition-all"
-            >
-              Retour à l&apos;accueil
-            </Link>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // ============================================
-  // ÉTAT : ERROR
-  // ============================================
-  if (status === "error") {
-    return (
-      <div className="min-h-[80vh] flex items-center justify-center p-6">
-        <div className="max-w-md w-full bg-white rounded-3xl p-10 border border-slate-100 text-center shadow-xl">
-          <div className="w-20 h-20 mx-auto mb-6 bg-slate-100 rounded-full flex items-center justify-center">
-            <AlertCircle className="w-10 h-10 text-slate-500" />
-          </div>
-          <h1 className="text-2xl font-bold text-slate-900 mb-3">
-            Erreur de vérification
-          </h1>
-          <p className="text-slate-600 mb-6">{message}</p>
-          <Link
-            href="/premium"
-            className="inline-block px-6 py-3 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-xl font-semibold hover:shadow-lg transition-all"
-          >
-            Retour à la page Premium
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
-  // ============================================
-  // ÉTAT : SUCCESS 🎉
-  // ============================================
   return (
-    <div className="min-h-[80vh] flex items-center justify-center p-4 lg:p-6">
-      <div className="max-w-2xl w-full">
-        {/* Card principale */}
-        <div className="bg-gradient-to-br from-amber-400 via-amber-500 to-orange-500 rounded-3xl p-1 shadow-2xl">
-          <div className="bg-white rounded-3xl p-8 lg:p-12 text-center">
-            {/* Icône animée */}
-            <div className="relative w-24 h-24 mx-auto mb-6">
-              <div className="absolute inset-0 bg-gradient-to-br from-amber-400 to-orange-500 rounded-full animate-pulse"></div>
-              <div className="absolute inset-2 bg-white rounded-full flex items-center justify-center">
-                <Crown className="w-12 h-12 text-amber-500" fill="currentColor" />
-              </div>
-              <Sparkles className="absolute -top-2 -right-2 w-6 h-6 text-amber-400 animate-pulse" />
-              <Sparkles className="absolute -bottom-2 -left-2 w-5 h-5 text-orange-400 animate-pulse" />
+    <div className="min-h-screen flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full text-center">
+        {status === 'loading' && (
+          <>
+            <div className="w-16 h-16 mx-auto mb-4 border-4 border-pink-500 border-t-transparent rounded-full animate-spin"></div>
+            <h1 className="text-2xl font-bold mb-2">Vérification...</h1>
+            <p className="text-gray-600">{message}</p>
+          </>
+        )}
+
+        {status === 'success' && (
+          <>
+            <div className="w-16 h-16 mx-auto mb-4 bg-green-100 rounded-full flex items-center justify-center">
+              <svg className="w-10 h-10 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
             </div>
-
-            {/* Titre */}
-            <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-gradient-to-r from-amber-100 to-orange-100 rounded-full mb-4">
-              <CheckCircle2 className="w-4 h-4 text-green-600" />
-              <span className="text-sm font-semibold text-amber-900">
-                Paiement confirmé
-              </span>
-            </div>
-
-            <h1 className="text-3xl lg:text-4xl font-bold text-slate-900 mb-3">
-              Bienvenue dans <span className="bg-gradient-to-r from-amber-500 to-orange-500 bg-clip-text text-transparent">{planLabel}</span> ! 🎉
-            </h1>
-
-            <p className="text-lg text-slate-600 mb-2">
-              Votre abonnement <strong>{planLabel}</strong> est actif pour{" "}
-              <strong>{periodLabel}</strong>.
-            </p>
-            <p className="text-sm text-slate-500 mb-8">
-              Montant : <strong>{amount.toLocaleString("fr-FR")} FCFA</strong>
-            </p>
-
-            {/* Avantages débloqués */}
-            <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-2xl p-6 mb-8 text-left">
-              <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-amber-500" />
-                Vos avantages sont maintenant actifs
-              </h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="flex items-center gap-3 p-3 bg-white rounded-xl">
-                  <div className="w-10 h-10 bg-gradient-to-br from-purple-100 to-purple-50 rounded-lg flex items-center justify-center">
-                    <Eye className="w-5 h-5 text-purple-600" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-slate-900">
-                      Voir qui vous like
-                    </p>
-                    <p className="text-xs text-slate-500">Photos débloquées</p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3 p-3 bg-white rounded-xl">
-                  <div className="w-10 h-10 bg-gradient-to-br from-blue-100 to-blue-50 rounded-lg flex items-center justify-center">
-                    <Star className="w-5 h-5 text-blue-600" fill="currentColor" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-slate-900">
-                      Super Likes x5
-                    </p>
-                    <p className="text-xs text-slate-500">Au lieu de 1/jour</p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3 p-3 bg-white rounded-xl">
-                  <div className="w-10 h-10 bg-gradient-to-br from-rose-100 to-rose-50 rounded-lg flex items-center justify-center">
-                    <Zap className="w-5 h-5 text-rose-600" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-slate-900">
-                      Boost x3/jour
-                    </p>
-                    <p className="text-xs text-slate-500">Au lieu de 1/24h</p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3 p-3 bg-white rounded-xl">
-                  <div className="w-10 h-10 bg-gradient-to-br from-slate-100 to-slate-50 rounded-lg flex items-center justify-center">
-                    <EyeOff className="w-5 h-5 text-slate-600" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-slate-900">
-                      Mode Incognito
-                    </p>
-                    <p className="text-xs text-slate-500">Profil invisible</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* CTA */}
-            <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            <h1 className="text-2xl font-bold mb-2 text-green-600">Paiement Réussi ! 🎉</h1>
+            <p className="text-gray-600 mb-6">{message}</p>
+            {plan && (
+              <p className="text-sm text-gray-500 mb-4">
+                Plan activé : <strong className="capitalize">{plan}</strong>
+              </p>
+            )}
+            <div className="space-y-3">
+              <Link
+                href="/profile"
+                className="block w-full bg-gradient-to-r from-pink-500 to-purple-600 text-white py-3 rounded-xl font-semibold hover:opacity-90 transition"
+              >
+                Voir mon profil Premium 💎
+              </Link>
               <Link
                 href="/discover"
-                className="inline-flex items-center justify-center gap-2 px-6 py-3.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-xl font-semibold hover:shadow-lg hover:shadow-amber-500/30 transition-all"
+                className="block w-full border-2 border-pink-500 text-pink-500 py-3 rounded-xl font-semibold hover:bg-pink-50 transition"
               >
-                <Heart className="w-5 h-5" />
                 Découvrir des profils
-                <ArrowRight className="w-4 h-4" />
-              </Link>
-              <Link
-                href="/likes-recus"
-                className="inline-flex items-center justify-center gap-2 px-6 py-3.5 bg-white border-2 border-amber-200 text-amber-700 rounded-xl font-semibold hover:bg-amber-50 transition-all"
-              >
-                <Eye className="w-5 h-5" />
-                Voir qui vous like
               </Link>
             </div>
+          </>
+        )}
 
-            <p className="text-xs text-slate-400 mt-6">
-              Un email de confirmation a été envoyé à votre adresse.
-            </p>
-          </div>
-        </div>
+        {status === 'pending' && (
+          <>
+            <div className="w-16 h-16 mx-auto mb-4 bg-yellow-100 rounded-full flex items-center justify-center">
+              <svg className="w-10 h-10 text-yellow-600 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <h1 className="text-2xl font-bold mb-2 text-yellow-600">Paiement en cours...</h1>
+            <p className="text-gray-600 mb-6">{message}</p>
+            <p className="text-sm text-gray-500">Cette page se rafraîchit automatiquement</p>
+          </>
+        )}
+
+        {status === 'failed' && (
+          <>
+            <div className="w-16 h-16 mx-auto mb-4 bg-red-100 rounded-full flex items-center justify-center">
+              <svg className="w-10 h-10 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </div>
+            <h1 className="text-2xl font-bold mb-2 text-red-600">Erreur de vérification</h1>
+            <p className="text-gray-600 mb-6">{message}</p>
+            <Link
+              href="/premium"
+              className="inline-block bg-orange-500 text-white px-6 py-3 rounded-xl font-semibold hover:bg-orange-600 transition"
+            >
+              Retour à la page Premium
+            </Link>
+          </>
+        )}
       </div>
     </div>
+  );
+}
+
+export default function SuccessPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="w-16 h-16 border-4 border-pink-500 border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    }>
+      <SuccessContent />
+    </Suspense>
   );
 }
