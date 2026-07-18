@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { payments, subscriptions, users } from '@/db/schema';
-import { getCurrentUser } from '@/lib/auth';
+import { getCurrentUserId } from '@/lib/auth';
 import { eq } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
 
@@ -10,12 +10,13 @@ export async function POST(req: NextRequest) {
   try {
     console.log('=== DEBUT CREATION PAIEMENT ===');
     
-    const currentUser = await getCurrentUser(req);
-    if (!currentUser) {
+    // CORRECTION ICI : utilisation de getCurrentUserId
+    const userId = await getCurrentUserId(req);
+    if (!userId) {
       console.log('Erreur: utilisateur non authentifie');
       return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
     }
-    console.log('User connecte:', currentUser.id);
+    console.log('User connecte ID:', userId);
 
     const body = await req.json();
     const { plan, billingPeriod, phone } = body;
@@ -53,10 +54,11 @@ export async function POST(req: NextRequest) {
 
     const description = `LoveLink ${planNames[plan]} ${periodNames[billingPeriod]}`;
 
+    // Récupérer les infos de l'utilisateur avec l'ID
     const userResult = await db
       .select()
       .from(users)
-      .where(eq(users.id, currentUser.id))
+      .where(eq(users.id, userId))
       .limit(1);
 
     if (!userResult[0]) {
@@ -110,12 +112,11 @@ export async function POST(req: NextRequest) {
       },
       custom_data: {
         merchant_transaction_id: merchantTransactionId,
-        user_id: String(currentUser.id),
+        user_id: String(userId),
       },
     };
 
     console.log('Appel PayDunya URL:', paydunyaUrl);
-    console.log('Mode:', mode);
 
     const paydunyaResponse = await fetch(paydunyaUrl, {
       method: 'POST',
@@ -161,7 +162,7 @@ export async function POST(req: NextRequest) {
     const [newSubscription] = await db
       .insert(subscriptions)
       .values({
-        userId: currentUser.id,
+        userId: userId,
         plan: plan as 'premium' | 'gold',
         billingPeriod: billingPeriod as 'monthly' | 'yearly',
         amount,
@@ -174,7 +175,7 @@ export async function POST(req: NextRequest) {
       .returning();
 
     await db.insert(payments).values({
-      userId: currentUser.id,
+      userId: userId,
       subscriptionId: newSubscription.id,
       merchantTransactionId,
       cinetpayTransactionId: paymentToken,
@@ -208,7 +209,6 @@ export async function POST(req: NextRequest) {
       { 
         error: 'Erreur serveur', 
         details: error instanceof Error ? error.message : String(error),
-        stack: error instanceof Error ? error.stack : undefined,
       },
       { status: 500 }
     );
