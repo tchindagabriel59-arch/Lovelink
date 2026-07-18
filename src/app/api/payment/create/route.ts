@@ -78,18 +78,21 @@ export async function POST(req: NextRequest) {
 
     const paydunyaBody = {
       invoice: {
-        items: {
-          item_0: {
-            name: description,
-            quantity: 1,
-            unit_price: String(amount),
-            total_price: String(amount),
-            description: description,
-          }
-        },
-        total_amount: amount,
-        description: description,
-      },
+  items: {
+    item_0: {
+      name: description,
+      quantity: 1,
+      unit_price: String(amount),
+      total_price: String(amount),
+      description: description,
+    },
+  },
+  total_amount: amount,
+  description: description,
+
+  // IMPORTANT: afficher les moyens de paiement (sinon wallet/login)
+  channels: ['card', 'orange-money-senegal', 'wave-senegal', 'free-money-senegal'],
+},
       store: {
         name: 'LoveLink',
         tagline: 'Trouvez l amour avec LoveLink',
