@@ -1,253 +1,155 @@
-import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/db";
-import { users, payments, subscriptions } from "@/db/schema";
-import { eq } from "drizzle-orm";
-import { getCurrentUserId } from "@/lib/auth";
-import {
-  verifyPayDunyaInvoice,
-  getSubscriptionExpiryDate,
-  type BillingPeriod,
-} from "@/lib/paydunya";
+// src/app/api/payment/verify/route.ts
+import { NextRequest, NextResponse } from 'next/server';
+import { db } from '@/db';
+import { payments, subscriptions, users } from '@/db/schema';
+import { getCurrentUserId } from '@/lib/auth';
+import { eq, or } from 'drizzle-orm';
 
-// ============================================
-// GET /api/payment/verify?tx=xxx
-// Vérifie manuellement le statut d'un paiement
-// Utilisé par la page /premium/success au retour de PayDunya
-// ============================================
 export async function GET(req: NextRequest) {
   try {
-    // 1. Vérifier que l'user est connecté
     const userId = await getCurrentUserId();
     if (!userId) {
-      return NextResponse.json(
-        { error: "Non autorisé" },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
     }
 
-    // 2. Récupérer le merchant_transaction_id depuis l'URL
     const { searchParams } = new URL(req.url);
-    const merchantTransactionId = searchParams.get("tx");
+    const txn = searchParams.get('txn');
 
-    if (!merchantTransactionId) {
-      return NextResponse.json(
-        { error: "Paramètre 'tx' manquant" },
-        { status: 400 }
-      );
+    if (!txn) {
+      return NextResponse.json({ error: 'Transaction ID manquant' }, { status: 400 });
     }
 
-    // 3. Retrouver le paiement en base
-    const [payment] = await db
+    console.log('Verification pour txn:', txn);
+
+    // Chercher par merchantTransactionId OU paymentToken
+    const paymentResult = await db
       .select()
       .from(payments)
-      .where(eq(payments.merchantTransactionId, merchantTransactionId))
+      .where(
+        or(
+          eq(payments.merchantTransactionId, txn),
+          eq(payments.paymentToken, txn)
+        )
+      )
       .limit(1);
 
-    if (!payment) {
-      return NextResponse.json(
-        { error: "Paiement introuvable" },
-        { status: 404 }
-      );
+    if (!paymentResult[0]) {
+      return NextResponse.json({ error: 'Paiement non trouvé' }, { status: 404 });
     }
 
-    // 4. Sécurité : vérifier que le paiement appartient bien à l'user
+    const payment = paymentResult[0];
+
     if (payment.userId !== userId) {
-      return NextResponse.json(
-        { error: "Accès refusé" },
-        { status: 403 }
-      );
+      return NextResponse.json({ error: 'Non autorisé' }, { status: 403 });
     }
 
-    // 5. Si déjà traité (success/failed), retourner directement
-    if (payment.status === "success" || payment.status === "failed") {
+    // Si déjà success en DB
+    if (payment.status === 'success') {
       return NextResponse.json({
-        status: payment.status,
-        message: payment.statusMessage,
+        success: true,
+        status: 'success',
         plan: payment.plan,
         billingPeriod: payment.billingPeriod,
-        amount: payment.amount,
-        currency: payment.currency,
-        completedAt: payment.completedAt,
       });
     }
 
-    // 6. Sinon, vérifier auprès de PayDunya (source de vérité)
-    if (!payment.paymentToken) {
-      return NextResponse.json(
-        { status: "pending", message: "Token de paiement manquant" },
-        { status: 200 }
-      );
-    }
+    // Vérifier via PayDunya API
+    if (payment.paymentToken) {
+      const mode = process.env.PAYDUNYA_MODE || 'test';
+      const paydunyaUrl = mode === 'live'
+        ? `https://app.paydunya.com/api/v1/checkout-invoice/confirm/${payment.paymentToken}`
+        : `https://app.paydunya.com/sandbox-api/v1/checkout-invoice/confirm/${payment.paymentToken}`;
 
-    let verifyResponse;
-    try {
-      verifyResponse = await verifyPayDunyaInvoice(payment.paymentToken);
-    } catch (verifyError: any) {
-      console.error("❌ Erreur vérification PayDunya:", verifyError);
-      return NextResponse.json(
-        {
-          status: "pending",
-          message: "Vérification en cours, veuillez patienter...",
+      const paydunyaResponse = await fetch(paydunyaUrl, {
+        method: 'GET',
+        headers: {
+          'PAYDUNYA-MASTER-KEY': process.env.PAYDUNYA_MASTER_KEY || '',
+          'PAYDUNYA-PUBLIC-KEY': process.env.PAYDUNYA_PUBLIC_KEY || '',
+          'PAYDUNYA-PRIVATE-KEY': process.env.PAYDUNYA_PRIVATE_KEY || '',
+          'PAYDUNYA-TOKEN': process.env.PAYDUNYA_TOKEN || '',
+          'Content-Type': 'application/json',
         },
-        { status: 200 }
-      );
-    }
+      });
 
-    const realStatus = verifyResponse.status;
+      const statusData = await paydunyaResponse.json();
+      console.log('Statut PayDunya:', statusData);
 
-    console.log(
-      `🔍 Verify - Statut PayDunya pour ${merchantTransactionId}: ${realStatus}`
-    );
+      const paydunyaStatus = statusData?.status?.toLowerCase() || '';
+      let interpretedStatus: 'pending' | 'success' | 'failed' | 'cancelled' = 'pending';
 
-    // 7. Traiter selon le statut réel
-    if (realStatus === "completed") {
-      // ✅ Activer le Premium (si pas déjà fait par le webhook)
-      await activatePremiumIfNeeded(payment.id, verifyResponse);
+      if (paydunyaStatus === 'completed') {
+        interpretedStatus = 'success';
+      } else if (paydunyaStatus === 'cancelled' || paydunyaStatus === 'canceled') {
+        interpretedStatus = 'cancelled';
+      } else if (paydunyaStatus === 'failed' || paydunyaStatus === 'expired') {
+        interpretedStatus = 'failed';
+      }
+
+      // Mettre à jour
+      if (interpretedStatus !== payment.status) {
+        await db
+          .update(payments)
+          .set({
+            status: interpretedStatus,
+            verifiedAt: new Date(),
+            completedAt: interpretedStatus === 'success' ? new Date() : payment.completedAt,
+            updatedAt: new Date(),
+          })
+          .where(eq(payments.id, payment.id));
+
+        // Activer Premium si succès
+        if (interpretedStatus === 'success') {
+          const expiresAt = new Date();
+          if (payment.billingPeriod === 'monthly') {
+            expiresAt.setMonth(expiresAt.getMonth() + 1);
+          } else {
+            expiresAt.setFullYear(expiresAt.getFullYear() + 1);
+          }
+
+          if (payment.subscriptionId) {
+            await db
+              .update(subscriptions)
+              .set({
+                status: 'active',
+                startsAt: new Date(),
+                expiresAt,
+                updatedAt: new Date(),
+              })
+              .where(eq(subscriptions.id, payment.subscriptionId));
+          }
+
+          await db
+            .update(users)
+            .set({
+              isPremium: true,
+              premiumPlan: payment.plan,
+              premiumExpiresAt: expiresAt,
+              updatedAt: new Date(),
+            })
+            .where(eq(users.id, payment.userId));
+
+          console.log(`Premium active pour user ${payment.userId}`);
+        }
+      }
 
       return NextResponse.json({
-        status: "success",
-        message: "Paiement réussi ! Premium activé.",
+        success: interpretedStatus === 'success',
+        status: interpretedStatus,
         plan: payment.plan,
         billingPeriod: payment.billingPeriod,
-        amount: payment.amount,
-        currency: payment.currency,
-      });
-    } else if (realStatus === "cancelled" || realStatus === "failed") {
-      // ❌ Marquer comme échoué
-      await db
-        .update(payments)
-        .set({
-          status: "failed",
-          statusMessage:
-            verifyResponse.fail_reason ||
-            verifyResponse.response_text ||
-            "Paiement échoué",
-          verifiedAt: new Date(),
-          updatedAt: new Date(),
-        })
-        .where(eq(payments.id, payment.id));
-
-      return NextResponse.json({
-        status: "failed",
-        message:
-          verifyResponse.fail_reason ||
-          verifyResponse.response_text ||
-          "Le paiement a échoué",
-        plan: payment.plan,
-        billingPeriod: payment.billingPeriod,
-      });
-    } else {
-      // ⏳ Toujours en attente
-      return NextResponse.json({
-        status: "pending",
-        message: "Paiement en cours de traitement, veuillez patienter...",
-        realStatus,
       });
     }
-  } catch (error: any) {
-    console.error("❌ Erreur GET /api/payment/verify:", error);
+
+    return NextResponse.json({
+      success: false,
+      status: payment.status,
+    });
+
+  } catch (error) {
+    console.error('Erreur vérification paiement:', error);
     return NextResponse.json(
-      { error: error.message || "Erreur serveur" },
+      { error: 'Erreur serveur', details: String(error) },
       { status: 500 }
     );
-  }
-}
-
-// ============================================
-// 💎 ACTIVER LE PREMIUM (si pas déjà fait)
-// Version simplifiée du webhook, pour double-sécurité
-// ============================================
-async function activatePremiumIfNeeded(paymentId: number, verifyResponse: any) {
-  try {
-    // Récupérer le paiement (peut avoir été mis à jour par le webhook entretemps)
-    const [payment] = await db
-      .select()
-      .from(payments)
-      .where(eq(payments.id, paymentId))
-      .limit(1);
-
-    if (!payment) return;
-
-    // Si déjà activé, ne rien faire
-    if (payment.status === "success") {
-      return;
-    }
-
-    // Récupérer l'utilisateur
-    const [user] = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, payment.userId))
-      .limit(1);
-
-    if (!user) return;
-
-    // Calculer la date d'expiration (avec prolongation si déjà Premium)
-    let expiresAt: Date;
-    const now = new Date();
-
-    if (
-      user.premiumExpiresAt &&
-      new Date(user.premiumExpiresAt) > now
-    ) {
-      const currentExpiry = new Date(user.premiumExpiresAt);
-      if (payment.billingPeriod === "monthly") {
-        currentExpiry.setMonth(currentExpiry.getMonth() + 1);
-      } else {
-        currentExpiry.setFullYear(currentExpiry.getFullYear() + 1);
-      }
-      expiresAt = currentExpiry;
-    } else {
-      expiresAt = getSubscriptionExpiryDate(payment.billingPeriod as BillingPeriod);
-    }
-
-    // Créer la subscription
-    const [subscription] = await db
-      .insert(subscriptions)
-      .values({
-        userId: payment.userId,
-        plan: payment.plan,
-        billingPeriod: payment.billingPeriod,
-        amount: payment.amount,
-        currency: payment.currency,
-        status: "active",
-        startsAt: now,
-        expiresAt,
-        autoRenew: false,
-      })
-      .returning();
-
-    // Mettre à jour le user
-    await db
-      .update(users)
-      .set({
-        isPremium: true,
-        premiumExpiresAt: expiresAt,
-        premiumPlan: payment.plan,
-        updatedAt: new Date(),
-      })
-      .where(eq(users.id, payment.userId));
-
-    // Mettre à jour le paiement
-    await db
-      .update(payments)
-      .set({
-        status: "success",
-        subscriptionId: subscription.id,
-        statusMessage: "Paiement réussi - Premium activé",
-        paymentMethod: verifyResponse?.mode || null,
-        cinetpayTransactionId:
-          verifyResponse?.receipt_identifier ||
-          verifyResponse?.provider_reference ||
-          payment.paymentToken,
-        completedAt: now,
-        verifiedAt: now,
-        updatedAt: now,
-      })
-      .where(eq(payments.id, paymentId));
-
-    console.log(`🎉 Premium activé via verify pour user ${payment.userId}`);
-  } catch (error) {
-    console.error("❌ Erreur activatePremiumIfNeeded:", error);
   }
 }
