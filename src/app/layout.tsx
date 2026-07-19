@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import "./globals.css";
 import CookieBanner from "./components/CookieBanner";
+import FacebookPixel from './components/FacebookPixel';
 
 const SITE_URL = "https://lovelink237.com";
 const SITE_NAME = "LoveLink";
@@ -86,6 +87,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <meta name="mobile-web-app-capable" content="yes" />
       </head>
       <body className="bg-slate-50 text-slate-900 antialiased min-h-screen">
+        <FacebookPixel />
         {children}
         <CookieBanner />
       </body>
