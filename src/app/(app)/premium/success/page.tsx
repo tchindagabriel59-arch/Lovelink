@@ -4,12 +4,20 @@ import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 
+// Déclaration TypeScript pour Facebook Pixel
+declare global {
+  interface Window {
+    fbq: (...args: any[]) => void;
+  }
+}
+
 function SuccessContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [status, setStatus] = useState<'loading' | 'success' | 'pending' | 'failed'>('loading');
   const [message, setMessage] = useState('Vérification de votre paiement...');
   const [plan, setPlan] = useState<string>('');
+  const [pixelTracked, setPixelTracked] = useState(false);
 
   useEffect(() => {
     const txn = searchParams.get('txn');
@@ -21,7 +29,6 @@ function SuccessContent() {
       return;
     }
 
-    // Utiliser txn en priorité, sinon token
     const verifyId = txn || token;
 
     fetch(`/api/payment/verify?txn=${verifyId}`)
@@ -31,10 +38,46 @@ function SuccessContent() {
           setStatus('success');
           setMessage('Paiement réussi ! Votre compte Premium est activé.');
           setPlan(data.plan || '');
+
+          // 🎯 FACEBOOK PIXEL - Tracker le PURCHASE réussi
+          if (!pixelTracked && typeof window !== 'undefined' && typeof window.fbq === 'function') {
+            // Prix approximatif selon le plan
+            const prices: Record<string, number> = {
+              premium: data.billingPeriod === 'yearly' ? 21000 : 2500,
+              gold: data.billingPeriod === 'yearly' ? 42000 : 5000,
+            };
+            const priceFCFA = prices[data.plan] || 2500;
+            const priceUSD = priceFCFA / 600; // Conversion FCFA → USD approximative
+
+            window.fbq('track', 'Purchase', {
+              content_name: `LoveLink ${data.plan}`,
+              content_category: 'Subscription',
+              content_ids: [data.plan],
+              content_type: 'product',
+              value: priceUSD,
+              currency: 'USD',
+              num_items: 1,
+            });
+
+            // Événement personnalisé avec le vrai montant en FCFA
+            window.fbq('trackCustom', 'PurchaseFCFA', {
+              plan: data.plan,
+              billing_period: data.billingPeriod,
+              value_fcfa: priceFCFA,
+              currency: 'XOF',
+            });
+
+            console.log('✅ Facebook Pixel: Purchase tracked', {
+              plan: data.plan,
+              value: priceUSD,
+              currency: 'USD',
+            });
+
+            setPixelTracked(true);
+          }
         } else if (data.status === 'pending') {
           setStatus('pending');
           setMessage('Paiement en cours de traitement...');
-          // Réessayer dans 3 secondes
           setTimeout(() => window.location.reload(), 3000);
         } else {
           setStatus('failed');
@@ -46,7 +89,7 @@ function SuccessContent() {
         setStatus('failed');
         setMessage('Erreur lors de la vérification du paiement');
       });
-  }, [searchParams]);
+  }, [searchParams, pixelTracked]);
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
