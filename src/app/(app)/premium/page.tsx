@@ -5,6 +5,13 @@ import { useRouter } from 'next/navigation';
 import { useUser } from '../layout';
 import { X, Loader2, Phone, ShieldCheck, Sparkles, AlertCircle } from 'lucide-react';
 
+// Déclaration TypeScript pour Facebook Pixel
+declare global {
+  interface Window {
+    fbq: (...args: any[]) => void;
+  }
+}
+
 const plans = [
   {
     id: 'basic',
@@ -101,7 +108,7 @@ const plans = [
 const faq = [
   {
     q: 'Comment fonctionne le paiement ?',
-    a: 'Le paiement se fait de manière sécurisée via CinetPay. Nous acceptons Orange Money, Wave, MTN Mobile Money et cartes bancaires. Ton abonnement est activé immédiatement après confirmation.',
+    a: 'Le paiement se fait de manière sécurisée via PayDunya. Nous acceptons Orange Money, Wave, MTN Mobile Money, Free Money et cartes bancaires. Ton abonnement est activé immédiatement après confirmation.',
   },
   {
     q: 'Puis-je annuler mon abonnement ?',
@@ -109,7 +116,7 @@ const faq = [
   },
   {
     q: 'Quels moyens de paiement sont acceptés ?',
-    a: 'Orange Money, Wave, MTN Mobile Money, Free Money, et cartes bancaires (Visa, Mastercard). Tous les paiements sont sécurisés par CinetPay.',
+    a: 'Orange Money, Wave, MTN Mobile Money, Free Money, Djamo, Expresso, et cartes bancaires (Visa, Mastercard). Tous les paiements sont sécurisés par PayDunya.',
   },
   {
     q: 'Le plan Basic restera-t-il gratuit ?',
@@ -136,6 +143,22 @@ export default function PremiumPage() {
     setError(null);
     setPhone('');
     setModalOpen(true);
+
+    // 🎯 FACEBOOK PIXEL - Tracker l'intérêt pour un plan
+    if (typeof window !== 'undefined' && typeof window.fbq === 'function') {
+      const plan = plans.find(p => p.id === planId);
+      const price = billing === 'yearly' ? plan?.priceYearly : plan?.priceMonthly;
+      
+      window.fbq('track', 'AddToCart', {
+        content_name: `LoveLink ${planId}`,
+        content_category: 'Subscription',
+        content_ids: [planId],
+        content_type: 'product',
+        value: (price || 0) / 600, // Conversion approximative FCFA vers USD
+        currency: 'USD',
+      });
+      console.log('✅ Facebook Pixel: AddToCart tracked');
+    }
   };
 
   const closeModal = () => {
@@ -151,6 +174,22 @@ export default function PremiumPage() {
 
     setProcessing(true);
     setError(null);
+
+    // 🎯 FACEBOOK PIXEL - Tracker le début du paiement
+    if (typeof window !== 'undefined' && typeof window.fbq === 'function') {
+      const plan = plans.find(p => p.id === selectedPlan);
+      const price = billing === 'yearly' ? plan?.priceYearly : plan?.priceMonthly;
+      
+      window.fbq('track', 'InitiateCheckout', {
+        content_name: `LoveLink ${selectedPlan}`,
+        content_category: 'Subscription',
+        content_ids: [selectedPlan],
+        value: (price || 0) / 600, // Conversion FCFA vers USD approximative
+        currency: 'USD',
+        num_items: 1,
+      });
+      console.log('✅ Facebook Pixel: InitiateCheckout tracked');
+    }
 
     try {
       const res = await fetch('/api/payment/create', {
@@ -171,7 +210,7 @@ export default function PremiumPage() {
         return;
       }
 
-      // ✅ Redirection vers CinetPay
+      // ✅ Redirection vers PayDunya
       if (data.paymentUrl) {
         window.location.href = data.paymentUrl;
       } else {
@@ -202,7 +241,7 @@ export default function PremiumPage() {
         <div className="relative z-10">
           <div className="inline-flex items-center gap-2 bg-white/20 backdrop-blur px-4 py-2 rounded-full text-sm font-medium mb-6">
             <Sparkles className="w-4 h-4" />
-            Paiement sécurisé par CinetPay
+            Paiement sécurisé par PayDunya
           </div>
           <h1 className="text-4xl md:text-5xl font-black mb-4">
             Passe à la vitesse supérieure
@@ -342,7 +381,7 @@ export default function PremiumPage() {
               Paiement 100% sécurisé
             </h2>
             <p className="text-white/90 max-w-xl mx-auto mb-6">
-              Tous les paiements sont traités de manière sécurisée par CinetPay,
+              Tous les paiements sont traités de manière sécurisée par PayDunya,
               leader africain des paiements en ligne.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center flex-wrap">
@@ -598,7 +637,7 @@ export default function PremiumPage() {
                     Paiement 100% sécurisé
                   </p>
                   <p className="text-xs text-green-700">
-                    Traité par CinetPay, leader africain
+                    Traité par PayDunya, leader africain
                   </p>
                 </div>
               </div>
