@@ -5,6 +5,13 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Heart, ArrowRight, Eye, EyeOff } from "lucide-react";
 
+// Déclaration TypeScript pour Facebook Pixel
+declare global {
+  interface Window {
+    fbq: (...args: any[]) => void;
+  }
+}
+
 export default function RegisterPage() {
   const router = useRouter();
   const [step, setStep] = useState(1);
@@ -100,6 +107,18 @@ export default function RegisterPage() {
         setError(data.error || "Erreur lors de l'inscription");
         return;
       }
+
+      // 🎯 FACEBOOK PIXEL - Tracker l'inscription réussie
+      if (typeof window !== "undefined" && typeof window.fbq === "function") {
+        window.fbq("track", "CompleteRegistration", {
+          content_name: "LoveLink Registration",
+          status: true,
+          currency: "USD",
+          value: 0,
+        });
+        console.log("✅ Facebook Pixel: CompleteRegistration tracked");
+      }
+
       router.push("/dashboard");
     } catch {
       setError("Erreur de connexion au serveur");
