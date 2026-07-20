@@ -27,42 +27,38 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const filter = searchParams.get("filter") ?? "pending";
 
+    // Sélectionner TOUS les champs nécessaires (avec les photos)
+    const selectFields = {
+      id: users.id,
+      firstName: users.firstName,
+      lastName: users.lastName,
+      email: users.email,
+      photoUrl: users.photoUrl,
+      photo1Url: users.photo1Url,
+      photo2Url: users.photo2Url,
+      photo3Url: users.photo3Url,
+      photo4Url: users.photo4Url,
+      verificationStatus: users.verificationStatus,
+      verificationPhotoUrl: users.verificationPhotoUrl,
+      verificationSubmittedAt: users.verificationSubmittedAt,
+      verificationReviewedAt: users.verificationReviewedAt,
+      verificationRejectedReason: users.verificationRejectedReason,
+      isVerified: users.isVerified,
+      isPremium: users.isPremium,
+    };
+
     let allRequests;
 
     if (filter === "all") {
       allRequests = await db
-        .select({
-          id: users.id,
-          firstName: users.firstName,
-          lastName: users.lastName,
-          email: users.email,
-          photoUrl: users.photoUrl,
-          verificationStatus: users.verificationStatus,
-          verificationPhotoUrl: users.verificationPhotoUrl,
-          verificationSubmittedAt: users.verificationSubmittedAt,
-          verificationReviewedAt: users.verificationReviewedAt,
-          verificationRejectedReason: users.verificationRejectedReason,
-          isVerified: users.isVerified,
-        })
+        .select(selectFields)
         .from(users)
         .where(isNotNull(users.verificationStatus));
     } else {
       allRequests = await db
-        .select({
-          id: users.id,
-          firstName: users.firstName,
-          lastName: users.lastName,
-          email: users.email,
-          photoUrl: users.photoUrl,
-          verificationStatus: users.verificationStatus,
-          verificationPhotoUrl: users.verificationPhotoUrl,
-          verificationSubmittedAt: users.verificationSubmittedAt,
-          verificationReviewedAt: users.verificationReviewedAt,
-          verificationRejectedReason: users.verificationRejectedReason,
-          isVerified: users.isVerified,
-        })
+        .select(selectFields)
         .from(users)
-        .where(eq(users.verificationStatus, filter));
+        .where(eq(users.verificationStatus, filter as "pending" | "approved" | "rejected"));
     }
 
     const pendingRequests = await db
@@ -70,8 +66,9 @@ export async function GET(req: NextRequest) {
       .from(users)
       .where(eq(users.verificationStatus, "pending"));
 
+    // 🎯 CORRECTION : renvoyer "verifications" au lieu de "requests"
     return NextResponse.json({
-      requests: allRequests,
+      verifications: allRequests,
       pendingCount: pendingRequests.length,
     });
   } catch (error) {
@@ -98,9 +95,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
     }
 
-    const { userId, action, reason } = await req.json();
+    // 🎯 CORRECTION : accepter targetUserId (envoyé par le frontend) OU userId
+    const body = await req.json();
+    const targetUserId = body.targetUserId || body.userId;
+    const action = body.action;
+    const reason = body.reason;
 
-    if (!userId || !action) {
+    if (!targetUserId || !action) {
       return NextResponse.json(
         { error: "Données manquantes" },
         { status: 400 }
@@ -117,7 +118,7 @@ export async function POST(req: NextRequest) {
     const targetUser = await db
       .select()
       .from(users)
-      .where(eq(users.id, userId))
+      .where(eq(users.id, targetUserId))
       .limit(1);
 
     if (targetUser.length === 0) {
@@ -138,24 +139,29 @@ export async function POST(req: NextRequest) {
           verificationReviewedAt: new Date(),
           verificationRejectedReason: null,
         })
-        .where(eq(users.id, userId));
+        .where(eq(users.id, targetUserId));
 
       await createNotification({
-        userId,
+        userId: targetUserId,
         type: "match",
         fromUserId: adminId,
         content:
           "✅ Félicitations ! Votre badge de vérification a été approuvé. Le badge bleu apparaît maintenant sur votre profil !",
       });
 
-      await sendPushToUser(userId, PushTemplates.verified());
+      try {
+        await sendPushToUser(targetUserId, PushTemplates.verified());
+      } catch (err) {
+        console.error("Erreur push notification:", err);
+      }
 
       return NextResponse.json({
         success: true,
-        message: `Badge bleu approuvé pour ${target.firstName}`,
+        message: `✅ Badge bleu approuvé pour ${target.firstName}`,
       });
     }
 
+    // Rejet
     await db
       .update(users)
       .set({
@@ -164,10 +170,10 @@ export async function POST(req: NextRequest) {
         verificationReviewedAt: new Date(),
         verificationRejectedReason: reason ?? "Non conforme",
       })
-      .where(eq(users.id, userId));
+      .where(eq(users.id, targetUserId));
 
     await createNotification({
-      userId,
+      userId: targetUserId,
       type: "match",
       fromUserId: adminId,
       content: `❌ Votre demande de vérification a été refusée. Raison : ${
@@ -175,20 +181,24 @@ export async function POST(req: NextRequest) {
       }. Vous pouvez soumettre une nouvelle demande.`,
     });
 
-    await sendPushToUser(userId, {
-      title: "❌ Demande de vérification refusée",
-      body: `Raison : ${
-        reason ?? "Non conforme"
-      }. Vous pouvez soumettre une nouvelle demande.`,
-      icon: "/icon",
-      badge: "/icon",
-      url: "/verification",
-      tag: "verification-rejected",
-    });
+    try {
+      await sendPushToUser(targetUserId, {
+        title: "❌ Demande de vérification refusée",
+        body: `Raison : ${
+          reason ?? "Non conforme"
+        }. Vous pouvez soumettre une nouvelle demande.`,
+        icon: "/icon",
+        badge: "/icon",
+        url: "/verification",
+        tag: "verification-rejected",
+      });
+    } catch (err) {
+      console.error("Erreur push notification:", err);
+    }
 
     return NextResponse.json({
       success: true,
-      message: `Demande refusée pour ${target.firstName}`,
+      message: `❌ Demande refusée pour ${target.firstName}`,
     });
   } catch (error) {
     console.error("Erreur POST verifications:", error);
