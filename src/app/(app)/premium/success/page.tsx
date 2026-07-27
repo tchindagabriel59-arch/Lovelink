@@ -39,25 +39,32 @@ function SuccessContent() {
           setMessage('Paiement réussi ! Votre compte Premium est activé.');
           setPlan(data.plan || '');
 
-          // 🎯 FACEBOOK PIXEL - Tracker le PURCHASE réussi
+          // 🎯 FACEBOOK PIXEL + CAPI - Tracker le PURCHASE avec déduplication
           if (!pixelTracked && typeof window !== 'undefined' && typeof window.fbq === 'function') {
-            // Prix approximatif selon le plan
             const prices: Record<string, number> = {
               premium: data.billingPeriod === 'yearly' ? 21000 : 2500,
               gold: data.billingPeriod === 'yearly' ? 42000 : 5000,
             };
             const priceFCFA = prices[data.plan] || 2500;
-            const priceUSD = priceFCFA / 600; // Conversion FCFA → USD approximative
+            const priceUSD = priceFCFA / 600;
 
-            window.fbq('track', 'Purchase', {
-              content_name: `LoveLink ${data.plan}`,
-              content_category: 'Subscription',
-              content_ids: [data.plan],
-              content_type: 'product',
-              value: priceUSD,
-              currency: 'USD',
-              num_items: 1,
-            });
+            // ✅ Purchase avec eventID pour déduplication avec le CAPI
+            window.fbq(
+              'track',
+              'Purchase',
+              {
+                content_name: `LoveLink ${data.plan}`,
+                content_category: 'Subscription',
+                content_ids: [data.plan],
+                content_type: 'product',
+                value: priceUSD,
+                currency: 'USD',
+                num_items: 1,
+              },
+              {
+                eventID: data.metaEventId, // ← Même ID que le CAPI = déduplication
+              }
+            );
 
             // Événement personnalisé avec le vrai montant en FCFA
             window.fbq('trackCustom', 'PurchaseFCFA', {
@@ -67,10 +74,11 @@ function SuccessContent() {
               currency: 'XOF',
             });
 
-            console.log('✅ Facebook Pixel: Purchase tracked', {
+            console.log('✅ Facebook Pixel + CAPI: Purchase tracked', {
               plan: data.plan,
               value: priceUSD,
               currency: 'USD',
+              eventID: data.metaEventId,
             });
 
             setPixelTracked(true);
