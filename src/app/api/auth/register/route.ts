@@ -5,18 +5,18 @@ import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { createToken } from "@/lib/auth";
 import { sendWelcomeEmail } from "@/lib/emails";
+import { sendMetaEvent, getClientIp, generateEventId } from "@/lib/meta-capi";
 
 // 🎯 Auto-définir la préférence de genre selon le genre de l'utilisateur
-// Logique HÉTÉRO par défaut (le plus courant), modifiable ensuite dans /preferences
 function getDefaultPrefGender(userGender: string): "male" | "female" | "non_binary" | "other" | null {
   switch (userGender) {
     case "male":
-      return "female"; // Homme → voit des femmes par défaut
+      return "female";
     case "female":
-      return "male"; // Femme → voit des hommes par défaut
+      return "male";
     case "non_binary":
     case "other":
-      return null; // null = "all" (voit tout le monde)
+      return null;
     default:
       return null;
   }
@@ -25,7 +25,7 @@ function getDefaultPrefGender(userGender: string): "male" | "female" | "non_bina
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { email, password, firstName, lastName, birthDate, gender } = body;
+    const { email, password, firstName, lastName, birthDate, gender, eventId: clientEventId } = body;
 
     if (!email || !password || !firstName || !lastName || !birthDate || !gender) {
       return NextResponse.json(
@@ -48,8 +48,6 @@ export async function POST(req: NextRequest) {
     }
 
     const passwordHash = await bcrypt.hash(password, 12);
-
-    // 🎯 Définir automatiquement la préférence de genre
     const defaultPrefGender = getDefaultPrefGender(gender);
 
     const [newUser] = await db
@@ -61,7 +59,7 @@ export async function POST(req: NextRequest) {
         lastName,
         birthDate,
         gender,
-        prefGender: defaultPrefGender, // 🎯 Auto-défini
+        prefGender: defaultPrefGender,
         prefAgeMin: 18,
         prefAgeMax: 99,
       })
@@ -69,10 +67,46 @@ export async function POST(req: NextRequest) {
 
     const token = await createToken(newUser.id);
 
-    // 📧 Envoyer l'email de bienvenue (en asynchrone, ne bloque pas l'inscription)
+    // 📧 Email de bienvenue (async, ne bloque pas)
     sendWelcomeEmail(email, firstName).catch((err) => {
       console.error("Erreur envoi email bienvenue:", err);
     });
+
+    // 🔥 META CAPI - CompleteRegistration (serveur -> Meta)
+    // On utilise le même eventId que le Pixel pour la déduplication
+    const metaEventId = clientEventId || generateEventId();
+    
+    try {
+      const clientIp = getClientIp(req as any);
+      const userAgent = req.headers.get('user-agent') || undefined;
+      const fbp = req.cookies.get('_fbp')?.value;
+      const fbc = req.cookies.get('_fbc')?.value;
+      const referer = req.headers.get('referer');
+      const eventSourceUrl = referer || `${process.env.NEXT_PUBLIC_SITE_URL || 'https://lovelink237.com'}/register`;
+
+      // Ne pas bloquer l'inscription si Meta échoue
+      await sendMetaEvent({
+        eventName: 'CompleteRegistration',
+        eventId: metaEventId,
+        eventSourceUrl,
+        userData: {
+          email: email,
+          firstName: firstName,
+          lastName: lastName,
+          country: 'sn',
+          clientIpAddress: clientIp,
+          clientUserAgent: userAgent,
+          fbp: fbp,
+          fbc: fbc,
+        },
+        customData: {
+          content_name: 'Inscription LoveLink',
+        }
+      });
+    } catch (capiError) {
+      console.error("[Meta CAPI] Erreur CompleteRegistration:", capiError);
+      // On continue, on ne bloque pas l'inscription
+    }
 
     const response = NextResponse.json({
       user: {
@@ -81,6 +115,7 @@ export async function POST(req: NextRequest) {
         firstName: newUser.firstName,
         lastName: newUser.lastName,
       },
+      metaEventId, // 🔥 Renvoyé au frontend pour déduplication Pixel
     });
 
     response.cookies.set("auth_token", token, {
