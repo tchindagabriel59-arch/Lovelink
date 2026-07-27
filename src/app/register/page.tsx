@@ -35,7 +35,6 @@ export default function RegisterPage() {
     setError("");
   };
 
-  // Calcul de l'âge depuis la date de naissance
   const calculateAge = (birthDate: string): number => {
     const today = new Date();
     const birth = new Date(birthDate);
@@ -78,14 +77,12 @@ export default function RegisterPage() {
       return;
     }
 
-    // Vérification de l'âge (18 ans minimum)
     const age = calculateAge(form.birthDate);
     if (age < 18) {
       setError("Vous devez avoir au moins 18 ans pour vous inscrire sur LoveLink.");
       return;
     }
 
-    // Vérification cases à cocher
     if (!acceptAge) {
       setError("Vous devez certifier avoir au moins 18 ans.");
       return;
@@ -108,15 +105,22 @@ export default function RegisterPage() {
         return;
       }
 
-      // 🎯 FACEBOOK PIXEL - Tracker l'inscription réussie
+      // 🎯 FACEBOOK PIXEL + CAPI - Tracker avec déduplication
       if (typeof window !== "undefined" && typeof window.fbq === "function") {
-        window.fbq("track", "CompleteRegistration", {
-          content_name: "LoveLink Registration",
-          status: true,
-          currency: "USD",
-          value: 0,
-        });
-        console.log("✅ Facebook Pixel: CompleteRegistration tracked");
+        window.fbq(
+          "track",
+          "CompleteRegistration",
+          {
+            content_name: "LoveLink Registration",
+            status: true,
+            currency: "USD",
+            value: 0,
+          },
+          {
+            eventID: data.metaEventId, // ← Même ID que le CAPI = déduplication
+          }
+        );
+        console.log("✅ Facebook Pixel + CAPI: CompleteRegistration tracked (eventID:", data.metaEventId, ")");
       }
 
       router.push("/dashboard");
@@ -142,7 +146,6 @@ export default function RegisterPage() {
           <p className="mt-2 text-slate-600">Rejoignez notre communauté</p>
         </div>
 
-        {/* Progress */}
         <div className="flex items-center justify-center gap-2 mb-8">
           {[1, 2, 3].map((s) => (
             <div key={s} className="flex items-center">
@@ -321,7 +324,6 @@ export default function RegisterPage() {
                 </select>
               </div>
 
-              {/* CASE 18+ */}
               <div className="flex items-start gap-3 p-4 bg-rose-50 rounded-xl border border-rose-100">
                 <input
                   type="checkbox"
@@ -336,7 +338,6 @@ export default function RegisterPage() {
                 </label>
               </div>
 
-              {/* CASE CGU */}
               <div className="flex items-start gap-3 p-4 bg-purple-50 rounded-xl border border-purple-100">
                 <input
                   type="checkbox"
