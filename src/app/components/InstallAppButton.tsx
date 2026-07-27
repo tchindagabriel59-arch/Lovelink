@@ -35,26 +35,30 @@ export default function InstallAppButton() {
       setDevice("desktop");
     }
 
+    // Vérifier si l'utilisateur a fermé la bannière récemment
+    const dismissedAt = localStorage.getItem("lovelink-install-dismissed-at");
+    const shouldShow = () => {
+      if (!dismissedAt) return true;
+      // Ne pas réafficher pendant 7 jours après fermeture
+      const daysSinceDismiss = (Date.now() - parseInt(dismissedAt)) / (1000 * 60 * 60 * 24);
+      return daysSinceDismiss > 7;
+    };
+
     // Écouter l'événement d'installation (Chrome/Edge/Android)
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e as BeforeInstallPromptEvent);
 
-      // Afficher le bandeau après 5 secondes si l'utilisateur n'a pas déjà refusé
-      const dismissed = localStorage.getItem("lovelink-install-dismissed");
-      if (!dismissed) {
-        setTimeout(() => setShowBanner(true), 5000);
+      if (shouldShow()) {
+        setTimeout(() => setShowBanner(true), 3000);
       }
     };
 
     window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
 
-    // Sur iOS, on affiche le bandeau après 10 secondes (pas d'événement natif)
-    if (/iphone|ipad|ipod/.test(userAgent)) {
-      const dismissed = localStorage.getItem("lovelink-install-dismissed");
-      if (!dismissed) {
-        setTimeout(() => setShowBanner(true), 10000);
-      }
+    // Sur iOS, on affiche le bandeau après quelques secondes (pas d'événement natif)
+    if (/iphone|ipad|ipod/.test(userAgent) && shouldShow()) {
+      setTimeout(() => setShowBanner(true), 5000);
     }
 
     // Détecter quand l'app est installée
@@ -87,7 +91,7 @@ export default function InstallAppButton() {
 
   const dismissBanner = () => {
     setShowBanner(false);
-    localStorage.setItem("lovelink-install-dismissed", "true");
+    localStorage.setItem("lovelink-install-dismissed-at", Date.now().toString());
   };
 
   // Si déjà installé, ne rien afficher
@@ -112,60 +116,42 @@ export default function InstallAppButton() {
         <Sparkles className="w-4 h-4 text-yellow-300" />
       </button>
 
-      {/* Bandeau flottant en bas (mobile) */}
+      {/* 🎨 NOUVELLE BANNIÈRE FINE EN HAUT */}
       {showBanner && (
-        <div className="fixed bottom-4 left-4 right-4 z-50 md:left-auto md:right-4 md:max-w-sm animate-slide-up">
-          <div className="bg-white rounded-2xl shadow-2xl border-2 border-purple-200 overflow-hidden">
-            {/* Header avec dégradé */}
-            <div className="bg-gradient-to-r from-purple-600 to-pink-600 p-4 relative">
+        <div className="fixed top-0 left-0 right-0 z-50 animate-slide-down">
+          <div className="bg-gradient-to-r from-purple-600 to-pink-600 shadow-lg">
+            <div className="max-w-6xl mx-auto px-3 py-2 flex items-center gap-2 sm:gap-3">
+              {/* Icône */}
+              <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center flex-shrink-0">
+                <Smartphone className="w-4 h-4 text-white" />
+              </div>
+
+              {/* Texte */}
+              <div className="flex-1 min-w-0">
+                <p className="text-white text-sm font-semibold truncate">
+                  Installez l&apos;app LoveLink
+                </p>
+                <p className="text-purple-100 text-xs hidden sm:block">
+                  Pour une meilleure expérience 📱
+                </p>
+              </div>
+
+              {/* Bouton Installer */}
+              <button
+                onClick={handleInstall}
+                className="px-3 py-1.5 bg-white text-purple-600 rounded-lg font-bold text-xs sm:text-sm hover:bg-purple-50 transition-colors whitespace-nowrap"
+              >
+                Installer
+              </button>
+
+              {/* Bouton fermer */}
               <button
                 onClick={dismissBanner}
-                className="absolute top-2 right-2 p-1 bg-white/20 hover:bg-white/30 rounded-full transition-colors"
+                className="p-1.5 hover:bg-white/20 rounded-lg transition-colors flex-shrink-0"
+                aria-label="Fermer"
               >
                 <X className="w-4 h-4 text-white" />
               </button>
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center flex-shrink-0">
-                  <Smartphone className="w-7 h-7 text-purple-600" />
-                </div>
-                <div className="flex-1">
-                  <h3 className="text-white font-bold text-lg">Installer LoveLink</h3>
-                  <p className="text-purple-100 text-xs">Comme une vraie app 📱</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Corps */}
-            <div className="p-4">
-              <ul className="space-y-2 text-sm text-slate-700 mb-4">
-                <li className="flex items-center gap-2">
-                  <Check className="w-4 h-4 text-green-500 flex-shrink-0" />
-                  <span>Accès rapide depuis l&apos;écran d&apos;accueil</span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <Check className="w-4 h-4 text-green-500 flex-shrink-0" />
-                  <span>Notifications instantanées</span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <Check className="w-4 h-4 text-green-500 flex-shrink-0" />
-                  <span>Ouverture plein écran</span>
-                </li>
-              </ul>
-
-              <div className="flex gap-2">
-                <button
-                  onClick={dismissBanner}
-                  className="flex-1 px-4 py-2.5 border border-slate-200 text-slate-600 rounded-xl font-medium text-sm hover:bg-slate-50 transition-colors"
-                >
-                  Plus tard
-                </button>
-                <button
-                  onClick={handleInstall}
-                  className="flex-1 px-4 py-2.5 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl font-bold text-sm shadow-lg hover:shadow-xl transition-all"
-                >
-                  Installer
-                </button>
-              </div>
             </div>
           </div>
         </div>
@@ -387,9 +373,9 @@ export default function InstallAppButton() {
       )}
 
       <style jsx>{`
-        @keyframes slide-up {
+        @keyframes slide-down {
           from {
-            transform: translateY(100%);
+            transform: translateY(-100%);
             opacity: 0;
           }
           to {
@@ -403,8 +389,8 @@ export default function InstallAppButton() {
           to { opacity: 1; }
         }
 
-        .animate-slide-up {
-          animation: slide-up 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        .animate-slide-down {
+          animation: slide-down 0.4s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
         .animate-fade-in {
