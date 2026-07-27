@@ -183,6 +183,9 @@ export const payments = pgTable("payments", {
   clientLastName: varchar("client_last_name", { length: 100 }),
   clientPhone: varchar("client_phone", { length: 30 }),
 
+  // 📊 META CAPI - Pour déduplication Pixel/CAPI
+  metaEventId: varchar("meta_event_id", { length: 100 }),
+
   // Timestamps
   initiatedAt: timestamp("initiated_at").defaultNow(),
   completedAt: timestamp("completed_at"),
