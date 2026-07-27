@@ -4,6 +4,7 @@ import { db } from '@/db';
 import { payments, subscriptions, users } from '@/db/schema';
 import { getCurrentUserId } from '@/lib/auth';
 import { eq, or } from 'drizzle-orm';
+import { sendMetaEvent, getClientIp, generateEventId } from '@/lib/meta-capi';
 
 export async function GET(req: NextRequest) {
   try {
@@ -21,7 +22,6 @@ export async function GET(req: NextRequest) {
 
     console.log('Verification pour txn:', txn);
 
-    // Chercher par merchantTransactionId OU paymentToken
     const paymentResult = await db
       .select()
       .from(payments)
@@ -43,13 +43,14 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Non autorisé' }, { status: 403 });
     }
 
-    // Si déjà success en DB
+    // ✅ Si déjà success en DB (probablement traité par le webhook)
     if (payment.status === 'success') {
       return NextResponse.json({
         success: true,
         status: 'success',
         plan: payment.plan,
         billingPeriod: payment.billingPeriod,
+        metaEventId: payment.metaEventId, // ← Renvoie l'eventId déjà stocké
       });
     }
 
@@ -85,14 +86,22 @@ export async function GET(req: NextRequest) {
         interpretedStatus = 'failed';
       }
 
+      let capiEventId = payment.metaEventId;
+
       // Mettre à jour
       if (interpretedStatus !== payment.status) {
+        // Générer un eventId si pas encore de status success (pour CAPI Purchase)
+        if (interpretedStatus === 'success' && !capiEventId) {
+          capiEventId = generateEventId();
+        }
+
         await db
           .update(payments)
           .set({
             status: interpretedStatus,
             verifiedAt: new Date(),
             completedAt: interpretedStatus === 'success' ? new Date() : payment.completedAt,
+            metaEventId: capiEventId,
             updatedAt: new Date(),
           })
           .where(eq(payments.id, payment.id));
@@ -128,7 +137,49 @@ export async function GET(req: NextRequest) {
             })
             .where(eq(users.id, payment.userId));
 
-          console.log(`Premium active pour user ${payment.userId}`);
+          console.log(`Premium activé pour user ${payment.userId}`);
+
+          // 📊 META CAPI - Envoyer Purchase si pas déjà envoyé par le webhook
+          const [user] = await db
+            .select()
+            .from(users)
+            .where(eq(users.id, payment.userId))
+            .limit(1);
+
+          if (user && capiEventId) {
+            const prices: Record<string, Record<string, number>> = {
+              premium: { monthly: 2500, yearly: 21000 },
+              gold: { monthly: 5000, yearly: 42000 },
+            };
+            const priceFCFA =
+              prices[payment.plan]?.[payment.billingPeriod] ||
+              Number(payment.amount) ||
+              2500;
+
+            sendMetaEvent({
+              eventName: 'Purchase',
+              eventId: capiEventId,
+              eventSourceUrl: 'https://lovelink237.com/premium/success',
+              userData: {
+                email: user.email,
+                firstName: user.firstName,
+                lastName: user.lastName,
+                clientIpAddress: getClientIp(req),
+                clientUserAgent: req.headers.get('user-agent') || undefined,
+              },
+              customData: {
+                currency: 'XOF',
+                value: priceFCFA,
+                content_name: `LoveLink ${payment.plan}`,
+                content_ids: [payment.plan],
+                content_type: 'product',
+              },
+            }).catch((err) => {
+              console.error('[Meta CAPI] Erreur Purchase (verify):', err);
+            });
+
+            console.log(`[Meta CAPI] ✅ Purchase envoyé via verify - eventId: ${capiEventId}`);
+          }
         }
       }
 
@@ -137,12 +188,14 @@ export async function GET(req: NextRequest) {
         status: interpretedStatus,
         plan: payment.plan,
         billingPeriod: payment.billingPeriod,
+        metaEventId: capiEventId, // ← Renvoie l'eventId pour le Pixel
       });
     }
 
     return NextResponse.json({
       success: false,
       status: payment.status,
+      metaEventId: payment.metaEventId,
     });
 
   } catch (error) {
