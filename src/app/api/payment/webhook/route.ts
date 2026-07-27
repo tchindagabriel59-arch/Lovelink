@@ -8,10 +8,10 @@ import {
   type BillingPeriod,
 } from "@/lib/paydunya";
 import { sendMatchEmail } from "@/lib/emails";
+import { sendMetaEvent, getClientIp, generateEventId } from "@/lib/meta-capi";
 
 // ============================================
 // GET /api/payment/webhook
-// Sonde de santé (PayDunya vérifie que l'URL est joignable)
 // ============================================
 export async function GET() {
   return new NextResponse("OK", { status: 200 });
@@ -19,24 +19,17 @@ export async function GET() {
 
 // ============================================
 // POST /api/payment/webhook
-// Reçoit les notifications de paiement de PayDunya (IPN)
 // ============================================
 export async function POST(req: NextRequest) {
-  // ⚠️ IMPORTANT : Répondre HTTP 200 rapidement !
-
   try {
-    // 1. Récupérer le payload (peut être JSON ou form-data selon config PayDunya)
     let body: any;
     const contentType = req.headers.get("content-type") || "";
 
     if (contentType.includes("application/json")) {
       body = await req.json();
     } else {
-      // PayDunya envoie parfois en form-data
       const formData = await req.formData();
       body = Object.fromEntries(formData.entries());
-
-      // Parser les champs data en JSON si présents
       if (typeof body.data === "string") {
         try {
           body.data = JSON.parse(body.data);
@@ -48,8 +41,6 @@ export async function POST(req: NextRequest) {
 
     console.log("📩 Webhook PayDunya reçu:", JSON.stringify(body));
 
-    // 2. Extraire les infos importantes
-    // PayDunya envoie : data (objet) OU custom_data + invoice.token
     const data = body.data || body;
     const token =
       data.invoice?.token ||
@@ -57,23 +48,16 @@ export async function POST(req: NextRequest) {
       body.token ||
       body["data[invoice][token]"];
 
-    const customData =
-      data.custom_data ||
-      body.custom_data ||
-      {};
-
+    const customData = data.custom_data || body.custom_data || {};
     const merchantTransactionId =
       customData.merchant_transaction_id ||
       body["data[custom_data][merchant_transaction_id]"];
 
-    // 3. Validation basique
     if (!token && !merchantTransactionId) {
-      console.warn("⚠️ Webhook payload incomplet - pas de token ni merchant_id");
+      console.warn("⚠️ Webhook payload incomplet");
       return NextResponse.json({ ok: true }, { status: 200 });
     }
 
-    // 4. Retrouver le paiement en base
-    // On cherche d'abord par merchant_transaction_id, sinon par token PayDunya
     let payment;
     if (merchantTransactionId) {
       [payment] = await db
@@ -92,36 +76,23 @@ export async function POST(req: NextRequest) {
     }
 
     if (!payment) {
-      console.warn(
-        `⚠️ Paiement introuvable - merchant_id=${merchantTransactionId}, token=${token}`
-      );
-      // On répond 200 quand même (PayDunya ne doit pas retenter à l'infini)
+      console.warn(`⚠️ Paiement introuvable`);
       return NextResponse.json({ ok: true }, { status: 200 });
     }
 
-    // 5. IDEMPOTENCE : si déjà traité, ignorer
     if (payment.status === "success" || payment.status === "failed") {
-      console.log(
-        `ℹ️ Paiement déjà traité: ${payment.merchantTransactionId} (${payment.status})`
-      );
+      console.log(`ℹ️ Paiement déjà traité: ${payment.merchantTransactionId}`);
       return NextResponse.json({ ok: true }, { status: 200 });
     }
 
-    // 6. Marquer le webhook comme reçu
     await db
       .update(payments)
-      .set({
-        webhookReceivedAt: new Date(),
-        updatedAt: new Date(),
-      })
+      .set({ webhookReceivedAt: new Date(), updatedAt: new Date() })
       .where(eq(payments.id, payment.id));
 
-    // 7. 🔒 SÉCURITÉ CRITIQUE : NE JAMAIS faire confiance au payload webhook !
-    // Toujours re-vérifier via l'API PayDunya (source de vérité)
     const verifyToken = payment.paymentToken || token;
-
     if (!verifyToken) {
-      console.error("❌ Pas de token pour vérifier le paiement");
+      console.error("❌ Pas de token pour vérifier");
       return NextResponse.json({ ok: true }, { status: 200 });
     }
 
@@ -130,24 +101,18 @@ export async function POST(req: NextRequest) {
       verifyResponse = await verifyPayDunyaInvoice(verifyToken);
     } catch (verifyError) {
       console.error("❌ Erreur vérification PayDunya:", verifyError);
-      // On répond 200 mais on ne finalise pas (retentera via success_url ou cron)
       return NextResponse.json({ ok: true }, { status: 200 });
     }
 
     const realStatus = verifyResponse.status;
-    console.log(
-      `🔍 Statut réel PayDunya pour ${payment.merchantTransactionId}: ${realStatus}`
-    );
+    console.log(`🔍 Statut réel PayDunya: ${realStatus}`);
 
-    // 8. Traiter selon le statut réel
     if (realStatus === "completed") {
-      // ✅ PAIEMENT RÉUSSI → Activer le Premium
-      await activatePremium(payment.id, verifyResponse);
-      console.log(
-        `✅ Premium activé pour user ${payment.userId} (${payment.plan} ${payment.billingPeriod})`
-      );
+      // ✅ Générer l'eventId CAPI pour déduplication avec le Pixel frontend
+      const capiEventId = generateEventId();
+      await activatePremium(payment.id, verifyResponse, capiEventId, req);
+      console.log(`✅ Premium activé pour user ${payment.userId}`);
     } else if (realStatus === "cancelled" || realStatus === "failed") {
-      // ❌ PAIEMENT ÉCHOUÉ / ANNULÉ
       await db
         .update(payments)
         .set({
@@ -162,17 +127,12 @@ export async function POST(req: NextRequest) {
         .where(eq(payments.id, payment.id));
       console.log(`❌ Paiement échoué: ${payment.merchantTransactionId}`);
     } else {
-      // ⏳ PENDING → on attend
-      console.log(
-        `⏳ Paiement en attente: ${payment.merchantTransactionId} (${realStatus})`
-      );
+      console.log(`⏳ Paiement en attente: ${realStatus}`);
     }
 
-    // 9. Toujours répondre 200 à PayDunya
     return NextResponse.json({ ok: true }, { status: 200 });
   } catch (error: any) {
     console.error("❌ Erreur webhook PayDunya:", error);
-    // Même en cas d'erreur, on répond 200 pour éviter les retries infinis
     return NextResponse.json({ ok: true }, { status: 200 });
   }
 }
@@ -180,9 +140,13 @@ export async function POST(req: NextRequest) {
 // ============================================
 // 💎 ACTIVER LE PREMIUM
 // ============================================
-async function activatePremium(paymentId: number, verifyResponse: any) {
+async function activatePremium(
+  paymentId: number,
+  verifyResponse: any,
+  capiEventId: string,
+  req: NextRequest
+) {
   try {
-    // 1. Récupérer le paiement
     const [payment] = await db
       .select()
       .from(payments)
@@ -190,11 +154,10 @@ async function activatePremium(paymentId: number, verifyResponse: any) {
       .limit(1);
 
     if (!payment) {
-      console.error(`❌ Paiement ${paymentId} introuvable pour activation`);
+      console.error(`❌ Paiement ${paymentId} introuvable`);
       return;
     }
 
-    // 2. Récupérer l'utilisateur
     const [user] = await db
       .select()
       .from(users)
@@ -206,16 +169,11 @@ async function activatePremium(paymentId: number, verifyResponse: any) {
       return;
     }
 
-    // 3. Calculer la date d'expiration
-    // Si l'user a déjà un Premium actif, on prolonge à partir de son expiration
+    // Calculer la date d'expiration
     let expiresAt: Date;
     const now = new Date();
 
-    if (
-      user.premiumExpiresAt &&
-      new Date(user.premiumExpiresAt) > now
-    ) {
-      // Prolongation
+    if (user.premiumExpiresAt && new Date(user.premiumExpiresAt) > now) {
       const currentExpiry = new Date(user.premiumExpiresAt);
       if (payment.billingPeriod === "monthly") {
         currentExpiry.setMonth(currentExpiry.getMonth() + 1);
@@ -224,11 +182,10 @@ async function activatePremium(paymentId: number, verifyResponse: any) {
       }
       expiresAt = currentExpiry;
     } else {
-      // Nouveau
       expiresAt = getSubscriptionExpiryDate(payment.billingPeriod as BillingPeriod);
     }
 
-    // 4. Créer la subscription
+    // Créer la subscription
     const [subscription] = await db
       .insert(subscriptions)
       .values({
@@ -244,7 +201,7 @@ async function activatePremium(paymentId: number, verifyResponse: any) {
       })
       .returning();
 
-    // 5. Mettre à jour le user (isPremium + expiration + plan)
+    // Mettre à jour l'utilisateur
     await db
       .update(users)
       .set({
@@ -255,14 +212,26 @@ async function activatePremium(paymentId: number, verifyResponse: any) {
       })
       .where(eq(users.id, payment.userId));
 
-    // 6. Mettre à jour le paiement (status success + subscription liée + méthode paiement)
+    // Calculer le montant
+    const prices: Record<string, Record<string, number>> = {
+      premium: { monthly: 2500, yearly: 21000 },
+      gold: { monthly: 5000, yearly: 42000 },
+    };
+    const priceFCFA =
+      prices[payment.plan]?.[payment.billingPeriod] ||
+      Number(payment.amount) ||
+      2500;
+    const priceUSD = Math.round((priceFCFA / 600) * 100) / 100;
+
+    // Mettre à jour le paiement avec l'eventId CAPI
     await db
       .update(payments)
       .set({
         status: "success",
         subscriptionId: subscription.id,
         statusMessage: "Paiement réussi - Premium activé",
-        paymentMethod: verifyResponse.customer?.name || verifyResponse.mode || null,
+        paymentMethod:
+          verifyResponse.customer?.name || verifyResponse.mode || null,
         cinetpayTransactionId:
           verifyResponse.receipt_identifier ||
           verifyResponse.provider_reference ||
@@ -270,21 +239,48 @@ async function activatePremium(paymentId: number, verifyResponse: any) {
         completedAt: now,
         verifiedAt: now,
         updatedAt: now,
+        // ✅ Stocker l'eventId pour que le frontend puisse l'utiliser
+        metaEventId: capiEventId,
       })
       .where(eq(payments.id, paymentId));
 
-    // 7. 📧 Envoyer un email de confirmation (silencieux)
+    // 📊 META CAPI - Envoyer Purchase côté serveur
+    sendMetaEvent({
+      eventName: "Purchase",
+      eventId: capiEventId,
+      eventSourceUrl: "https://lovelink237.com/premium/success",
+      userData: {
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        clientIpAddress: getClientIp(req),
+        clientUserAgent: req.headers.get("user-agent") || undefined,
+      },
+      customData: {
+        currency: "XOF",
+        value: priceFCFA,
+        content_name: `LoveLink ${payment.plan}`,
+        content_ids: [payment.plan],
+        content_type: "product",
+      },
+    }).catch((err) => {
+      console.error("[Meta CAPI] Erreur Purchase:", err);
+    });
+
+    console.log(`[Meta CAPI] ✅ Purchase envoyé - eventId: ${capiEventId}`);
+
+    // 📧 Email de confirmation
     try {
       const planLabel = payment.plan === "premium" ? "Premium" : "Gold";
-      const periodLabel = payment.billingPeriod === "monthly" ? "1 mois" : "1 an";
+      const periodLabel =
+        payment.billingPeriod === "monthly" ? "1 mois" : "1 an";
       await sendMatchEmail(
         user.email,
         user.firstName,
         `LoveLink ${planLabel} activé (${periodLabel})`
       );
     } catch (emailError) {
-      console.error("⚠️ Erreur envoi email confirmation:", emailError);
-      // On ne bloque pas si l'email échoue
+      console.error("⚠️ Erreur envoi email:", emailError);
     }
 
     console.log(
