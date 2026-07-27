@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { X, Download, Smartphone, Share, Plus, Check, Sparkles } from "lucide-react";
+import { X, Smartphone, Share, Plus, Check } from "lucide-react";
 
 // Type pour l'événement beforeinstallprompt (Chrome/Edge)
 interface BeforeInstallPromptEvent extends Event {
@@ -19,13 +19,11 @@ export default function InstallAppButton() {
   const [device, setDevice] = useState<DeviceType>("unknown");
 
   useEffect(() => {
-    // Détecter si l'app est déjà installée
     if (window.matchMedia("(display-mode: standalone)").matches) {
       setIsInstalled(true);
       return;
     }
 
-    // Détecter le type d'appareil
     const userAgent = window.navigator.userAgent.toLowerCase();
     if (/iphone|ipad|ipod/.test(userAgent)) {
       setDevice("ios");
@@ -35,16 +33,13 @@ export default function InstallAppButton() {
       setDevice("desktop");
     }
 
-    // Vérifier si l'utilisateur a fermé la bannière récemment
     const dismissedAt = localStorage.getItem("lovelink-install-dismissed-at");
     const shouldShow = () => {
       if (!dismissedAt) return true;
-      // Ne pas réafficher pendant 7 jours après fermeture
       const daysSinceDismiss = (Date.now() - parseInt(dismissedAt)) / (1000 * 60 * 60 * 24);
       return daysSinceDismiss > 7;
     };
 
-    // Écouter l'événement d'installation (Chrome/Edge/Android)
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e as BeforeInstallPromptEvent);
@@ -56,12 +51,10 @@ export default function InstallAppButton() {
 
     window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
 
-    // Sur iOS, on affiche le bandeau après quelques secondes (pas d'événement natif)
     if (/iphone|ipad|ipod/.test(userAgent) && shouldShow()) {
       setTimeout(() => setShowBanner(true), 5000);
     }
 
-    // Détecter quand l'app est installée
     window.addEventListener("appinstalled", () => {
       setIsInstalled(true);
       setShowBanner(false);
@@ -75,7 +68,6 @@ export default function InstallAppButton() {
 
   const handleInstall = async () => {
     if (deferredPrompt) {
-      // Chrome/Edge/Android : installation native
       await deferredPrompt.prompt();
       const { outcome } = await deferredPrompt.userChoice;
       if (outcome === "accepted") {
@@ -84,7 +76,6 @@ export default function InstallAppButton() {
       }
       setDeferredPrompt(null);
     } else {
-      // iOS ou desktop sans support : afficher les instructions
       setShowModal(true);
     }
   };
@@ -96,37 +87,20 @@ export default function InstallAppButton() {
 
   // Si déjà installé, ne rien afficher
   if (isInstalled) {
-    return (
-      <div className="hidden lg:flex items-center gap-2 px-4 py-2 bg-green-50 border border-green-200 rounded-xl text-green-700 text-sm font-medium">
-        <Check className="w-4 h-4" />
-        App installée
-      </div>
-    );
+    return null;
   }
 
   return (
     <>
-      {/* Bouton principal (dans le dashboard) */}
-      <button
-        onClick={handleInstall}
-        className="group relative w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-2xl font-bold text-sm shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-200"
-      >
-        <Download className="w-5 h-5 group-hover:animate-bounce" />
-        Installer l&apos;app LoveLink
-        <Sparkles className="w-4 h-4 text-yellow-300" />
-      </button>
-
-      {/* 🎨 NOUVELLE BANNIÈRE FINE EN HAUT */}
+      {/* 🎨 BANNIÈRE FINE EN HAUT (seule interface d'invitation) */}
       {showBanner && (
         <div className="fixed top-0 left-0 right-0 z-50 animate-slide-down">
           <div className="bg-gradient-to-r from-purple-600 to-pink-600 shadow-lg">
             <div className="max-w-6xl mx-auto px-3 py-2 flex items-center gap-2 sm:gap-3">
-              {/* Icône */}
               <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center flex-shrink-0">
                 <Smartphone className="w-4 h-4 text-white" />
               </div>
 
-              {/* Texte */}
               <div className="flex-1 min-w-0">
                 <p className="text-white text-sm font-semibold truncate">
                   Installez l&apos;app LoveLink
@@ -136,7 +110,6 @@ export default function InstallAppButton() {
                 </p>
               </div>
 
-              {/* Bouton Installer */}
               <button
                 onClick={handleInstall}
                 className="px-3 py-1.5 bg-white text-purple-600 rounded-lg font-bold text-xs sm:text-sm hover:bg-purple-50 transition-colors whitespace-nowrap"
@@ -144,7 +117,6 @@ export default function InstallAppButton() {
                 Installer
               </button>
 
-              {/* Bouton fermer */}
               <button
                 onClick={dismissBanner}
                 className="p-1.5 hover:bg-white/20 rounded-lg transition-colors flex-shrink-0"
@@ -167,7 +139,6 @@ export default function InstallAppButton() {
             className="bg-white rounded-3xl max-w-md w-full shadow-2xl overflow-hidden max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Header */}
             <div className="bg-gradient-to-r from-purple-600 to-pink-600 p-6 relative">
               <button
                 onClick={() => setShowModal(false)}
@@ -188,7 +159,6 @@ export default function InstallAppButton() {
               </div>
             </div>
 
-            {/* Instructions selon l'appareil */}
             <div className="p-6">
               {device === "ios" && (
                 <div className="space-y-4">
@@ -197,9 +167,7 @@ export default function InstallAppButton() {
                       1
                     </div>
                     <div>
-                      <p className="font-semibold text-slate-900 mb-1">
-                        Ouvre Safari
-                      </p>
+                      <p className="font-semibold text-slate-900 mb-1">Ouvre Safari</p>
                       <p className="text-sm text-slate-600">
                         L&apos;installation ne fonctionne que sur Safari (pas Chrome ni Firefox)
                       </p>
@@ -262,9 +230,7 @@ export default function InstallAppButton() {
                       1
                     </div>
                     <div>
-                      <p className="font-semibold text-slate-900 mb-1">
-                        Ouvre le menu Chrome
-                      </p>
+                      <p className="font-semibold text-slate-900 mb-1">Ouvre le menu Chrome</p>
                       <p className="text-sm text-slate-600">
                         Appuie sur les 3 points en haut à droite ⋮
                       </p>
@@ -290,9 +256,7 @@ export default function InstallAppButton() {
                       3
                     </div>
                     <div>
-                      <p className="font-semibold text-slate-900 mb-1">
-                        Confirme l&apos;installation
-                      </p>
+                      <p className="font-semibold text-slate-900 mb-1">Confirme l&apos;installation</p>
                       <p className="text-sm text-slate-600">
                         LoveLink s&apos;installe comme une vraie app ! 🎉
                       </p>
@@ -336,9 +300,7 @@ export default function InstallAppButton() {
                       3
                     </div>
                     <div>
-                      <p className="font-semibold text-slate-900 mb-1">
-                        C&apos;est prêt ! 🎉
-                      </p>
+                      <p className="font-semibold text-slate-900 mb-1">C&apos;est prêt ! 🎉</p>
                       <p className="text-sm text-slate-600">
                         LoveLink s&apos;ouvre comme un logiciel classique
                       </p>
@@ -347,7 +309,6 @@ export default function InstallAppButton() {
                 </div>
               )}
 
-              {/* Avantages */}
               <div className="mt-6 pt-4 border-t border-slate-100">
                 <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">
                   Pourquoi installer ?
