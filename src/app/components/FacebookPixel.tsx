@@ -6,9 +6,18 @@ import { useEffect, Suspense } from 'react';
 
 const FB_PIXEL_ID = '1502714508561130';
 
+// Type étendu pour fbq avec la propriété "loaded"
+interface FbqFunction {
+  (...args: any[]): void;
+  loaded?: boolean;
+  queue?: any[];
+  version?: string;
+  callMethod?: (...args: any[]) => void;
+}
+
 declare global {
   interface Window {
-    fbq: (...args: any[]) => void;
+    fbq: FbqFunction;
     _fbq: any;
   }
 }
@@ -20,7 +29,11 @@ function PixelTracker() {
   useEffect(() => {
     // Attendre que fbq soit complètement initialisé
     const trackPageView = () => {
-      if (typeof window !== 'undefined' && typeof window.fbq === 'function' && window.fbq.loaded) {
+      if (
+        typeof window !== 'undefined' &&
+        typeof window.fbq === 'function' &&
+        window.fbq.loaded === true
+      ) {
         window.fbq('track', 'PageView');
       }
     };
