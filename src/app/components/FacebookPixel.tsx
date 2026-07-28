@@ -9,6 +9,7 @@ const FB_PIXEL_ID = '1502714508561130';
 declare global {
   interface Window {
     fbq: (...args: any[]) => void;
+    _fbq: any;
   }
 }
 
@@ -17,9 +18,16 @@ function PixelTracker() {
   const searchParams = useSearchParams();
 
   useEffect(() => {
-    if (typeof window.fbq === 'function') {
-      window.fbq('track', 'PageView');
-    }
+    // Attendre que fbq soit complètement initialisé
+    const trackPageView = () => {
+      if (typeof window !== 'undefined' && typeof window.fbq === 'function' && window.fbq.loaded) {
+        window.fbq('track', 'PageView');
+      }
+    };
+
+    // Petit délai pour s'assurer que le script est chargé
+    const timer = setTimeout(trackPageView, 100);
+    return () => clearTimeout(timer);
   }, [pathname, searchParams]);
 
   return null;
@@ -42,7 +50,6 @@ export default function FacebookPixel() {
             s.parentNode.insertBefore(t,s)}(window, document,'script',
             'https://connect.facebook.net/en_US/fbevents.js');
             fbq('init', '${FB_PIXEL_ID}');
-            fbq('track', 'PageView');
           `,
         }}
       />
