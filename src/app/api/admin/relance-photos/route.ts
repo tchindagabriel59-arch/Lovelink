@@ -1,13 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { users } from "@/db/schema";
-import { sql, isNull, or, eq } from "drizzle-orm";
+import { sql, isNull, or } from "drizzle-orm";
 import { sendPhotoReminderEmail } from "@/lib/emails";
 
 export async function POST(req: NextRequest) {
   try {
     // 🔍 Récupérer tous les utilisateurs sans photo
-    // On cherche où photos est null, vide [] ou string vide
     const usersWithoutPhotos = await db
       .select({
         id: users.id,
@@ -18,10 +17,8 @@ export async function POST(req: NextRequest) {
       .from(users)
       .where(
         or(
-          isNull(users.photos),
-          sql`json_array_length(COALESCE(${users.photos}, '[]'::json)) = 0`,
-          sql`${users.photos}::text = '[]'`,
-          sql`${users.photos}::text = '""'`
+          isNull(users.photoUrl),
+          sql`${users.photoUrl} = ''`
         )
       );
 
