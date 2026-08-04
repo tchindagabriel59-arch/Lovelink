@@ -81,6 +81,32 @@ export async function sendMessageEmail(
   }
 }
 
+// 📸 Email de rappel photo (NOUVEAU)
+export async function sendPhotoReminderEmail(
+  userEmail: string,
+  firstName: string,
+  daysWithoutPhoto: number
+) {
+  try {
+    const { data, error } = await resend.emails.send({
+      from: FROM_EMAIL,
+      to: userEmail,
+      replyTo: REPLY_TO,
+      subject: `📸 ${firstName}, ajoute ta photo pour trouver l'amour !`,
+      html: photoReminderEmailTemplate(firstName, daysWithoutPhoto),
+    });
+
+    if (error) {
+      console.error("Erreur envoi email photo reminder:", error);
+      return { success: false, error };
+    }
+
+    return { success: true, data };
+  } catch (error) {
+    return { success: false, error };
+  }
+}
+
 // ============ TEMPLATES HTML ============
 
 const baseStyle = `
@@ -202,6 +228,55 @@ function messageEmailTemplate(userFirstName: string, senderFirstName: string): s
 
       <p style="color: #94a3b8; font-size: 13px; text-align: center; margin: 24px 0 0;">
         Réponds rapidement pour maximiser tes chances ! ⚡
+      </p>
+    </div>
+    ${baseFooter}
+  `;
+}
+
+function photoReminderEmailTemplate(firstName: string, days: number): string {
+  const urgencyMessage = days >= 3 
+    ? "Ton profil est presque invisible sans photo ! 😢" 
+    : "Tu passes à côté de beaucoup de rencontres ! 💔";
+
+  return `
+    ${baseStyle}
+    <div style="background-color: white; padding: 40px 30px;">
+      <div style="text-align: center; font-size: 64px; margin-bottom: 16px;">📸</div>
+      
+      <h2 style="color: #1e293b; font-size: 24px; margin: 0 0 16px; text-align: center;">
+        ${firstName}, ta photo t'attend !
+      </h2>
+      
+      <p style="color: #475569; font-size: 16px; line-height: 1.6; margin: 0 0 20px; text-align: center;">
+        ${urgencyMessage}
+      </p>
+
+      <div style="background: linear-gradient(135deg, #fef3f2 0%, #f5f3ff 100%); border-radius: 12px; padding: 24px; margin: 24px 0;">
+        <h3 style="color: #1e293b; font-size: 18px; margin: 0 0 16px; text-align: center;">
+          📊 Le saviez-vous ?
+        </h3>
+        <div style="color: #475569; font-size: 15px; line-height: 1.8;">
+          <p style="margin: 0 0 12px;">
+            ✅ Les profils <strong>avec photo</strong> reçoivent <strong style="color: #f43f5e;">10x plus de likes</strong>
+          </p>
+          <p style="margin: 0 0 12px;">
+            ✅ <strong>95% des membres</strong> ne swipent que les profils avec photo
+          </p>
+          <p style="margin: 0;">
+            ✅ Une photo souriante augmente tes matchs de <strong>+300%</strong>
+          </p>
+        </div>
+      </div>
+
+      <div style="text-align: center; margin: 32px 0;">
+        <a href="${SITE_URL}/welcome" style="display: inline-block; background: linear-gradient(135deg, #f43f5e 0%, #a855f7 100%); color: white; padding: 16px 40px; border-radius: 12px; text-decoration: none; font-weight: 700; font-size: 17px;">
+          Ajouter ma photo maintenant 📸
+        </a>
+      </div>
+
+      <p style="color: #94a3b8; font-size: 13px; text-align: center; margin: 24px 0 0;">
+        Ça prend moins de 2 minutes ⚡
       </p>
     </div>
     ${baseFooter}
