@@ -85,10 +85,17 @@ function MessagesContent() {
   const [showEmojis, setShowEmojis] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // ✅ NOUVEAU : Refs pour éviter re-renders inutiles
+  const isTypingRef = useRef(false);
+  const lastMessageIdRef = useRef<number | null>(null);
+  const shouldScrollRef = useRef(true);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
+  const scrollToBottom = useCallback((smooth = true) => {
+    messagesEndRef.current?.scrollIntoView({ 
+      behavior: smooth ? "smooth" : "auto" 
+    });
+  }, []);
 
   const fetchMatchesList = useCallback(async () => {
     try {
@@ -106,7 +113,8 @@ function MessagesContent() {
 
   useEffect(() => {
     fetchMatchesList();
-    const interval = setInterval(fetchMatchesList, 15000);
+    // ✅ Polling à 30s au lieu de 15s (moins agressif)
+    const interval = setInterval(fetchMatchesList, 30000);
     return () => clearInterval(interval);
   }, [fetchMatchesList]);
 
@@ -117,37 +125,87 @@ function MessagesContent() {
     }
   }, [searchParams]);
 
-  const fetchMessages = useCallback(async (matchId: number) => {
-    setLoadingMessages(true);
+  // ✅ CORRECTION MAJEURE : Ne met à jour que si les messages ont vraiment changé
+  const fetchMessages = useCallback(async (matchId: number, isInitial = false) => {
+    if (isInitial) setLoadingMessages(true);
+    
     try {
       const res = await fetch(`/api/messages/${matchId}`);
       if (res.ok) {
         const data = await res.json();
-        setChatMessages(data.messages || []);
-        setOtherUser(data.otherUser || null);
+        const newMessages: Message[] = data.messages || [];
+        
+        // ✅ Si initial, on remplace tout
+        if (isInitial) {
+          setChatMessages(newMessages);
+          setOtherUser(data.otherUser || null);
+          if (newMessages.length > 0) {
+            lastMessageIdRef.current = newMessages[newMessages.length - 1].id;
+          }
+          shouldScrollRef.current = true;
+          return;
+        }
+        
+        // ✅ Si polling, on vérifie s'il y a de nouveaux messages
+        const lastNewMessageId = newMessages.length > 0 
+          ? newMessages[newMessages.length - 1].id 
+          : null;
+        
+        // ✅ Ne mettre à jour QUE si nouveaux messages
+        if (lastNewMessageId !== lastMessageIdRef.current) {
+          setChatMessages(newMessages);
+          lastMessageIdRef.current = lastNewMessageId;
+          shouldScrollRef.current = true;
+          
+          // Update other user aussi (statut online, etc.)
+          setOtherUser((prev) => {
+            const newOther = data.otherUser;
+            if (!newOther) return prev;
+            // Seulement update si vraiment différent
+            if (
+              prev?.isOnline !== newOther.isOnline ||
+              prev?.lastSeen !== newOther.lastSeen
+            ) {
+              return newOther;
+            }
+            return prev;
+          });
+        }
       }
     } catch {
       // silently fail
     } finally {
-      setLoadingMessages(false);
+      if (isInitial) setLoadingMessages(false);
     }
   }, []);
 
+  // ✅ Fetch initial quand on ouvre une conversation
   useEffect(() => {
     if (selectedMatch) {
-      fetchMessages(selectedMatch);
+      lastMessageIdRef.current = null;
+      fetchMessages(selectedMatch, true);
     }
   }, [selectedMatch, fetchMessages]);
 
+  // ✅ Scroll uniquement si nécessaire (pas à chaque render)
   useEffect(() => {
-    scrollToBottom();
-  }, [chatMessages]);
+    if (shouldScrollRef.current && chatMessages.length > 0) {
+      scrollToBottom();
+      shouldScrollRef.current = false;
+    }
+  }, [chatMessages, scrollToBottom]);
 
+  // ✅ POLLING INTELLIGENT : 10s au lieu de 3s, pause pendant frappe
   useEffect(() => {
     if (!selectedMatch) return;
+    
     const interval = setInterval(() => {
-      fetchMessages(selectedMatch);
-    }, 3000);
+      // ✅ Ne pas polling si l'utilisateur est en train d'écrire
+      if (!isTypingRef.current) {
+        fetchMessages(selectedMatch, false);
+      }
+    }, 10000); // ✅ 10 secondes au lieu de 3
+    
     return () => clearInterval(interval);
   }, [selectedMatch, fetchMessages]);
 
@@ -155,22 +213,30 @@ function MessagesContent() {
     e.preventDefault();
     if (!newMessage.trim() || !selectedMatch || sending) return;
 
+    const messageToSend = newMessage;
+    setNewMessage(""); // ✅ Vider immédiatement pour UX fluide
     setSending(true);
     setShowEmojis(false);
+    
     try {
       const res = await fetch(`/api/messages/${selectedMatch}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: newMessage }),
+        body: JSON.stringify({ content: messageToSend }),
       });
       if (res.ok) {
         const data = await res.json();
         setChatMessages((prev) => [...prev, data.message]);
-        setNewMessage("");
+        lastMessageIdRef.current = data.message.id;
+        shouldScrollRef.current = true;
         fetchMatchesList();
+      } else {
+        // Restaurer le message si échec
+        setNewMessage(messageToSend);
       }
     } catch {
-      // silently fail
+      // Restaurer le message si échec
+      setNewMessage(messageToSend);
     } finally {
       setSending(false);
     }
@@ -188,6 +254,8 @@ function MessagesContent() {
       if (res.ok) {
         const data = await res.json();
         setChatMessages((prev) => [...prev, data.message]);
+        lastMessageIdRef.current = data.message.id;
+        shouldScrollRef.current = true;
         fetchMatchesList();
       }
     } catch {
@@ -230,6 +298,8 @@ function MessagesContent() {
       if (res.ok) {
         const data = await res.json();
         setChatMessages((prev) => [...prev, data.message]);
+        lastMessageIdRef.current = data.message.id;
+        shouldScrollRef.current = true;
         fetchMatchesList();
       }
     } catch {
@@ -239,6 +309,22 @@ function MessagesContent() {
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
   }
+
+  // ✅ Détecter si l'utilisateur tape (pour pauser le polling)
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setNewMessage(e.target.value);
+    isTypingRef.current = true;
+    
+    // Reset "isTyping" après 2 secondes d'inactivité
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+    typingTimeoutRef.current = setTimeout(() => {
+      isTypingRef.current = false;
+    }, 2000);
+  };
+
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   function formatMessageTime(dateStr: string) {
     const date = new Date(dateStr);
@@ -763,7 +849,7 @@ function MessagesContent() {
               <input
                 type="text"
                 value={newMessage}
-                onChange={(e) => setNewMessage(e.target.value)}
+                onChange={handleInputChange}
                 placeholder="Écris un message..."
                 className="flex-1 px-4 py-2.5 bg-slate-100 rounded-full focus:bg-white focus:ring-2 focus:ring-rose-200 transition text-sm outline-none"
               />
