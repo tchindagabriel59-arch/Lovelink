@@ -79,9 +79,26 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     }
   }, [router]);
 
-  useEffect(() => {
+    useEffect(() => {
     fetchUser();
   }, [fetchUser]);
+
+  // 🎯 REDIRECTION FORCÉE : Si nouvel inscrit sans photo → /welcome
+  useEffect(() => {
+    if (!user) return;
+    
+    // Si l'utilisateur n'a PAS de photo ET n'est PAS déjà sur /welcome
+    // → Force la redirection vers /welcome
+    if (!user.photoUrl && pathname !== "/welcome") {
+      router.push("/welcome");
+    }
+    
+    // Si l'utilisateur A une photo mais est encore sur /welcome
+    // → Rediriger vers dashboard
+    if (user.photoUrl && pathname === "/welcome") {
+      router.push("/dashboard");
+    }
+  }, [user, pathname, router]);
 
   const handleLogout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
