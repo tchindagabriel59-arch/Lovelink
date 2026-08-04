@@ -179,13 +179,27 @@ function MessagesContent() {
     }
   }, []);
 
-  // ✅ Fetch initial quand on ouvre une conversation
+   // ✅ Fetch initial quand on ouvre une conversation + nettoyer les notifs
   useEffect(() => {
     if (selectedMatch) {
       lastMessageIdRef.current = null;
       fetchMessages(selectedMatch, true);
     }
   }, [selectedMatch, fetchMessages]);
+
+  // ✅ NOUVEAU : Nettoyer les notifs de messages quand on ouvre une conversation
+  useEffect(() => {
+    if (!selectedMatch || !otherUser) return;
+    
+    // Supprimer toutes les notifs "message" provenant de cette personne
+    fetch("/api/notifications/clear-messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fromUserId: otherUser.id }),
+    }).catch(() => {
+      // silently fail - pas critique
+    });
+  }, [selectedMatch, otherUser]);
 
   // ✅ Scroll uniquement si nécessaire (pas à chaque render)
   useEffect(() => {
