@@ -123,7 +123,7 @@ export default function RegisterPage() {
         console.log("✅ Facebook Pixel + CAPI: CompleteRegistration tracked (eventID:", data.metaEventId, ")");
       }
 
-      router.push("/dashboard");
+            router.push("/welcome");
     } catch {
       setError("Erreur de connexion au serveur");
     } finally {
