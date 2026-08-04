@@ -5,6 +5,7 @@ import { eq, and } from "drizzle-orm";
 import { getCurrentUserId } from "@/lib/auth";
 import { createNotification } from "@/lib/notifications";
 import { sendPushToUser, PushTemplates } from "@/lib/push";
+import { sendMatchEmail } from "@/lib/emails"; // 🆕 AJOUT
 
 const SUPER_LIKE_LIMITS = {
   free: 1,
@@ -223,6 +224,23 @@ export async function POST(req: NextRequest) {
             userId,
             PushTemplates.match(toUserData?.firstName ?? "Quelqu'un")
           );
+
+          // 📧 EMAIL MATCH aux 2 utilisateurs (async, ne bloque pas)
+          if (toUserData?.email && fromUserData?.firstName) {
+            sendMatchEmail(
+              toUserData.email,
+              toUserData.firstName ?? "Cher membre",
+              fromUserData.firstName
+            ).catch((err) => console.error("Erreur email match user1:", err));
+          }
+
+          if (fromUserData?.email && toUserData?.firstName) {
+            sendMatchEmail(
+              fromUserData.email,
+              fromUserData.firstName ?? "Cher membre",
+              toUserData.firstName
+            ).catch((err) => console.error("Erreur email match user2:", err));
+          }
         }
       } else {
         // Pas de match → notif like simple ou super like
