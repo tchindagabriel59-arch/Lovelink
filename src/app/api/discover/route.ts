@@ -44,11 +44,17 @@ export async function GET() {
       .where(eq(users.id, userId))
       .limit(1);
 
-    const prefGender = currentUser?.prefGender || "all";
+        const prefGender = currentUser?.prefGender || "all";
     const prefAgeMin = currentUser?.prefAgeMin || 18;
     const prefAgeMax = currentUser?.prefAgeMax || 99;
     const prefLookingFor = currentUser?.prefLookingFor || "all";
     const prefMaxDistance = currentUser?.prefMaxDistance || 999999;
+
+    // 🔍 DEBUG - À supprimer après diagnostic
+    console.log("🔍 [DISCOVER DEBUG] User ID:", userId);
+    console.log("🔍 [DISCOVER DEBUG] currentUser:", JSON.stringify(currentUser));
+    console.log("🔍 [DISCOVER DEBUG] prefGender:", prefGender);
+    console.log("🔍 [DISCOVER DEBUG] prefAgeMin/Max:", prefAgeMin, "-", prefAgeMax);
     const userLat = currentUser?.latitude;
     const userLon = currentUser?.longitude;
 
