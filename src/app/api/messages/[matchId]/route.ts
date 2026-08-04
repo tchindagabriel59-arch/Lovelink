@@ -5,6 +5,7 @@ import { eq, and, asc } from "drizzle-orm";
 import { getCurrentUserId } from "@/lib/auth";
 import { createNotification } from "@/lib/notifications";
 import { sendPushToUser, PushTemplates } from "@/lib/push";
+import { sendMessageEmail } from "@/lib/emails"; // 🆕 AJOUT
 
 export async function GET(
   req: NextRequest,
@@ -139,6 +140,21 @@ export async function POST(
 
     const sender = senderData[0];
 
+    // 🆕 Récupérer infos du destinataire (email + statut online)
+    const recipientData = await db
+      .select({
+        id: users.id,
+        email: users.email,
+        firstName: users.firstName,
+        isOnline: users.isOnline,
+        lastSeen: users.lastSeen,
+      })
+      .from(users)
+      .where(eq(users.id, recipientId))
+      .limit(1);
+
+    const recipient = recipientData[0];
+
     const cleanContent = content.trim();
 
     const newMessage = await db
@@ -172,6 +188,25 @@ export async function POST(
       recipientId,
       PushTemplates.message(sender?.firstName ?? "Quelqu'un", pushContent)
     );
+
+    // 📧 EMAIL MESSAGE (uniquement si destinataire hors ligne depuis 15+ min)
+    if (recipient?.email && recipient.firstName) {
+      const now = new Date();
+      const lastSeen = recipient.lastSeen ? new Date(recipient.lastSeen) : null;
+      const minutesSinceLastSeen = lastSeen
+        ? Math.floor((now.getTime() - lastSeen.getTime()) / (1000 * 60))
+        : 999;
+
+      const isOffline = !recipient.isOnline || minutesSinceLastSeen >= 15;
+
+      if (isOffline) {
+        sendMessageEmail(
+          recipient.email,
+          recipient.firstName,
+          sender?.firstName ?? "Quelqu'un"
+        ).catch((err) => console.error("Erreur email message:", err));
+      }
+    }
 
     return NextResponse.json({
       success: true,
