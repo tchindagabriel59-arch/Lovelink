@@ -14,6 +14,9 @@ import {
   Shield,
   BarChart3,
   ShieldCheck,
+  Camera,
+  Mail,
+  Loader2,
 } from "lucide-react";
 
 interface Stats {
@@ -47,6 +50,13 @@ export default function AdminDashboard() {
   const [pendingVerifications, setPendingVerifications] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+
+  // 🆕 États pour la relance photos
+  const [sendingRelance, setSendingRelance] = useState(false);
+  const [relanceResult, setRelanceResult] = useState<{
+    success: boolean;
+    message: string;
+  } | null>(null);
 
   useEffect(() => {
     fetchStats();
@@ -86,6 +96,44 @@ export default function AdminDashboard() {
       }
     } catch {
       // silently fail
+    }
+  }
+
+  // 🆕 Fonction de relance photos
+  async function handleRelancePhotos() {
+    if (!confirm("Envoyer un email de relance à tous les utilisateurs sans photo ?")) {
+      return;
+    }
+
+    setSendingRelance(true);
+    setRelanceResult(null);
+
+    try {
+      const res = await fetch("/api/admin/relance-photos", {
+        method: "POST",
+      });
+      const data = await res.json();
+
+      if (res.ok) {
+        setRelanceResult({
+          success: true,
+          message: `✅ ${data.sentCount} email(s) envoyé(s) sur ${data.totalWithoutPhotos} utilisateur(s) sans photo`,
+        });
+      } else {
+        setRelanceResult({
+          success: false,
+          message: `❌ Erreur : ${data.error || "Impossible d'envoyer les emails"}`,
+        });
+      }
+    } catch (err) {
+      setRelanceResult({
+        success: false,
+        message: "❌ Erreur de connexion",
+      });
+    } finally {
+      setSendingRelance(false);
+      // Effacer le message après 8 secondes
+      setTimeout(() => setRelanceResult(null), 8000);
     }
   }
 
@@ -183,6 +231,56 @@ export default function AdminDashboard() {
             trend={`${stats.reports.total} au total`}
             alert={stats.reports.pending > 0}
           />
+        </div>
+
+        {/* 🆕 CARTE RELANCE PHOTOS */}
+        <div className="bg-gradient-to-r from-rose-500/20 to-pink-500/20 border-2 border-rose-500/50 rounded-2xl p-6 relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-rose-500/10 rounded-full blur-3xl" />
+          <div className="relative flex items-center justify-between flex-wrap gap-4">
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 bg-gradient-to-br from-rose-500 to-pink-500 rounded-2xl flex items-center justify-center shadow-lg">
+                <Camera className="w-8 h-8 text-white" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold flex items-center gap-2">
+                  📸 Relancer les utilisateurs sans photo
+                </h3>
+                <p className="text-sm text-slate-400">
+                  Envoie un email à tous les membres qui n&apos;ont pas encore ajouté de photo
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={handleRelancePhotos}
+              disabled={sendingRelance}
+              className="px-6 py-3 bg-gradient-to-r from-rose-500 to-pink-500 hover:shadow-lg text-white rounded-xl font-bold transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {sendingRelance ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  Envoi en cours...
+                </>
+              ) : (
+                <>
+                  <Mail className="w-5 h-5" />
+                  Envoyer les relances
+                </>
+              )}
+            </button>
+          </div>
+
+          {/* Message de résultat */}
+          {relanceResult && (
+            <div
+              className={`mt-4 p-4 rounded-xl relative ${
+                relanceResult.success
+                  ? "bg-green-500/10 border border-green-500/30 text-green-400"
+                  : "bg-red-500/10 border border-red-500/30 text-red-400"
+              }`}
+            >
+              <p className="text-sm font-semibold">{relanceResult.message}</p>
+            </div>
+          )}
         </div>
 
         {/* 🆕 ALERTE VÉRIFICATIONS EN ATTENTE */}
