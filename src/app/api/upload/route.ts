@@ -1,5 +1,9 @@
 import { NextResponse } from 'next/server';
 
+// 🆕 Nouvelle façon Next.js App Router (au lieu de export const config)
+export const runtime = 'nodejs';
+export const maxDuration = 60;
+
 export async function POST(request: Request): Promise<NextResponse> {
   const startTime = Date.now();
   
@@ -75,7 +79,7 @@ export async function POST(request: Request): Promise<NextResponse> {
         // Si erreur ImgBB générique, retry
         if (attempt < MAX_ATTEMPTS) {
           console.warn(`[UPLOAD] Tentative ${attempt} échouée, retry...`, data);
-          await new Promise((r) => setTimeout(r, 1000 * attempt)); // Attente progressive
+          await new Promise((r) => setTimeout(r, 1000 * attempt));
           return uploadWithRetry(attempt + 1);
         }
 
@@ -132,12 +136,3 @@ export async function POST(request: Request): Promise<NextResponse> {
     );
   }
 }
-
-// Augmenter la limite de body pour les gros uploads
-export const config = {
-  api: {
-    bodyParser: {
-      sizeLimit: '32mb',
-    },
-  },
-};
