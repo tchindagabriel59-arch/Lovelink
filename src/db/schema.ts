@@ -49,6 +49,10 @@ export const users = pgTable("users", {
   verificationSubmittedAt: timestamp("verification_submitted_at"),
   verificationReviewedAt: timestamp("verification_reviewed_at"),
   verificationRejectedReason: text("verification_rejected_reason"),
+  // 🎁 SYSTÈME DE PARRAINAGE (NOUVEAU)
+  referralCode: varchar("referral_code", { length: 20 }).unique(),
+  referredBy: integer("referred_by"),
+  referralCount: integer("referral_count").default(0).notNull(),
   // PRÉFÉRENCES
   prefGender: varchar("pref_gender", { length: 20 }).default("all"),
   prefAgeMin: integer("pref_age_min").default(18),
@@ -140,11 +144,11 @@ export const pushSubscriptions = pgTable("push_subscriptions", {
 export const subscriptions = pgTable("subscriptions", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  plan: varchar("plan", { length: 20 }).notNull(), // 'premium' | 'gold'
-  billingPeriod: varchar("billing_period", { length: 20 }).notNull(), // 'monthly' | 'yearly'
-  amount: integer("amount").notNull(), // en FCFA
+  plan: varchar("plan", { length: 20 }).notNull(),
+  billingPeriod: varchar("billing_period", { length: 20 }).notNull(),
+  amount: integer("amount").notNull(),
   currency: varchar("currency", { length: 10 }).notNull().default("XOF"),
-  status: varchar("status", { length: 20 }).notNull().default("active"), // 'active' | 'expired' | 'cancelled'
+  status: varchar("status", { length: 20 }).notNull().default("active"),
   startsAt: timestamp("starts_at").notNull().defaultNow(),
   expiresAt: timestamp("expires_at").notNull(),
   cancelledAt: timestamp("cancelled_at"),
@@ -158,39 +162,37 @@ export const payments = pgTable("payments", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   subscriptionId: integer("subscription_id").references(() => subscriptions.id, { onDelete: "set null" }),
-
-  // CinetPay IDs
   merchantTransactionId: varchar("merchant_transaction_id", { length: 50 }).notNull().unique(),
   cinetpayTransactionId: varchar("cinetpay_transaction_id", { length: 100 }),
   notifyToken: varchar("notify_token", { length: 255 }),
   paymentToken: varchar("payment_token", { length: 255 }),
   paymentUrl: text("payment_url"),
-
-  // Détails du paiement
   amount: integer("amount").notNull(),
   currency: varchar("currency", { length: 10 }).notNull().default("XOF"),
-  plan: varchar("plan", { length: 20 }).notNull(), // 'premium' | 'gold'
-  billingPeriod: varchar("billing_period", { length: 20 }).notNull(), // 'monthly' | 'yearly'
-  paymentMethod: varchar("payment_method", { length: 50 }), // 'OM', 'WAVE', 'MTN', 'VISA'...
-
-  // Statut
-  status: varchar("status", { length: 20 }).notNull().default("pending"), // 'pending' | 'success' | 'failed' | 'cancelled'
+  plan: varchar("plan", { length: 20 }).notNull(),
+  billingPeriod: varchar("billing_period", { length: 20 }).notNull(),
+  paymentMethod: varchar("payment_method", { length: 50 }),
+  status: varchar("status", { length: 20 }).notNull().default("pending"),
   statusMessage: text("status_message"),
-
-  // Client info (snapshot)
   clientEmail: varchar("client_email", { length: 255 }),
   clientFirstName: varchar("client_first_name", { length: 100 }),
   clientLastName: varchar("client_last_name", { length: 100 }),
   clientPhone: varchar("client_phone", { length: 30 }),
-
-  // 📊 META CAPI - Pour déduplication Pixel/CAPI
   metaEventId: varchar("meta_event_id", { length: 100 }),
-
-  // Timestamps
   initiatedAt: timestamp("initiated_at").defaultNow(),
   completedAt: timestamp("completed_at"),
   webhookReceivedAt: timestamp("webhook_received_at"),
   verifiedAt: timestamp("verified_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// 🎁 REFERRALS (Système de parrainage) - NOUVEAU
+export const referrals = pgTable("referrals", {
+  id: serial("id").primaryKey(),
+  referrerId: integer("referrer_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  referredUserId: integer("referred_user_id").notNull().unique().references(() => users.id, { onDelete: "cascade" }),
+  rewardApplied: boolean("reward_applied").default(false).notNull(),
+  rewardType: varchar("reward_type", { length: 30 }).default("premium_7d").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
 });
