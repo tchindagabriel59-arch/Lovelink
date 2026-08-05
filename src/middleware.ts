@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { jwtVerify } from "jose";
 
 // Routes qui nécessitent d'avoir une photo
 const PROTECTED_ROUTES = [
@@ -14,9 +15,6 @@ const PROTECTED_ROUTES = [
   "/parrainage",
   "/premium",
 ];
-
-// Routes autorisées SANS photo
-const ALLOWED_WITHOUT_PHOTO = ["/welcome", "/profile", "/login", "/register"];
 
 export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
@@ -40,54 +38,15 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Récupérer le token d'auth
-  const authToken = request.cookies.get("auth_token")?.value;
-
-  if (!authToken) {
-    // Pas de token → laisse le layout gérer (redirection vers /login)
-    return NextResponse.next();
-  }
-
-  // Vérifier si l'user a une photo via l'API
-  try {
-    const meResponse = await fetch(
-      `${request.nextUrl.origin}/api/auth/me`,
-      {
-        headers: {
-          Cookie: `auth_token=${authToken}`,
-        },
-      }
-    );
-
-    if (!meResponse.ok) {
-      return NextResponse.next();
-    }
-
-    const meData = await meResponse.json();
-    const user = meData.user;
-
-    // Si pas de photo ET pas déjà sur /welcome → redirection forcée
-    if (user && (!user.photoUrl || user.photoUrl.trim() === "")) {
-      const welcomeUrl = new URL("/welcome", request.url);
-      return NextResponse.redirect(welcomeUrl);
-    }
-  } catch (error) {
-    console.error("[Middleware] Erreur vérification photo:", error);
-  }
-
+  // Le middleware ne peut pas facilement accéder à la BDD
+  // On laisse le layout côté client faire la vérification photo
+  // C'est plus fiable et évite les blocages
   return NextResponse.next();
 }
 
 // Configurer les routes sur lesquelles le middleware s'applique
 export const config = {
   matcher: [
-    /*
-     * Match toutes les routes SAUF :
-     * - api (API routes)
-     * - _next/static (fichiers statiques)
-     * - _next/image (images)
-     * - favicon.ico, manifest.json, etc.
-     */
     "/((?!api|_next/static|_next/image|favicon.ico|manifest.json|robots.txt|sitemap.xml|.*\\.png|.*\\.jpg|.*\\.jpeg|.*\\.svg|.*\\.ico).*)",
   ],
 };
