@@ -231,8 +231,9 @@ export async function POST(req: NextRequest) {
             PushTemplates.match(toUserData?.firstName ?? "Quelqu'un")
           );
 
-          // 📧 EMAIL MATCH : Envoyer seulement au destinataire (économie quota Resend)
-// La personne qui a liké en dernier reçoit l'email (celle qui a "provoqué" le match)
+          // 📧 EMAIL MATCH : Envoyer seulement au destinataire pour économiser le quota Resend
+// L'utilisateur qui vient d'être "matché" reçoit l'email (celui qui a été liké en dernier)
+// La personne qui a liké voit déjà l'animation de match sur son écran
 if (toUserData?.email && fromUserData?.firstName) {
   sendMatchEmail(
     toUserData.email,
