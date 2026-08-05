@@ -195,24 +195,28 @@ export async function POST(
       PushTemplates.message(sender?.firstName ?? "Quelqu'un", pushContent)
     );
 
-    // 📧 EMAIL MESSAGE (uniquement si destinataire hors ligne depuis 15+ min)
-    if (recipient?.email && recipient.firstName) {
-      const now = new Date();
-      const lastSeen = recipient.lastSeen ? new Date(recipient.lastSeen) : null;
-      const minutesSinceLastSeen = lastSeen
-        ? Math.floor((now.getTime() - lastSeen.getTime()) / (1000 * 60))
-        : 999;
+  // 📧 EMAIL MESSAGE : DÉSACTIVÉ pour économiser le quota Resend
+// La notification push suffit largement
+// Décommenter si tu passes au plan Pro Resend
+/*
+if (recipient?.email && recipient.firstName) {
+  const now = new Date();
+  const lastSeen = recipient.lastSeen ? new Date(recipient.lastSeen) : null;
+  const minutesSinceLastSeen = lastSeen
+    ? Math.floor((now.getTime() - lastSeen.getTime()) / (1000 * 60))
+    : 999;
 
-      const isOffline = !recipient.isOnline || minutesSinceLastSeen >= 15;
+  const isOffline = !recipient.isOnline || minutesSinceLastSeen >= 15;
 
-      if (isOffline) {
-        sendMessageEmail(
-          recipient.email,
-          recipient.firstName,
-          sender?.firstName ?? "Quelqu'un"
-        ).catch((err) => console.error("Erreur email message:", err));
-      }
-    }
+  if (isOffline) {
+    sendMessageEmail(
+      recipient.email,
+      recipient.firstName,
+      sender?.firstName ?? "Quelqu'un"
+    ).catch((err) => console.error("Erreur email message:", err));
+  }
+}
+*/
 
     return NextResponse.json({
       success: true,
