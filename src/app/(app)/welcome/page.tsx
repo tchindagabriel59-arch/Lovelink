@@ -23,6 +23,7 @@ export default function WelcomePage() {
   const [bio, setBio] = useState("");
   const [city, setCity] = useState("");
   const [saving, setSaving] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string>("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Si l'utilisateur a déjà une photo, rediriger vers dashboard
@@ -36,13 +37,17 @@ export default function WelcomePage() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 5 * 1024 * 1024) {
-      alert("Photo trop grande. Maximum 5 MB.");
+    // 🔍 Réinitialiser les erreurs
+    setErrorMessage("");
+
+    // 🛡️ Vérifications préalables
+    if (file.size > 32 * 1024 * 1024) {
+      setErrorMessage(`📸 Photo trop grande (${(file.size / (1024 * 1024)).toFixed(1)} MB). Maximum : 32 MB`);
       return;
     }
 
     if (!file.type.startsWith("image/")) {
-      alert("Veuillez sélectionner une image.");
+      setErrorMessage("❌ Ce fichier n'est pas une image. Choisis une photo (JPG, PNG, HEIC...)");
       return;
     }
 
@@ -56,12 +61,22 @@ export default function WelcomePage() {
         }
       );
 
-      if (!response.ok) throw new Error("Erreur upload");
+      const data = await response.json();
 
-      const blob = await response.json();
-      setPhotoUrl(blob.url);
-    } catch {
-      alert("❌ Erreur lors de l'envoi de la photo");
+      if (!response.ok) {
+        // 🎯 Messages d'erreur spécifiques
+        if (data.code === "QUOTA_EXCEEDED") {
+          setErrorMessage("⏳ Le service photos est temporairement saturé. Réessaie dans 5 minutes !");
+        } else {
+          setErrorMessage(`❌ ${data.error || "Erreur lors de l'envoi de la photo"}`);
+        }
+        return;
+      }
+
+      setPhotoUrl(data.url);
+    } catch (err) {
+      console.error("Erreur upload:", err);
+      setErrorMessage("❌ Problème de connexion. Vérifie ton internet et réessaie.");
     } finally {
       setUploading(false);
     }
@@ -69,11 +84,12 @@ export default function WelcomePage() {
 
   const handleContinue = async () => {
     if (!photoUrl) {
-      alert("📸 Ajoute au moins une photo pour continuer !");
+      setErrorMessage("📸 Ajoute au moins une photo pour continuer !");
       return;
     }
 
     setSaving(true);
+    setErrorMessage("");
     try {
       await fetch("/api/profile", {
         method: "PUT",
@@ -92,7 +108,7 @@ export default function WelcomePage() {
         router.push("/dashboard");
       }, 500);
     } catch {
-      alert("Erreur, réessaye");
+      setErrorMessage("❌ Erreur d'enregistrement. Réessaye.");
       setSaving(false);
     }
   };
@@ -134,6 +150,14 @@ export default function WelcomePage() {
               C&apos;est <strong>essentiel</strong> pour recevoir des likes et faire des matchs
             </p>
           </div>
+
+          {/* 🚨 MESSAGE D'ERREUR */}
+          {errorMessage && (
+            <div className="mb-6 p-4 bg-red-50 border-2 border-red-200 rounded-xl text-red-700 text-sm font-medium animate-fade-in flex items-start gap-2">
+              <span className="text-lg leading-none">⚠️</span>
+              <span>{errorMessage}</span>
+            </div>
+          )}
 
           {/* Statistiques d'incitation */}
           <div className="grid grid-cols-3 gap-3 mb-6">
@@ -205,6 +229,7 @@ export default function WelcomePage() {
                     <>
                       <Loader2 className="w-16 h-16 text-rose-500 animate-spin" />
                       <p className="text-slate-600 font-medium">Envoi en cours...</p>
+                      <p className="text-xs text-slate-400">Cela peut prendre quelques secondes</p>
                     </>
                   ) : (
                     <>
@@ -215,7 +240,7 @@ export default function WelcomePage() {
                         Clique pour ajouter ta photo
                       </p>
                       <p className="text-sm text-slate-500">
-                        JPG, PNG • Max 5 MB
+                        JPG, PNG, HEIC • Max 32 MB
                       </p>
                     </>
                   )}
