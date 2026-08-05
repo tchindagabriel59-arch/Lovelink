@@ -6,6 +6,7 @@ import { getCurrentUserId } from "@/lib/auth";
 import { createNotification } from "@/lib/notifications";
 import { sendPushToUser, PushTemplates } from "@/lib/push";
 import { sendMessageEmail } from "@/lib/emails"; // 🆕 AJOUT
+import { requirePhoto } from "@/lib/photo-check";
 
 export async function GET(
   req: NextRequest,
@@ -95,7 +96,12 @@ export async function POST(
       return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
     }
 
+    // 🔒 BLOQUER SI PAS DE PHOTO
+    const photoCheck = await requirePhoto(userId);
+    if (photoCheck) return photoCheck;
+
     const { matchId: matchIdParam } = await params;
+    // ... reste du code
     const matchId = parseInt(matchIdParam);
 
     if (isNaN(matchId)) {
