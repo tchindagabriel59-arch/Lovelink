@@ -6,7 +6,6 @@ import { getCurrentUserId } from "@/lib/auth";
 import { createNotification } from "@/lib/notifications";
 import { sendPushToUser, PushTemplates } from "@/lib/push";
 import { requirePhoto } from "@/lib/photo-check";
-// import { sendMessageEmail } from "@/lib/emails"; // ❌ Désactivé pour économiser quota Resend
 
 export async function GET(
   req: NextRequest,
@@ -96,7 +95,7 @@ export async function POST(
       return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
     }
 
-    // 🔒 BLOQUER SI PAS DE PHOTO
+    // Blocage si pas de photo
     const photoCheck = await requirePhoto(userId);
     if (photoCheck) return photoCheck;
 
@@ -179,9 +178,8 @@ export async function POST(
       PushTemplates.message(sender?.firstName ?? "Quelqu'un", pushContent)
     );
 
-    // 📧 EMAIL MESSAGE : DÉSACTIVÉ pour économiser le quota Resend
+    // Emails de message desactives pour economiser le quota Resend
     // La notification push suffit largement
-    // Réactiver si tu passes au plan Pro Resend (20$/mois)
 
     return NextResponse.json({
       success: true,
