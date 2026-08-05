@@ -6,6 +6,7 @@ import { getCurrentUserId } from "@/lib/auth";
 import { createNotification } from "@/lib/notifications";
 import { sendPushToUser, PushTemplates } from "@/lib/push";
 import { sendMatchEmail } from "@/lib/emails"; // 🆕 AJOUT
+import { requirePhoto } from "@/lib/photo-check";
 
 const SUPER_LIKE_LIMITS = {
   free: 1,
@@ -66,7 +67,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
     }
 
+    // 🔒 BLOQUER SI PAS DE PHOTO
+    const photoCheck = await requirePhoto(userId);
+    if (photoCheck) return photoCheck;
+
     const { toUserId, isLike, isSuperLike } = await req.json();
+    // ...
 
     if (!toUserId || isLike === undefined) {
       return NextResponse.json({ error: "Données manquantes" }, { status: 400 });
