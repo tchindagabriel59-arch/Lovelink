@@ -83,35 +83,60 @@ export default function WelcomePage() {
   };
 
   const handleContinue = async () => {
-    if (!photoUrl) {
-      setErrorMessage("📸 Ajoute au moins une photo pour continuer !");
+  if (!photoUrl) {
+    setErrorMessage("📸 Ajoute au moins une photo pour continuer !");
+    return;
+  }
+
+  setSaving(true);
+  setErrorMessage("");
+
+  try {
+    // Timeout de 30 secondes pour éviter le blocage infini
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+    const response = await fetch("/api/profile", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        photoUrl,
+        bio: bio || undefined,
+        city: city || undefined,
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    // Vérifier si la réponse est OK
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      console.error("Erreur API profile:", response.status, errorData);
+      setErrorMessage(
+        `❌ Erreur d'enregistrement (${response.status}). ${errorData.error || "Réessaye."}`
+      );
+      setSaving(false);
       return;
     }
 
-    setSaving(true);
-    setErrorMessage("");
-    try {
-      await fetch("/api/profile", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          photoUrl,
-          bio: bio || undefined,
-          city: city || undefined,
-        }),
-      });
-
-      refreshUser();
-      
-      // Petit délai pour l'animation
-      setTimeout(() => {
-        router.push("/dashboard");
-      }, 500);
-    } catch {
-      setErrorMessage("❌ Erreur d'enregistrement. Réessaye.");
-      setSaving(false);
+    // Succès : rafraîchir l'user et rediriger
+    await refreshUser();
+    
+    setTimeout(() => {
+      router.push("/dashboard");
+    }, 500);
+  } catch (err: any) {
+    console.error("Erreur handleContinue:", err);
+    
+    if (err.name === "AbortError") {
+      setErrorMessage("⏳ L'enregistrement prend trop de temps. Vérifie ta connexion et réessaye.");
+    } else {
+      setErrorMessage(`❌ ${err.message || "Erreur d'enregistrement. Réessaye."}`);
     }
-  };
+    setSaving(false);
+  }
+};
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-rose-50 via-pink-50 to-purple-50 flex items-center justify-center p-4">
