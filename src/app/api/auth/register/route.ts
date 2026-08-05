@@ -6,6 +6,11 @@ import bcrypt from "bcryptjs";
 import { createToken } from "@/lib/auth";
 import { sendWelcomeEmail } from "@/lib/emails";
 import { sendMetaEvent, getClientIp, generateEventId } from "@/lib/meta-capi";
+import { 
+  generateUniqueReferralCode, 
+  findUserByReferralCode, 
+  applyReferralReward 
+} from "@/lib/referral";
 
 // 🎯 Auto-définir la préférence de genre selon le genre de l'utilisateur
 function getDefaultPrefGender(userGender: string): "male" | "female" | "non_binary" | "other" | null {
@@ -25,7 +30,16 @@ function getDefaultPrefGender(userGender: string): "male" | "female" | "non_bina
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { email, password, firstName, lastName, birthDate, gender, eventId: clientEventId } = body;
+    const { 
+      email, 
+      password, 
+      firstName, 
+      lastName, 
+      birthDate, 
+      gender, 
+      eventId: clientEventId,
+      referralCode: providedReferralCode, // 🆕 Code de parrainage optionnel
+    } = body;
 
     if (!email || !password || !firstName || !lastName || !birthDate || !gender) {
       return NextResponse.json(
@@ -50,6 +64,16 @@ export async function POST(req: NextRequest) {
     const passwordHash = await bcrypt.hash(password, 12);
     const defaultPrefGender = getDefaultPrefGender(gender);
 
+    // 🎁 Générer un code de parrainage unique pour ce nouveau user
+    const newReferralCode = await generateUniqueReferralCode(firstName);
+
+    // 🎁 Vérifier si un code de parrainage a été fourni
+    let referrer = null;
+    if (providedReferralCode && providedReferralCode.trim() !== "") {
+      referrer = await findUserByReferralCode(providedReferralCode);
+    }
+
+    // Créer le nouveau user
     const [newUser] = await db
       .insert(users)
       .values({
@@ -62,18 +86,26 @@ export async function POST(req: NextRequest) {
         prefGender: defaultPrefGender,
         prefAgeMin: 18,
         prefAgeMax: 99,
+        referralCode: newReferralCode, // 🆕
+        referredBy: referrer?.id || null, // 🆕
       })
       .returning();
 
     const token = await createToken(newUser.id);
+
+    // 🎁 Si parrainé : appliquer la récompense (Premium 7 jours aux 2)
+    if (referrer) {
+      applyReferralReward(referrer.id, newUser.id).catch((err) => {
+        console.error("Erreur applyReferralReward:", err);
+      });
+    }
 
     // 📧 Email de bienvenue (async, ne bloque pas)
     sendWelcomeEmail(email, firstName).catch((err) => {
       console.error("Erreur envoi email bienvenue:", err);
     });
 
-    // 🔥 META CAPI - CompleteRegistration (serveur -> Meta)
-    // On utilise le même eventId que le Pixel pour la déduplication
+    // 🔥 META CAPI - CompleteRegistration
     const metaEventId = clientEventId || generateEventId();
     
     try {
@@ -84,7 +116,6 @@ export async function POST(req: NextRequest) {
       const referer = req.headers.get('referer');
       const eventSourceUrl = referer || `${process.env.NEXT_PUBLIC_SITE_URL || 'https://lovelink237.com'}/register`;
 
-      // Ne pas bloquer l'inscription si Meta échoue
       await sendMetaEvent({
         eventName: 'CompleteRegistration',
         eventId: metaEventId,
@@ -105,7 +136,6 @@ export async function POST(req: NextRequest) {
       });
     } catch (capiError) {
       console.error("[Meta CAPI] Erreur CompleteRegistration:", capiError);
-      // On continue, on ne bloque pas l'inscription
     }
 
     const response = NextResponse.json({
@@ -114,8 +144,10 @@ export async function POST(req: NextRequest) {
         email: newUser.email,
         firstName: newUser.firstName,
         lastName: newUser.lastName,
+        referralCode: newUser.referralCode, // 🆕
       },
-      metaEventId, // 🔥 Renvoyé au frontend pour déduplication Pixel
+      metaEventId,
+      referralApplied: !!referrer, // 🆕 Le frontend saura si le parrainage a marché
     });
 
     response.cookies.set("auth_token", token, {
