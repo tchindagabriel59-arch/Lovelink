@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { users, likes, blocks } from "@/db/schema";
-import { eq, notInArray, sql, and, gte, lte } from "drizzle-orm";
+import { eq, notInArray, sql, and, gte, lte, ne, isNotNull } from "drizzle-orm";
 import { getCurrentUserId } from "@/lib/auth";
+import { requirePhoto } from "@/lib/photo-check"; // 🆕 Import
 
 function calculateDistance(
   lat1: number,
@@ -30,6 +31,10 @@ export async function GET() {
       return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
     }
 
+    // 🔒 BLOQUER SI PAS DE PHOTO
+    const photoCheck = await requirePhoto(userId);
+    if (photoCheck) return photoCheck;
+
     const [currentUser] = await db
       .select({
         prefGender: users.prefGender,
@@ -44,7 +49,7 @@ export async function GET() {
       .where(eq(users.id, userId))
       .limit(1);
 
-           const prefGender = currentUser?.prefGender || "all";
+    const prefGender = currentUser?.prefGender || "all";
     const prefAgeMin = currentUser?.prefAgeMin || 18;
     const prefAgeMax = currentUser?.prefAgeMax || 99;
     const prefLookingFor = currentUser?.prefLookingFor || "all";
@@ -118,6 +123,9 @@ export async function GET() {
       eq(users.isIncognito, false), // 🕵️ Cacher les profils en mode incognito
       lte(users.birthDate, maxBirthDate),
       gte(users.birthDate, minBirthDate),
+      // 🔒 NE MONTRER QUE LES PROFILS AVEC PHOTO
+      isNotNull(users.photoUrl),
+      ne(users.photoUrl, ""),
     ];
 
     if (prefGender !== "all") {
@@ -130,7 +138,7 @@ export async function GET() {
       );
     }
 
-      const allProfiles = await db
+    const allProfiles = await db
       .select({
         id: users.id,
         firstName: users.firstName,
