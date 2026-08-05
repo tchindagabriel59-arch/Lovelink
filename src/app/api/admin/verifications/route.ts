@@ -45,6 +45,7 @@ export async function GET(req: NextRequest) {
       verificationRejectedReason: users.verificationRejectedReason,
       isVerified: users.isVerified,
       isPremium: users.isPremium,
+      createdAt: users.createdAt, // 🆕 Date d'inscription
     };
 
     let allRequests;
