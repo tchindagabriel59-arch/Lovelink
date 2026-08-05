@@ -231,22 +231,15 @@ export async function POST(req: NextRequest) {
             PushTemplates.match(toUserData?.firstName ?? "Quelqu'un")
           );
 
-          // 📧 EMAIL MATCH aux 2 utilisateurs (async, ne bloque pas)
-          if (toUserData?.email && fromUserData?.firstName) {
-            sendMatchEmail(
-              toUserData.email,
-              toUserData.firstName ?? "Cher membre",
-              fromUserData.firstName
-            ).catch((err) => console.error("Erreur email match user1:", err));
-          }
-
-          if (fromUserData?.email && toUserData?.firstName) {
-            sendMatchEmail(
-              fromUserData.email,
-              fromUserData.firstName ?? "Cher membre",
-              toUserData.firstName
-            ).catch((err) => console.error("Erreur email match user2:", err));
-          }
+          // 📧 EMAIL MATCH : Envoyer seulement au destinataire (économie quota Resend)
+// La personne qui a liké en dernier reçoit l'email (celle qui a "provoqué" le match)
+if (toUserData?.email && fromUserData?.firstName) {
+  sendMatchEmail(
+    toUserData.email,
+    toUserData.firstName ?? "Cher membre",
+    fromUserData.firstName
+  ).catch((err) => console.error("Erreur email match:", err));
+}
         }
       } else {
         // Pas de match → notif like simple ou super like
