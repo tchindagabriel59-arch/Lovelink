@@ -195,10 +195,7 @@ export async function POST(
       PushTemplates.message(sender?.firstName ?? "Quelqu'un", pushContent)
     );
 
-  // 📧 EMAIL MESSAGE : DÉSACTIVÉ pour économiser le quota Resend
-// La notification push suffit largement
-// Décommenter si tu passes au plan Pro Resend
-/*
+  // 📧 EMAIL MESSAGE (uniquement si destinataire hors ligne depuis 15+ min)
 if (recipient?.email && recipient.firstName) {
   const now = new Date();
   const lastSeen = recipient.lastSeen ? new Date(recipient.lastSeen) : null;
