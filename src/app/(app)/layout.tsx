@@ -274,9 +274,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             </div>
           </div>
 
-          {/* Menu mobile déroulant */}
-          {menuOpen && (
-            <nav className="px-4 pb-4 space-y-1 animate-fade-in">
+          {/* Menu mobile déroulant - AVEC SCROLL */}
+{menuOpen && (
+  <nav 
+    className="px-4 pb-32 space-y-1 animate-fade-in overflow-y-auto"
+    style={{ maxHeight: "calc(100vh - 80px)" }}
+  >
               {navItems.map((item) => (
                 <Link
                   key={item.href}
