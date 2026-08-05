@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { Heart, ArrowRight, Eye, EyeOff } from "lucide-react";
+import { Heart, ArrowRight, Eye, EyeOff, Gift, Sparkles } from "lucide-react";
 
 // Déclaration TypeScript pour Facebook Pixel
 declare global {
@@ -12,8 +12,11 @@ declare global {
   }
 }
 
-export default function RegisterPage() {
+function RegisterPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const refCode = searchParams.get("ref"); // 🎁 Récupère le code de parrainage
+
   const [step, setStep] = useState(1);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
@@ -29,6 +32,15 @@ export default function RegisterPage() {
   });
   const [acceptCGU, setAcceptCGU] = useState(false);
   const [acceptAge, setAcceptAge] = useState(false);
+
+  // 🎁 Sauvegarder le code de parrainage dans localStorage (au cas où l'user recharge)
+  useEffect(() => {
+    if (refCode) {
+      localStorage.setItem("referralCode", refCode);
+    }
+  }, [refCode]);
+
+  const activeReferralCode = refCode || (typeof window !== "undefined" ? localStorage.getItem("referralCode") : null);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -97,7 +109,10 @@ export default function RegisterPage() {
       const res = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify({
+          ...form,
+          referralCode: activeReferralCode, // 🎁 Envoie le code de parrainage
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -117,13 +132,23 @@ export default function RegisterPage() {
             value: 0,
           },
           {
-            eventID: data.metaEventId, // ← Même ID que le CAPI = déduplication
+            eventID: data.metaEventId,
           }
         );
         console.log("✅ Facebook Pixel + CAPI: CompleteRegistration tracked (eventID:", data.metaEventId, ")");
       }
 
-            router.push("/welcome");
+      // 🎁 Nettoyer le code de parrainage du localStorage
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("referralCode");
+      }
+
+      // 🎁 Si parrainage appliqué, on peut afficher un message (optionnel via query param)
+      if (data.referralApplied) {
+        router.push("/welcome?referral=success");
+      } else {
+        router.push("/welcome");
+      }
     } catch {
       setError("Erreur de connexion au serveur");
     } finally {
@@ -145,6 +170,29 @@ export default function RegisterPage() {
           <h1 className="text-3xl font-bold text-slate-900">Créer un compte</h1>
           <p className="mt-2 text-slate-600">Rejoignez notre communauté</p>
         </div>
+
+        {/* 🎁 BANDEAU DE PARRAINAGE (si code présent) */}
+        {activeReferralCode && (
+          <div className="mb-6 relative overflow-hidden rounded-2xl bg-gradient-to-r from-emerald-500 via-green-500 to-teal-500 p-1 shadow-xl shadow-emerald-500/30 animate-fade-in">
+            <div className="bg-white rounded-xl p-5 flex items-center gap-4">
+              <div className="w-14 h-14 bg-gradient-to-br from-emerald-500 to-green-600 rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-500/30 flex-shrink-0">
+                <Gift className="w-7 h-7 text-white" />
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-xs font-black text-emerald-600 uppercase tracking-wider">🎁 Cadeau de bienvenue</span>
+                  <Sparkles className="w-4 h-4 text-amber-500 animate-pulse" />
+                </div>
+                <p className="text-sm font-bold text-slate-900">
+                  Tu es invité(e) avec le code <span className="text-emerald-600 font-black">{activeReferralCode}</span>
+                </p>
+                <p className="text-xs text-slate-600 mt-0.5">
+                  Tu recevras <strong className="text-emerald-600">7 jours de Premium GRATUIT</strong> à l&apos;inscription ! 💜
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="flex items-center justify-center gap-2 mb-8">
           {[1, 2, 3].map((s) => (
@@ -333,8 +381,8 @@ export default function RegisterPage() {
                   className="mt-1 w-5 h-5 accent-rose-500 cursor-pointer"
                 />
                 <label htmlFor="acceptAge" className="text-sm text-slate-700 cursor-pointer">
-                  Je certifie sur l'honneur avoir <strong>au moins 18 ans</strong> et
-                  disposer de la capacité juridique pour m'inscrire sur LoveLink.
+                  Je certifie sur l&apos;honneur avoir <strong>au moins 18 ans</strong> et
+                  disposer de la capacité juridique pour m&apos;inscrire sur LoveLink.
                 </label>
               </div>
 
@@ -347,9 +395,9 @@ export default function RegisterPage() {
                   className="mt-1 w-5 h-5 accent-purple-500 cursor-pointer"
                 />
                 <label htmlFor="acceptCGU" className="text-sm text-slate-700 cursor-pointer">
-                  J'accepte les{" "}
+                  J&apos;accepte les{" "}
                   <Link href="/cgu" target="_blank" className="text-rose-500 underline font-semibold">
-                    Conditions Générales d'Utilisation
+                    Conditions Générales d&apos;Utilisation
                   </Link>{" "}
                   et la{" "}
                   <Link href="/confidentialite" target="_blank" className="text-rose-500 underline font-semibold">
@@ -388,5 +436,18 @@ export default function RegisterPage() {
         </form>
       </div>
     </div>
+  );
+}
+
+// Wrapper avec Suspense pour useSearchParams
+export default function RegisterPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gradient-to-br from-rose-50 via-pink-50 to-purple-50 flex items-center justify-center">
+        <Heart className="w-12 h-12 text-rose-500 fill-rose-500 animate-pulse" />
+      </div>
+    }>
+      <RegisterPageContent />
+    </Suspense>
   );
 }
