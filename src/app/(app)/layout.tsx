@@ -21,6 +21,7 @@ import {
   ShieldCheck,
   BadgeCheck,
   EyeOff,
+  Gift, // 🆕 Icône parrainage
 } from "lucide-react";
 
 interface UserData {
@@ -167,6 +168,22 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             {/* Séparateur */}
             <div className="my-3 border-t border-slate-100" />
 
+            {/* 🎁 Bouton PARRAINAGE (NOUVEAU) */}
+            <Link
+              href="/parrainage"
+              className={`relative flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold ${
+                pathname === "/parrainage"
+                  ? "bg-gradient-to-r from-emerald-500 to-green-600 text-white shadow-lg shadow-emerald-500/25"
+                  : "bg-gradient-to-r from-emerald-50 to-green-50 text-emerald-700 border border-emerald-200 hover:from-emerald-100 hover:to-green-100"
+              }`}
+            >
+              <Gift className="w-5 h-5" />
+              <span>Parrainer</span>
+              <span className="ml-auto text-[10px] font-bold bg-emerald-500 text-white px-2 py-0.5 rounded-full animate-pulse">
+                GRATUIT
+              </span>
+            </Link>
+
             {/* Bouton Premium spécial */}
             <Link
               href="/premium"
@@ -278,6 +295,23 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
               {/* Séparateur */}
               <div className="border-t border-slate-100 my-2" />
+
+              {/* 🎁 Lien PARRAINAGE dans le menu mobile (NOUVEAU) */}
+              <Link
+                href="/parrainage"
+                onClick={() => setMenuOpen(false)}
+                className={`relative flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all ${
+                  pathname === "/parrainage"
+                    ? "bg-gradient-to-r from-emerald-500 to-green-600 text-white"
+                    : "bg-gradient-to-r from-emerald-50 to-green-50 text-emerald-700 border border-emerald-200"
+                }`}
+              >
+                <Gift className="w-5 h-5" />
+                Parrainer un ami
+                <span className="ml-auto text-[10px] font-bold bg-emerald-500 text-white px-2 py-0.5 rounded-full animate-pulse">
+                  GRATUIT
+                </span>
+              </Link>
 
               {/* Lien Premium dans le menu mobile */}
               <Link
