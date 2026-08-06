@@ -1,17 +1,14 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Heart,
   X,
   MapPin,
-  Briefcase,
   Sparkles,
-  ChevronLeft,
-  ChevronRight,
   Flag,
-  AlertTriangle,
   Crown,
   MessageCircle,
   Star,
@@ -20,6 +17,8 @@ import {
   Gem,
   Lock,
   BadgeCheck,
+  ChevronUp,
+  AlertTriangle,
 } from "lucide-react";
 
 interface Profile {
@@ -40,6 +39,7 @@ interface Profile {
   interests: string | null;
   occupation: string | null;
   isOnline: boolean;
+  lastSeen?: string | null;
   isPremium: boolean;
   isVerified: boolean;
   distance: number | null;
@@ -61,6 +61,10 @@ interface SuperLikeStatus {
   canSuperLike: boolean;
 }
 
+interface CurrentUser {
+  isPremium?: boolean;
+}
+
 function getAge(birthDate: string): number {
   const today = new Date();
   const birth = new Date(birthDate);
@@ -70,13 +74,26 @@ function getAge(birthDate: string): number {
   return age;
 }
 
+function getActivityStatus(profile: Profile): { text: string; color: string } {
+  if (profile.isOnline) {
+    return { text: "En ligne", color: "bg-green-500" };
+  }
+  if (profile.lastSeen) {
+    const now = new Date();
+    const lastSeen = new Date(profile.lastSeen);
+    const diffMin = Math.floor((now.getTime() - lastSeen.getTime()) / (1000 * 60));
+    if (diffMin < 60) return { text: "Actif récemment", color: "bg-green-400" };
+    if (diffMin < 1440) return { text: "Actif aujourd'hui", color: "bg-yellow-400" };
+  }
+  return { text: "Par activité récente", color: "bg-green-500" };
+}
+
 const gradients = [
   "from-rose-400 to-pink-500",
   "from-purple-400 to-violet-500",
   "from-blue-400 to-cyan-500",
   "from-amber-400 to-orange-500",
   "from-emerald-400 to-teal-500",
-  "from-fuchsia-400 to-pink-500",
 ];
 
 const reportReasons = [
@@ -90,17 +107,17 @@ const reportReasons = [
 ];
 
 function getAllPhotos(profile: Profile): string[] {
-  const photos = [
+  return [
     profile.photoUrl,
     profile.photo1Url,
     profile.photo2Url,
     profile.photo3Url,
     profile.photo4Url,
   ].filter((p): p is string => !!p && p.trim() !== "");
-  return photos;
 }
 
 export default function DiscoverPage() {
+  const router = useRouter();
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
@@ -112,19 +129,36 @@ export default function DiscoverPage() {
   const [selectedReason, setSelectedReason] = useState("");
   const [reportDetails, setReportDetails] = useState("");
   const [sendingReport, setSendingReport] = useState(false);
-  const [showFullBio, setShowFullBio] = useState(false);
   const [superLikeStatus, setSuperLikeStatus] = useState<SuperLikeStatus | null>(null);
   const [showLimitModal, setShowLimitModal] = useState(false);
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
+  const [showPremiumModal, setShowPremiumModal] = useState(false);
+  const [premiumFeature, setPremiumFeature] = useState<string>("");
+
+  // Swipe state
+  const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const cardRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetchProfiles();
     fetchSuperLikeStatus();
+    fetchCurrentUser();
   }, []);
 
   useEffect(() => {
     setCurrentPhotoIndex(0);
-    setShowFullBio(false);
   }, [currentIndex]);
+
+  async function fetchCurrentUser() {
+    try {
+      const res = await fetch("/api/auth/me");
+      if (res.ok) {
+        const data = await res.json();
+        setCurrentUser(data.user);
+      }
+    } catch {}
+  }
 
   async function fetchProfiles() {
     try {
@@ -133,9 +167,8 @@ export default function DiscoverPage() {
         const data = await res.json();
         setProfiles(data.profiles || []);
       }
-    } catch {
-      // silently fail
-    } finally {
+    } catch {}
+    finally {
       setLoading(false);
     }
   }
@@ -147,13 +180,11 @@ export default function DiscoverPage() {
         const data = await res.json();
         setSuperLikeStatus(data);
       }
-    } catch {
-      // silently fail
-    }
+    } catch {}
   }
 
   const handleAction = useCallback(async (isLike: boolean) => {
-    if (currentIndex >= profiles.length) return;
+    if (currentIndex >= profiles.length || animating) return;
     const profile = profiles[currentIndex];
     setAnimating(isLike ? "right" : "left");
     setCanRewind(true);
@@ -174,20 +205,17 @@ export default function DiscoverPage() {
           });
         }
       }
-    } catch {
-      // silently fail
-    }
+    } catch {}
 
     setTimeout(() => {
       setCurrentIndex((i) => i + 1);
       setAnimating(null);
+      setDragOffset({ x: 0, y: 0 });
     }, 300);
-  }, [currentIndex, profiles]);
+  }, [currentIndex, profiles, animating]);
 
   const handleSuperLike = useCallback(async () => {
-    if (currentIndex >= profiles.length) return;
-
-    // 🔒 Vérifier la limite AVANT
+    if (currentIndex >= profiles.length || animating) return;
     if (superLikeStatus && !superLikeStatus.canSuperLike) {
       setShowLimitModal(true);
       return;
@@ -209,7 +237,6 @@ export default function DiscoverPage() {
       });
 
       if (res.status === 403) {
-        // Limite atteinte
         setAnimating(null);
         setShowLimitModal(true);
         fetchSuperLikeStatus();
@@ -224,45 +251,48 @@ export default function DiscoverPage() {
             photoUrl: profile.photoUrl,
           });
         }
-        // Actualiser le compteur
         fetchSuperLikeStatus();
       }
-    } catch {
-      // silently fail
-    }
+    } catch {}
 
     setTimeout(() => {
       setCurrentIndex((i) => i + 1);
       setAnimating(null);
     }, 300);
-  }, [currentIndex, profiles, superLikeStatus]);
+  }, [currentIndex, profiles, superLikeStatus, animating]);
 
   const handleRewind = useCallback(async () => {
     if (currentIndex === 0) return;
 
-    try {
-      const res = await fetch("/api/like/rewind", {
-        method: "POST",
-      });
+    // Premium seulement
+    if (!currentUser?.isPremium) {
+      setPremiumFeature("rewind");
+      setShowPremiumModal(true);
+      return;
+    }
 
+    try {
+      const res = await fetch("/api/like/rewind", { method: "POST" });
       if (res.ok) {
         setCurrentIndex((i) => Math.max(0, i - 1));
         setCanRewind(false);
-      } else {
-        alert("Impossible d'annuler cette action");
       }
-    } catch {
-      alert("Erreur de connexion");
-    }
-  }, [currentIndex]);
+    } catch {}
+  }, [currentIndex, currentUser]);
 
-  async function handleReport() {
-    if (!selectedReason) {
-      alert("Veuillez sélectionner un motif");
+  const handleDirectMessage = () => {
+    // Premium seulement
+    if (!currentUser?.isPremium) {
+      setPremiumFeature("message");
+      setShowPremiumModal(true);
       return;
     }
-    if (!currentProfile) return;
+    // TODO: Ouvrir modal message direct
+    alert("💬 Message direct (à implémenter)");
+  };
 
+  async function handleReport() {
+    if (!selectedReason || !currentProfile) return;
     setSendingReport(true);
     try {
       const res = await fetch("/api/reports", {
@@ -276,25 +306,21 @@ export default function DiscoverPage() {
       });
 
       if (res.ok) {
-        alert("✅ Signalement envoyé. Merci de nous aider à protéger la communauté !");
+        alert("✅ Signalement envoyé");
         setShowReportModal(false);
         setSelectedReason("");
         setReportDetails("");
         setCurrentIndex((i) => i + 1);
-      } else {
-        const data = await res.json();
-        alert("❌ " + (data.error || "Erreur lors du signalement"));
       }
-    } catch {
-      alert("❌ Erreur de connexion");
-    } finally {
+    } catch {}
+    finally {
       setSendingReport(false);
     }
   }
 
   async function handleBlock() {
     if (!currentProfile) return;
-    if (!confirm(`Bloquer ${currentProfile.firstName} ?\n\nCette personne ne verra plus ton profil et vous ne pourrez plus vous contacter.`)) return;
+    if (!confirm(`Bloquer ${currentProfile.firstName} ?`)) return;
 
     try {
       const res = await fetch("/api/blocks", {
@@ -304,20 +330,15 @@ export default function DiscoverPage() {
       });
 
       if (res.ok) {
-        alert("✅ Utilisateur bloqué");
         setCurrentIndex((i) => i + 1);
-      } else {
-        const data = await res.json();
-        alert("❌ " + (data.error || "Erreur"));
       }
-    } catch {
-      alert("Erreur de connexion");
-    }
+    } catch {}
   }
 
   const currentProfile = profiles[currentIndex];
   const photos = currentProfile ? getAllPhotos(currentProfile) : [];
   const hasPhotos = photos.length > 0;
+  const status = currentProfile ? getActivityStatus(currentProfile) : { text: "", color: "" };
 
   const nextPhoto = () => {
     if (currentPhotoIndex < photos.length - 1) {
@@ -332,22 +353,82 @@ export default function DiscoverPage() {
   };
 
   const handlePhotoTap = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (dragOffset.x !== 0 || dragOffset.y !== 0) return; // Ne pas naviguer si on drag
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left;
-    const width = rect.width;
-    if (x < width / 2) {
-      prevPhoto();
+    if (x < rect.width / 2) prevPhoto();
+    else nextPhoto();
+  };
+
+  // 🎯 SWIPE GESTURES
+  const handleTouchStart = (e: React.TouchEvent) => {
+    const touch = e.touches[0];
+    setDragStart({ x: touch.clientX, y: touch.clientY });
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!dragStart) return;
+    const touch = e.touches[0];
+    setDragOffset({
+      x: touch.clientX - dragStart.x,
+      y: touch.clientY - dragStart.y,
+    });
+  };
+
+  const handleTouchEnd = () => {
+    if (!dragStart) return;
+    const threshold = 100;
+    if (Math.abs(dragOffset.x) > threshold) {
+      if (dragOffset.x > 0) {
+        handleAction(true); // Swipe right = Like
+      } else {
+        handleAction(false); // Swipe left = Pass
+      }
+    } else if (dragOffset.y < -threshold) {
+      handleSuperLike(); // Swipe up = Super Like
     } else {
-      nextPhoto();
+      setDragOffset({ x: 0, y: 0 });
+    }
+    setDragStart(null);
+  };
+
+  // Souris (desktop)
+  const handleMouseDown = (e: React.MouseEvent) => {
+    setDragStart({ x: e.clientX, y: e.clientY });
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!dragStart) return;
+    setDragOffset({
+      x: e.clientX - dragStart.x,
+      y: e.clientY - dragStart.y,
+    });
+  };
+
+  const handleMouseUp = () => {
+    if (!dragStart) return;
+    const threshold = 100;
+    if (Math.abs(dragOffset.x) > threshold) {
+      if (dragOffset.x > 0) handleAction(true);
+      else handleAction(false);
+    } else {
+      setDragOffset({ x: 0, y: 0 });
+    }
+    setDragStart(null);
+  };
+
+  const goToProfile = () => {
+    if (currentProfile) {
+      router.push(`/discover/${currentProfile.id}`);
     }
   };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[80vh]">
+      <div className="fixed inset-0 bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center">
         <div className="text-center">
-          <Heart className="w-12 h-12 text-rose-400 animate-pulse mx-auto" />
-          <p className="mt-4 text-slate-600">Recherche de profils...</p>
+          <Heart className="w-16 h-16 text-rose-400 animate-pulse mx-auto fill-rose-400" />
+          <p className="mt-4 text-white font-medium">Recherche de profils...</p>
         </div>
       </div>
     );
@@ -355,15 +436,15 @@ export default function DiscoverPage() {
 
   if (!currentProfile || currentIndex >= profiles.length) {
     return (
-      <div className="flex items-center justify-center min-h-[80vh] p-6">
+      <div className="fixed inset-0 bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center p-6">
         <div className="text-center max-w-md">
-          <div className="w-24 h-24 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-6">
+          <div className="w-24 h-24 bg-white/10 backdrop-blur rounded-full flex items-center justify-center mx-auto mb-6">
             <Sparkles className="w-12 h-12 text-rose-400" />
           </div>
-          <h2 className="text-2xl font-bold text-slate-900 mb-2">
+          <h2 className="text-2xl font-bold text-white mb-2">
             Plus de profils pour le moment
           </h2>
-          <p className="text-slate-600 mb-6">
+          <p className="text-white/70 mb-6">
             Revenez plus tard pour découvrir de nouveaux profils !
           </p>
           <button
@@ -372,7 +453,7 @@ export default function DiscoverPage() {
               setLoading(true);
               fetchProfiles();
             }}
-            className="px-6 py-3 bg-gradient-to-r from-rose-500 to-purple-600 text-white rounded-xl font-semibold hover:shadow-lg transition"
+            className="px-6 py-3 bg-gradient-to-r from-rose-500 to-pink-500 text-white rounded-2xl font-bold shadow-xl hover:shadow-2xl transition"
           >
             Rafraîchir
           </button>
@@ -382,60 +463,75 @@ export default function DiscoverPage() {
   }
 
   const gradient = gradients[currentProfile.id % gradients.length];
-  const canUseSuperLike = superLikeStatus?.canSuperLike ?? true;
+  const rotation = dragOffset.x / 20; // Rotation légère pendant le swipe
 
   return (
-    <div className="flex items-center justify-center min-h-[calc(100vh-100px)] p-4">
-      
-      {/* 🔒 MODAL LIMITE SUPER LIKE ATTEINTE */}
+    <div className="fixed inset-0 bg-black lg:relative lg:min-h-screen lg:bg-gradient-to-br lg:from-slate-100 lg:to-rose-50 lg:flex lg:items-center lg:justify-center lg:p-4">
+
+      {/* MODAL PREMIUM REQUIS */}
+      {showPremiumModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl">
+            <div className="text-center mb-6">
+              <div className="w-20 h-20 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full flex items-center justify-center mx-auto mb-4 shadow-xl">
+                {premiumFeature === "rewind" ? (
+                  <RotateCcw className="w-10 h-10 text-white" />
+                ) : (
+                  <MessageCircle className="w-10 h-10 text-white" />
+                )}
+              </div>
+              <h2 className="text-2xl font-black text-slate-900 mb-2">
+                Fonctionnalité Premium 👑
+              </h2>
+              <p className="text-slate-600">
+                {premiumFeature === "rewind"
+                  ? "Revenir au profil précédent est réservé aux membres Premium."
+                  : "Envoyer un message direct sans matcher est une fonctionnalité Premium."}
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowPremiumModal(false)}
+                className="flex-1 px-4 py-3 border border-slate-200 rounded-xl font-semibold text-slate-700 hover:bg-slate-50 transition"
+              >
+                Fermer
+              </button>
+              <Link
+                href="/premium"
+                onClick={() => setShowPremiumModal(false)}
+                className="flex-1 px-4 py-3 bg-gradient-to-r from-yellow-500 to-orange-500 text-white rounded-xl font-bold hover:shadow-lg transition flex items-center justify-center gap-2"
+              >
+                <Gem className="w-4 h-4" />
+                Premium
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL LIMITE SUPER LIKE */}
       {showLimitModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4">
           <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl">
             <div className="text-center mb-6">
               <div className="w-20 h-20 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full flex items-center justify-center mx-auto mb-4 shadow-xl">
                 <Lock className="w-10 h-10 text-white" />
               </div>
               <h2 className="text-2xl font-black text-slate-900 mb-2">
-                {superLikeStatus?.isPremium
-                  ? "Limite quotidienne atteinte ⭐"
-                  : "Plus de Super Likes ! ⭐"}
+                Plus de Super Likes ! ⭐
               </h2>
               <p className="text-slate-600">
                 {superLikeStatus?.isPremium ? (
-                  <>Tu as utilisé tes <strong>{superLikeStatus.limit} Super Likes</strong> aujourd&apos;hui. Reviens demain !</>
+                  <>Tu as utilisé tes <strong>{superLikeStatus.limit} Super Likes</strong> aujourd'hui.</>
                 ) : (
-                  <>Tu as utilisé ton Super Like gratuit du jour.</>
+                  <>Passe Premium pour avoir 5 Super Likes/jour !</>
                 )}
               </p>
             </div>
-
-            {!superLikeStatus?.isPremium && (
-              <div className="bg-gradient-to-br from-yellow-50 to-orange-50 rounded-2xl p-5 border-2 border-yellow-200 mb-5">
-                <div className="flex items-center gap-2 mb-3">
-                  <Crown className="w-6 h-6 text-yellow-500 fill-yellow-500" />
-                  <p className="font-black text-slate-900">Avec Premium :</p>
-                </div>
-                <ul className="space-y-2 text-sm text-slate-700">
-                  <li className="flex items-center gap-2">
-                    <Star className="w-4 h-4 text-blue-500 fill-blue-500" />
-                    <strong>5 Super Likes</strong> par jour
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <Heart className="w-4 h-4 text-rose-500 fill-rose-500" />
-                    Voir qui t&apos;a liké
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-purple-500" />
-                    Boost profil 3x/jour
-                  </li>
-                </ul>
-              </div>
-            )}
-
             <div className="flex gap-3">
               <button
                 onClick={() => setShowLimitModal(false)}
-                className="flex-1 px-4 py-3 border border-slate-200 rounded-xl font-semibold text-slate-700 hover:bg-slate-50 transition"
+                className="flex-1 px-4 py-3 border border-slate-200 rounded-xl font-semibold text-slate-700 hover:bg-slate-50"
               >
                 Fermer
               </button>
@@ -443,7 +539,7 @@ export default function DiscoverPage() {
                 <Link
                   href="/premium"
                   onClick={() => setShowLimitModal(false)}
-                  className="flex-1 px-4 py-3 bg-gradient-to-r from-yellow-500 to-orange-500 text-white rounded-xl font-bold hover:shadow-lg transition flex items-center justify-center gap-2"
+                  className="flex-1 px-4 py-3 bg-gradient-to-r from-yellow-500 to-orange-500 text-white rounded-xl font-bold flex items-center justify-center gap-2"
                 >
                   <Gem className="w-4 h-4" />
                   Premium
@@ -454,25 +550,21 @@ export default function DiscoverPage() {
         </div>
       )}
 
-      {/* Modal signalement */}
+      {/* MODAL SIGNALEMENT */}
       {showReportModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
                 <AlertTriangle className="w-6 h-6 text-red-600" />
               </div>
               <div>
-                <h2 className="text-xl font-bold text-slate-900">Signaler ce profil</h2>
+                <h2 className="text-xl font-bold text-slate-900">Signaler</h2>
                 <p className="text-sm text-slate-500">{currentProfile.firstName}</p>
               </div>
             </div>
 
-            <p className="text-sm text-slate-600 mb-4">
-              Aidez-nous à maintenir une communauté sûre.
-            </p>
-
-            <div className="space-y-2 mb-4 max-h-60 overflow-y-auto">
+            <div className="space-y-2 mb-4">
               {reportReasons.map((reason) => (
                 <label
                   key={reason.value}
@@ -498,27 +590,22 @@ export default function DiscoverPage() {
             <textarea
               value={reportDetails}
               onChange={(e) => setReportDetails(e.target.value)}
-              placeholder="Détails supplémentaires (optionnel)..."
+              placeholder="Détails (optionnel)..."
               rows={3}
-              className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-red-400 focus:ring-2 focus:ring-red-100 transition text-sm resize-none mb-4"
+              className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm resize-none mb-4"
             />
 
             <div className="flex gap-3">
               <button
-                onClick={() => {
-                  setShowReportModal(false);
-                  setSelectedReason("");
-                  setReportDetails("");
-                }}
-                disabled={sendingReport}
-                className="flex-1 px-4 py-3 border border-slate-200 rounded-xl font-semibold text-slate-700 hover:bg-slate-50 transition disabled:opacity-50"
+                onClick={() => setShowReportModal(false)}
+                className="flex-1 px-4 py-3 border border-slate-200 rounded-xl font-semibold text-slate-700"
               >
                 Annuler
               </button>
               <button
                 onClick={handleReport}
                 disabled={sendingReport || !selectedReason}
-                className="flex-1 px-4 py-3 bg-red-500 text-white rounded-xl font-semibold hover:bg-red-600 transition disabled:opacity-50"
+                className="flex-1 px-4 py-3 bg-red-500 text-white rounded-xl font-semibold disabled:opacity-50"
               >
                 {sendingReport ? "Envoi..." : "Signaler"}
               </button>
@@ -527,8 +614,9 @@ export default function DiscoverPage() {
         </div>
       )}
 
+      {/* MATCH POPUP */}
       {matchPopup && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90">
           <div className="bg-white rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl mx-4">
             <div className="relative w-32 h-32 mx-auto mb-4">
               {matchPopup.photoUrl ? (
@@ -546,16 +634,14 @@ export default function DiscoverPage() {
                 <Heart className="w-6 h-6 text-white fill-white" />
               </div>
             </div>
-            <h2 className="text-3xl font-bold gradient-text mb-2">
-              C&apos;est un match ! 🎉
-            </h2>
+            <h2 className="text-3xl font-bold gradient-text mb-2">C'est un match ! 🎉</h2>
             <p className="text-slate-600 mb-6">
               Vous et <strong>{matchPopup.firstName}</strong> vous êtes mutuellement likés !
             </p>
             <div className="flex gap-3">
               <button
                 onClick={() => setMatchPopup(null)}
-                className="flex-1 px-4 py-3 border border-slate-200 rounded-xl font-semibold text-slate-700 hover:bg-slate-50 transition"
+                className="flex-1 px-4 py-3 border border-slate-200 rounded-xl font-semibold text-slate-700"
               >
                 Continuer
               </button>
@@ -564,7 +650,7 @@ export default function DiscoverPage() {
                   setMatchPopup(null);
                   window.location.href = "/messages";
                 }}
-                className="flex-1 px-4 py-3 bg-gradient-to-r from-rose-500 to-purple-600 text-white rounded-xl font-semibold hover:shadow-lg transition"
+                className="flex-1 px-4 py-3 bg-gradient-to-r from-rose-500 to-purple-600 text-white rounded-xl font-semibold"
               >
                 <MessageCircle className="w-4 h-4 inline mr-1" />
                 Message
@@ -574,325 +660,225 @@ export default function DiscoverPage() {
         </div>
       )}
 
-      <div className="w-full max-w-md">
-        <div
-          className={`relative bg-white rounded-3xl shadow-2xl overflow-hidden transition-all duration-300 ${
-            currentProfile.isPremium 
-              ? "ring-4 ring-yellow-400 shadow-yellow-500/30" 
-              : currentProfile.hasSuperLikedMe
-              ? "ring-4 ring-blue-400 ring-offset-2 shadow-blue-500/30"
-              : currentProfile.hasLikedMe
-              ? "ring-2 ring-rose-400 ring-offset-2"
-              : ""
-          } ${
-            animating === "left"
-              ? "opacity-0 -translate-x-20 -rotate-12"
-              : animating === "right"
-              ? "opacity-0 translate-x-20 rotate-12"
-              : animating === "up"
-              ? "opacity-0 -translate-y-20"
-              : "opacity-100"
-          }`}
-          style={{ minHeight: "600px" }}
-        >
-          {/* Badge Premium */}
-          {currentProfile.isPremium && (
-            <div className="absolute top-7 right-4 z-20">
-              <div className="flex items-center gap-1.5 bg-gradient-to-r from-yellow-400 via-orange-500 to-yellow-400 bg-[length:200%_100%] animate-gradient-x rounded-full px-3 py-1.5 shadow-lg border border-white/30">
-                <Crown className="w-3.5 h-3.5 text-white fill-white" />
-                <span className="text-[10px] font-black text-white tracking-widest uppercase">Premium</span>
-              </div>
+      {/* ═══════════════════════════════════════════════ */}
+      {/* CARTE PROFIL PRINCIPALE - STYLE TINDER */}
+      {/* ═══════════════════════════════════════════════ */}
+      <div
+        ref={cardRef}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseUp}
+        style={{
+          transform: `translate(${dragOffset.x}px, ${dragOffset.y}px) rotate(${rotation}deg)`,
+          transition: dragStart ? "none" : "all 0.3s ease",
+        }}
+        className={`relative w-full h-full lg:w-[420px] lg:h-[750px] lg:rounded-3xl overflow-hidden bg-black shadow-2xl ${
+          animating === "left" ? "-translate-x-full -rotate-12 opacity-0" :
+          animating === "right" ? "translate-x-full rotate-12 opacity-0" :
+          animating === "up" ? "-translate-y-full opacity-0" : ""
+        }`}
+      >
+        {/* PHOTO PLEIN ÉCRAN */}
+        <div onClick={handlePhotoTap} className="absolute inset-0 select-none cursor-pointer">
+          {hasPhotos ? (
+            <img
+              src={photos[currentPhotoIndex]}
+              alt={currentProfile.firstName}
+              className="w-full h-full object-cover"
+              draggable={false}
+            />
+          ) : (
+            <div className={`w-full h-full bg-gradient-to-br ${gradient} flex items-center justify-center`}>
+              <span className="text-9xl font-bold text-white/80">
+                {currentProfile.firstName.charAt(0)}
+              </span>
             </div>
           )}
-
-          <div
-            onClick={handlePhotoTap}
-            className={`relative h-[500px] bg-gradient-to-br ${gradient} cursor-pointer select-none`}
-          >
-            {currentProfile.hasSuperLikedMe && (
-              <div className="absolute top-16 left-1/2 -translate-x-1/2 z-20 animate-pulse">
-                <div className="bg-gradient-to-r from-blue-500 to-cyan-500 text-white px-4 py-2 rounded-full shadow-2xl flex items-center gap-2 border-2 border-white">
-                  <Star className="w-4 h-4 fill-white" />
-                  <span className="text-sm font-bold">T&apos;A SUPER LIKÉ !</span>
-                  <Star className="w-4 h-4 fill-white" />
-                </div>
-              </div>
-            )}
-
-            {currentProfile.hasLikedMe && !currentProfile.hasSuperLikedMe && (
-              <div className="absolute top-16 left-1/2 -translate-x-1/2 z-20">
-                <div className="bg-gradient-to-r from-rose-500 to-pink-500 text-white px-4 py-2 rounded-full shadow-xl flex items-center gap-2 border-2 border-white">
-                  <Heart className="w-4 h-4 fill-white" />
-                  <span className="text-sm font-bold">T&apos;A LIKÉ !</span>
-                </div>
-              </div>
-            )}
-
-            {hasPhotos ? (
-              <img
-                src={photos[currentPhotoIndex]}
-                alt={currentProfile.firstName}
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center">
-                <span className="text-9xl font-bold text-white/80">
-                  {currentProfile.firstName.charAt(0)}
-                </span>
-              </div>
-            )}
-
-            <div className="absolute bottom-0 left-0 right-0 h-64 bg-gradient-to-t from-black/90 via-black/50 to-transparent pointer-events-none" />
-
-            {photos.length > 1 && (
-              <div className="absolute top-3 left-3 right-3 flex gap-1 z-10">
-                {photos.map((_, i) => (
-                  <div
-                    key={i}
-                    className={`flex-1 h-1 rounded-full transition-all ${
-                      i === currentPhotoIndex ? "bg-white" : "bg-white/40"
-                    }`}
-                  />
-                ))}
-              </div>
-            )}
-
-            <div className="absolute top-7 left-4 flex gap-2 z-10">
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowReportModal(true);
-                }}
-                className="w-9 h-9 bg-white/90 backdrop-blur rounded-full flex items-center justify-center text-slate-600 hover:text-red-500 hover:bg-white shadow-md transition"
-                title="Signaler ce profil"
-              >
-                <Flag className="w-4 h-4" />
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleBlock();
-                }}
-                className="w-9 h-9 bg-white/90 backdrop-blur rounded-full flex items-center justify-center text-slate-600 hover:text-red-500 hover:bg-white shadow-md transition"
-                title="Bloquer ce profil"
-              >
-                <Ban className="w-4 h-4" />
-              </button>
-            </div>
-
-            {currentProfile.isOnline && !currentProfile.isPremium && (
-              <div className="absolute top-7 right-4 flex items-center gap-2 bg-white/90 backdrop-blur rounded-full px-3 py-1.5 z-10">
-                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                <span className="text-xs font-medium text-slate-700">En ligne</span>
-              </div>
-            )}
-
-            {photos.length > 1 && (
-              <>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    prevPhoto();
-                  }}
-                  disabled={currentPhotoIndex === 0}
-                  className="absolute left-2 top-1/2 -translate-y-1/2 w-10 h-10 bg-white/80 hover:bg-white rounded-full flex items-center justify-center opacity-0 hover:opacity-100 transition disabled:opacity-0 z-10"
-                >
-                  <ChevronLeft className="w-6 h-6 text-slate-700" />
-                </button>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    nextPhoto();
-                  }}
-                  disabled={currentPhotoIndex === photos.length - 1}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 bg-white/80 hover:bg-white rounded-full flex items-center justify-center opacity-0 hover:opacity-100 transition disabled:opacity-0 z-10"
-                >
-                  <ChevronRight className="w-6 h-6 text-slate-700" />
-                </button>
-              </>
-            )}
-
-            <div className="absolute bottom-4 left-4 right-4 text-white z-10 pointer-events-none">
-              <div className="flex items-center gap-2 flex-wrap">
-               <h2 className="text-3xl font-bold drop-shadow-lg flex items-center gap-2">
-                  {currentProfile.firstName}
-                  {currentProfile.isVerified && (
-                    <BadgeCheck className="w-6 h-6 text-blue-400 fill-blue-500 drop-shadow-md" />
-                  )}
-                  {currentProfile.isPremium && (
-                    <Crown className="w-6 h-6 text-yellow-400 fill-yellow-400 drop-shadow-md" />
-                  )}
-                </h2>
-                <span className="text-2xl font-light drop-shadow-lg">
-                  {getAge(currentProfile.birthDate)}
-                </span>
-              </div>
-              {currentProfile.city && (
-                <p className="flex items-center gap-1 text-white/95 text-sm mt-1 drop-shadow">
-                  <MapPin className="w-3.5 h-3.5" />
-                  {currentProfile.city}
-                  {currentProfile.country ? `, ${currentProfile.country}` : ""}
-                  {currentProfile.distance !== null && currentProfile.distance !== undefined && (
-                    <span className="ml-2 px-2 py-0.5 bg-white/20 rounded-full text-xs font-bold">
-                      {currentProfile.distance === 0 ? "< 1 km" : `${currentProfile.distance} km`}
-                    </span>
-                  )}
-                </p>
-              )}
-              {currentProfile.occupation && (
-                <p className="flex items-center gap-1 text-white/90 text-sm mt-0.5 drop-shadow">
-                  <Briefcase className="w-3.5 h-3.5" />
-                  {currentProfile.occupation}
-                </p>
-              )}
-            </div>
-          </div>
-
-          <div className="p-5">
-            {currentProfile.bio && (
-              <div className="mb-4">
-                <p className={`text-slate-700 leading-relaxed text-sm ${showFullBio ? "" : "line-clamp-3"}`}>
-                  {currentProfile.bio}
-                </p>
-                {currentProfile.bio.length > 150 && (
-                  <button
-                    onClick={() => setShowFullBio(!showFullBio)}
-                    className="text-xs text-rose-500 font-medium mt-1"
-                  >
-                    {showFullBio ? "Voir moins" : "Voir plus"}
-                  </button>
-                )}
-              </div>
-            )}
-
-            {currentProfile.interests && (
-              <div className="flex flex-wrap gap-1.5">
-                {currentProfile.interests.split(",").slice(0, 6).map((interest, i) => (
-                  <span
-                    key={i}
-                    className="px-2.5 py-1 bg-rose-50 text-rose-600 rounded-full text-xs font-medium"
-                  >
-                    {interest.trim()}
-                  </span>
-                ))}
-              </div>
-            )}
-
-            {(currentProfile.prompt1Answer || currentProfile.prompt2Answer || currentProfile.prompt3Answer) && (
-              <div className="mt-4 space-y-3">
-                {currentProfile.prompt1Question && currentProfile.prompt1Answer && (
-                  <div className="p-3 bg-gradient-to-br from-purple-50 to-rose-50 rounded-xl border border-purple-100">
-                    <p className="text-xs font-bold text-purple-600 uppercase tracking-wider mb-1">
-                      {currentProfile.prompt1Question}
-                    </p>
-                    <p className="text-sm text-slate-800 leading-relaxed">
-                      {currentProfile.prompt1Answer}
-                    </p>
-                  </div>
-                )}
-                {currentProfile.prompt2Question && currentProfile.prompt2Answer && (
-                  <div className="p-3 bg-gradient-to-br from-rose-50 to-pink-50 rounded-xl border border-rose-100">
-                    <p className="text-xs font-bold text-rose-600 uppercase tracking-wider mb-1">
-                      {currentProfile.prompt2Question}
-                    </p>
-                    <p className="text-sm text-slate-800 leading-relaxed">
-                      {currentProfile.prompt2Answer}
-                    </p>
-                  </div>
-                )}
-                {currentProfile.prompt3Question && currentProfile.prompt3Answer && (
-                  <div className="p-3 bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl border border-amber-100">
-                    <p className="text-xs font-bold text-amber-600 uppercase tracking-wider mb-1">
-                      {currentProfile.prompt3Question}
-                    </p>
-                    <p className="text-sm text-slate-800 leading-relaxed">
-                      {currentProfile.prompt3Answer}
-                    </p>
-                  </div>
-                )}
-              </div>
-            )}
-
-            <p className="text-center text-xs text-slate-400 mt-4">
-              {currentIndex + 1} / {profiles.length}
-              {photos.length > 1 && ` • 📸 ${currentPhotoIndex + 1}/${photos.length}`}
-            </p>
-          </div>
         </div>
 
-        {/* Compteur Super Likes */}
-        {superLikeStatus && (
-          <div className="flex items-center justify-center mt-4">
-            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold ${
-              superLikeStatus.canSuperLike
-                ? "bg-blue-50 text-blue-600 border border-blue-200"
-                : "bg-slate-100 text-slate-500 border border-slate-200"
-            }`}>
-              <Star className={`w-3.5 h-3.5 ${superLikeStatus.canSuperLike ? "fill-blue-500" : ""}`} />
-              {superLikeStatus.remaining} / {superLikeStatus.limit} Super Like{superLikeStatus.limit > 1 ? "s" : ""} restant{superLikeStatus.limit > 1 ? "s" : ""}
-              {!superLikeStatus.isPremium && (
-                <Link href="/premium" className="ml-1 text-orange-500 hover:underline flex items-center gap-0.5">
-                  <Crown className="w-3 h-3" />
-                  +
-                </Link>
-              )}
+        {/* SEGMENTS PHOTOS EN HAUT */}
+        {photos.length > 1 && (
+          <div className="absolute top-3 left-3 right-3 flex gap-1 z-20 pointer-events-none">
+            {photos.map((_, i) => (
+              <div
+                key={i}
+                className={`flex-1 h-1 rounded-full transition-all ${
+                  i === currentPhotoIndex ? "bg-white" : "bg-white/40"
+                }`}
+              />
+            ))}
+          </div>
+        )}
+
+        {/* BOUTONS FLAG + BAN (haut gauche) */}
+        <div className="absolute top-7 left-3 flex flex-col gap-2 z-20">
+          <button
+            onClick={(e) => { e.stopPropagation(); setShowReportModal(true); }}
+            className="w-9 h-9 bg-black/40 backdrop-blur-md rounded-full flex items-center justify-center text-white/80 hover:text-red-400 transition"
+          >
+            <Flag className="w-4 h-4" />
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); handleBlock(); }}
+            className="w-9 h-9 bg-black/40 backdrop-blur-md rounded-full flex items-center justify-center text-white/80 hover:text-red-400 transition"
+          >
+            <Ban className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* BADGE PREMIUM (haut droit) */}
+        {currentProfile.isPremium && (
+          <div className="absolute top-7 right-3 z-20">
+            <div className="flex items-center gap-1.5 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-full px-3 py-1.5 shadow-lg">
+              <Crown className="w-3.5 h-3.5 text-white fill-white" />
+              <span className="text-[10px] font-black text-white tracking-widest">PREMIUM</span>
             </div>
           </div>
         )}
 
-        {/* BOUTONS ACTIONS */}
-        <div className="flex items-center justify-center gap-3 mt-3">
+        {/* BADGES "T'A LIKÉ" / "SUPER LIKÉ" */}
+        {currentProfile.hasSuperLikedMe && (
+          <div className="absolute top-20 left-1/2 -translate-x-1/2 z-20 animate-pulse">
+            <div className="bg-gradient-to-r from-blue-500 to-cyan-500 text-white px-4 py-2 rounded-full shadow-2xl flex items-center gap-2 border-2 border-white">
+              <Star className="w-4 h-4 fill-white" />
+              <span className="text-sm font-bold">T'A SUPER LIKÉ !</span>
+            </div>
+          </div>
+        )}
+        {currentProfile.hasLikedMe && !currentProfile.hasSuperLikedMe && (
+          <div className="absolute top-20 left-1/2 -translate-x-1/2 z-20">
+            <div className="bg-gradient-to-r from-rose-500 to-pink-500 text-white px-4 py-2 rounded-full shadow-xl flex items-center gap-2 border-2 border-white">
+              <Heart className="w-4 h-4 fill-white" />
+              <span className="text-sm font-bold">T'A LIKÉ !</span>
+            </div>
+          </div>
+        )}
+
+        {/* INDICATEURS SWIPE (LIKE / NOPE) */}
+        {dragOffset.x > 50 && (
+          <div className="absolute top-1/3 left-8 z-30 rotate-[-20deg] pointer-events-none">
+            <div className="border-4 border-green-500 text-green-500 px-6 py-2 rounded-2xl text-4xl font-black">
+              LIKE
+            </div>
+          </div>
+        )}
+        {dragOffset.x < -50 && (
+          <div className="absolute top-1/3 right-8 z-30 rotate-[20deg] pointer-events-none">
+            <div className="border-4 border-red-500 text-red-500 px-6 py-2 rounded-2xl text-4xl font-black">
+              NOPE
+            </div>
+          </div>
+        )}
+        {dragOffset.y < -50 && (
+          <div className="absolute top-1/3 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
+            <div className="border-4 border-blue-500 text-blue-500 px-6 py-2 rounded-2xl text-4xl font-black">
+              SUPER
+            </div>
+          </div>
+        )}
+
+        {/* GRADIENT DU BAS */}
+        <div className="absolute bottom-0 left-0 right-0 h-72 bg-gradient-to-t from-black via-black/70 to-transparent pointer-events-none z-10" />
+
+        {/* INFOS UTILISATEUR (bas gauche) */}
+        <div className="absolute bottom-28 left-4 right-4 text-white z-20">
+          {/* Statut activité */}
+          <div className="flex items-center gap-2 mb-3">
+            <div className={`w-2.5 h-2.5 rounded-full ${status.color} animate-pulse`} />
+            <span className="text-sm font-medium text-white/90">{status.text}</span>
+          </div>
+
+          {/* Nom + Age (cliquable pour voir détails) */}
           <button
-            onClick={handleRewind}
+            onClick={(e) => {
+              e.stopPropagation();
+              goToProfile();
+            }}
+            className="text-left hover:opacity-90 transition"
+          >
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-4xl font-black drop-shadow-2xl flex items-center gap-2">
+                {currentProfile.firstName}
+                {currentProfile.isVerified && (
+                  <BadgeCheck className="w-7 h-7 text-blue-400 fill-blue-500 drop-shadow-lg" />
+                )}
+              </h2>
+              <span className="text-3xl font-light drop-shadow-2xl">
+                {getAge(currentProfile.birthDate)}
+              </span>
+            </div>
+
+            {/* Distance */}
+            {currentProfile.distance !== null && currentProfile.distance !== undefined && (
+              <p className="flex items-center gap-1 text-white/90 text-sm mt-1 drop-shadow">
+                <MapPin className="w-4 h-4" />
+                à {currentProfile.distance === 0 ? "moins de 1" : currentProfile.distance} kilomètre{currentProfile.distance > 1 ? "s" : ""}
+              </p>
+            )}
+
+            {/* Indicateur voir plus */}
+            <div className="flex items-center gap-1 mt-2 text-white/70 text-xs">
+              <ChevronUp className="w-3 h-3" />
+              <span>Appuie sur le nom pour voir le profil</span>
+            </div>
+          </button>
+        </div>
+
+        {/* ═══════════════════════════════════════ */}
+        {/* 5 BOUTONS D'ACTION EN BAS */}
+        {/* ═══════════════════════════════════════ */}
+        <div className="absolute bottom-4 left-0 right-0 flex items-center justify-center gap-3 z-30 px-4">
+          {/* REWIND (Premium) */}
+          <button
+            onClick={(e) => { e.stopPropagation(); handleRewind(); }}
             disabled={!canRewind}
-            className="w-12 h-12 bg-white rounded-full shadow-lg flex items-center justify-center text-amber-500 hover:shadow-xl hover:scale-110 transition-all duration-200 border border-slate-100 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:scale-100"
-            title={canRewind ? "Retour arrière" : "Rien à annuler"}
+            className="relative w-11 h-11 bg-white rounded-full shadow-lg flex items-center justify-center text-amber-500 hover:scale-110 active:scale-95 transition disabled:opacity-40"
           >
             <RotateCcw className="w-5 h-5" strokeWidth={2.5} />
-          </button>
-
-          <button
-            onClick={() => handleAction(false)}
-            className="w-14 h-14 bg-white rounded-full shadow-lg flex items-center justify-center text-slate-400 hover:text-red-500 hover:shadow-xl hover:scale-110 transition-all duration-200 border border-slate-100"
-            title="Passer"
-          >
-            <X className="w-7 h-7" strokeWidth={2.5} />
-          </button>
-
-          {/* Bouton Super Like avec verrouillage */}
-          <button
-            onClick={handleSuperLike}
-            className={`relative w-16 h-16 rounded-full shadow-lg flex items-center justify-center text-white transition-all duration-200 ${
-              canUseSuperLike
-                ? "bg-gradient-to-br from-blue-400 to-cyan-500 shadow-blue-500/40 hover:shadow-xl hover:scale-110"
-                : "bg-gradient-to-br from-slate-300 to-slate-400 shadow-slate-300/40 hover:scale-105"
-            }`}
-            title={canUseSuperLike ? "Super Like" : "Limite atteinte - Passe Premium"}
-          >
-            {canUseSuperLike ? (
-              <Star className="w-8 h-8 fill-white" strokeWidth={2} />
-            ) : (
-              <div className="relative">
-                <Star className="w-8 h-8 fill-white opacity-50" strokeWidth={2} />
-                <Lock className="w-4 h-4 absolute -top-1 -right-1 text-white bg-orange-500 rounded-full p-0.5" />
-              </div>
+            {!currentUser?.isPremium && (
+              <Lock className="w-3 h-3 absolute -top-0.5 -right-0.5 text-white bg-orange-500 rounded-full p-0.5" />
             )}
           </button>
 
+          {/* PASS */}
           <button
-            onClick={() => handleAction(true)}
-            className="w-14 h-14 bg-gradient-to-r from-rose-500 to-pink-500 rounded-full shadow-lg shadow-rose-500/30 flex items-center justify-center text-white hover:shadow-xl hover:scale-110 transition-all duration-200"
-            title="Liker"
+            onClick={(e) => { e.stopPropagation(); handleAction(false); }}
+            className="w-14 h-14 bg-white rounded-full shadow-xl flex items-center justify-center text-red-500 hover:scale-110 active:scale-95 transition"
           >
-            <Heart className="w-7 h-7 fill-white" />
+            <X className="w-8 h-8" strokeWidth={3} />
+          </button>
+
+          {/* SUPER LIKE */}
+          <button
+            onClick={(e) => { e.stopPropagation(); handleSuperLike(); }}
+            className="relative w-12 h-12 bg-white rounded-full shadow-lg flex items-center justify-center text-blue-500 hover:scale-110 active:scale-95 transition"
+          >
+            <Star className="w-6 h-6 fill-blue-500" strokeWidth={2} />
+          </button>
+
+          {/* LIKE */}
+          <button
+            onClick={(e) => { e.stopPropagation(); handleAction(true); }}
+            className="w-14 h-14 bg-white rounded-full shadow-xl flex items-center justify-center text-green-500 hover:scale-110 active:scale-95 transition"
+          >
+            <Heart className="w-8 h-8 fill-green-500" strokeWidth={2} />
+          </button>
+
+          {/* MESSAGE DIRECT (Premium) */}
+          <button
+            onClick={(e) => { e.stopPropagation(); handleDirectMessage(); }}
+            className="relative w-11 h-11 bg-white rounded-full shadow-lg flex items-center justify-center text-purple-500 hover:scale-110 active:scale-95 transition"
+          >
+            <MessageCircle className="w-5 h-5" strokeWidth={2.5} />
+            {!currentUser?.isPremium && (
+              <Lock className="w-3 h-3 absolute -top-0.5 -right-0.5 text-white bg-orange-500 rounded-full p-0.5" />
+            )}
           </button>
         </div>
-
-        {photos.length > 1 && (
-          <p className="text-center text-xs text-slate-400 mt-4">
-            💡 Tap à gauche/droite de la photo pour naviguer
-          </p>
-        )}
       </div>
     </div>
   );
