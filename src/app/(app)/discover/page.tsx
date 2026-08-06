@@ -785,7 +785,7 @@ export default function DiscoverPage() {
         <div className="absolute bottom-0 left-0 right-0 h-72 bg-gradient-to-t from-black via-black/70 to-transparent pointer-events-none z-10" />
 
         {/* INFOS UTILISATEUR (bas gauche) */}
-        <div className="absolute bottom-28 left-4 right-4 text-white z-20">
+<div className="absolute bottom-48 lg:bottom-28 left-4 right-4 text-white z-20">
           {/* Statut activité */}
           <div className="flex items-center gap-2 mb-3">
             <div className={`w-2.5 h-2.5 rounded-full ${status.color} animate-pulse`} />
@@ -829,9 +829,9 @@ export default function DiscoverPage() {
         </div>
 
         {/* ═══════════════════════════════════════ */}
-        {/* 5 BOUTONS D'ACTION EN BAS */}
-        {/* ═══════════════════════════════════════ */}
-        <div className="absolute bottom-4 left-0 right-0 flex items-center justify-center gap-3 z-30 px-4">
+{/* 5 BOUTONS D'ACTION EN BAS */}
+{/* ═══════════════════════════════════════ */}
+<div className="absolute bottom-24 lg:bottom-4 left-0 right-0 flex items-center justify-center gap-3 z-30 px-4">
           {/* REWIND (Premium) */}
           <button
             onClick={(e) => { e.stopPropagation(); handleRewind(); }}
