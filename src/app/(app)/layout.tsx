@@ -5,6 +5,7 @@ import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import Notifications from "../components/Notifications";
 import InstallAppButton from "../components/InstallAppButton";
+import { ..., Info } from "lucide-react";
 import {
   Heart,
   User,
@@ -116,6 +117,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     { href: "/preferences", label: "Préférences", icon: <Settings className="w-5 h-5" /> },
     { href: "/boost", label: "Boost", icon: <Zap className="w-5 h-5" /> },
     { href: "/verification", label: "Vérification", icon: <ShieldCheck className="w-5 h-5" /> },
+    { href: "/guide", label: "Guide", icon: <Info className="w-5 h-5" /> },
   ];
 
   // Sur mobile : afficher moins d'items dans la barre du bas (max 5)
