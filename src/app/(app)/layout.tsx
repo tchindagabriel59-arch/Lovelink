@@ -5,7 +5,6 @@ import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import Notifications from "../components/Notifications";
 import InstallAppButton from "../components/InstallAppButton";
-import { ..., Info } from "lucide-react";
 import {
   Heart,
   User,
@@ -23,6 +22,7 @@ import {
   BadgeCheck,
   EyeOff,
   Gift, // 🆕 Icône parrainage
+  Info, // 📚 Icône Guide
 } from "lucide-react";
 
 interface UserData {
