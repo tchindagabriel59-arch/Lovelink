@@ -24,23 +24,33 @@ export async function verifyToken(token: string) {
   }
 }
 
+// ⚡ VERSION RAPIDE (0 requête SQL)
+// Utilise UNIQUEMENT le JWT — pas de check BDD
+// Le check "banni" est fait à la connexion (login)
 export async function getCurrentUserId(): Promise<number | null> {
   const cookieStore = await cookies();
   const token = cookieStore.get("auth_token")?.value;
   if (!token) return null;
   const payload = await verifyToken(token);
   if (!payload?.userId) return null;
+  return payload.userId;
+}
 
-  // 🚫 Vérifier si l'utilisateur est banni
+// ⚡ VERSION AVEC CHECK BANNI (à utiliser SEULEMENT pour actions sensibles)
+// À utiliser dans : envoyer message, liker, upload photo, etc.
+// PAS besoin pour : /api/auth/me, /api/dashboard-stats, /api/discover, etc.
+export async function getCurrentUserIdWithBanCheck(): Promise<number | null> {
+  const userId = await getCurrentUserId();
+  if (!userId) return null;
+
   const [user] = await db
     .select({ isBanned: users.isBanned })
     .from(users)
-    .where(eq(users.id, payload.userId))
+    .where(eq(users.id, userId))
     .limit(1);
 
   if (!user || user.isBanned) return null;
-
-  return payload.userId;
+  return userId;
 }
 
 // Vérifier si l'utilisateur actuel est admin
