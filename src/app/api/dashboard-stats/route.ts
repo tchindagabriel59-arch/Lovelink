@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { users, likes, matches, messages, notifications } from "@/db/schema";
-import { eq, and, or, gte, count, desc } from "drizzle-orm";
+import { eq, and, or, gte, count, desc, ne } from "drizzle-orm";
 import { getCurrentUserId } from "@/lib/auth";
 
 export async function GET() {
@@ -130,13 +130,21 @@ export async function GET() {
         .from(messages)
         .where(eq(messages.senderId, userId)),
 
-      // Messages non lus (reçus par moi)
-      db
-        .select({ c: count() })
-        .from(messages)
-        .where(
-          and(eq(messages.receiverId, userId), eq(messages.isRead, false))
-        ),
+     // Messages non lus dans les matchs de l'utilisateur
+db
+  .select({ c: count() })
+  .from(messages)
+  .innerJoin(matches, eq(messages.matchId, matches.id))
+  .where(
+    and(
+      or(
+        eq(matches.user1Id, userId),
+        eq(matches.user2Id, userId)
+      ),
+      ne(messages.senderId, userId),
+      eq(messages.isRead, false)
+    )
+  ),
 
       // Notifs non lues
       db
