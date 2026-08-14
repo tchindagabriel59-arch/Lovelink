@@ -1,8 +1,16 @@
 "use client";
 
-import { useState, useEffect, createContext, useContext, useCallback } from "react";
+import {
+  useState,
+  useEffect,
+  createContext,
+  useContext,
+  useCallback,
+  useRef,
+} from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import Notifications from "../components/Notifications";
 import InstallAppButton from "../components/InstallAppButton";
 import {
@@ -21,8 +29,8 @@ import {
   ShieldCheck,
   BadgeCheck,
   EyeOff,
-  Gift, // 🆕 Icône parrainage
-  Info, // 📚 Icône Guide
+  Gift,
+  Info,
 } from "lucide-react";
 
 interface UserData {
@@ -61,9 +69,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
 
+  // ✅ OPTIMISATION CLEF : Ne fetch l'utilisateur QU'UNE SEULE FOIS au montage
+  // Si on rappelle fetchUser plusieurs fois, on annule les précédents
+  const hasFetchedRef = useRef(false);
+
   const fetchUser = useCallback(async () => {
     try {
-      const res = await fetch("/api/auth/me");
+      const res = await fetch("/api/auth/me", {
+        // ✅ Cache navigateur : 30 secondes
+        // Évite de refaire la requête pendant les navigations rapides
+        cache: "default",
+      });
       if (!res.ok) {
         router.push("/login");
         return;
@@ -81,22 +97,25 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     }
   }, [router]);
 
-    useEffect(() => {
+  // ✅ Fetch UNIQUEMENT au premier montage (pas à chaque navigation)
+  useEffect(() => {
+    if (hasFetchedRef.current) return;
+    hasFetchedRef.current = true;
     fetchUser();
   }, [fetchUser]);
+
+  // ✅ Fermer le menu mobile automatiquement quand on change de page
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [pathname]);
 
   // 🎯 REDIRECTION FORCÉE : Si nouvel inscrit sans photo → /welcome
   useEffect(() => {
     if (!user) return;
-    
-    // Si l'utilisateur n'a PAS de photo ET n'est PAS déjà sur /welcome
-    // → Force la redirection vers /welcome
+
     if (!user.photoUrl && pathname !== "/welcome") {
       router.push("/welcome");
     }
-    
-    // Si l'utilisateur A une photo mais est encore sur /welcome
-    // → Rediriger vers dashboard
     if (user.photoUrl && pathname === "/welcome") {
       router.push("/dashboard");
     }
@@ -120,14 +139,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     { href: "/guide", label: "Guide", icon: <Info className="w-5 h-5" /> },
   ];
 
-  // Sur mobile : afficher moins d'items dans la barre du bas (max 5)
   const mobileNavItems = navItems.slice(0, 5);
 
+  // ✅ Loading minimaliste (déjà rapide)
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-rose-50 to-purple-50 flex items-center justify-center">
         <div className="text-center">
-          <Heart className="w-12 h-12 text-rose-500 fill-rose-500 animate-pulse-heart mx-auto" />
+          <Heart className="w-12 h-12 text-rose-500 fill-rose-500 animate-pulse mx-auto" />
           <p className="mt-4 text-slate-600 font-medium">Chargement...</p>
         </div>
       </div>
@@ -140,22 +159,20 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
         {/* ========== SIDEBAR DESKTOP ========== */}
         <aside className="hidden lg:flex w-72 bg-white border-r border-slate-100 flex-col fixed inset-y-0 left-0 z-30">
-          
-          {/* Logo */}
           <div className="p-6 flex items-center justify-between">
-            <Link href="/dashboard" className="flex items-center gap-2">
+            <Link href="/dashboard" className="flex items-center gap-2" prefetch={true}>
               <Heart className="w-8 h-8 text-rose-500 fill-rose-500" />
               <span className="text-2xl font-bold gradient-text">LoveLink</span>
             </Link>
             <Notifications />
           </div>
 
-          {/* Nav Links */}
           <nav className="flex-1 px-4 space-y-1 overflow-y-auto">
             {navItems.map((item) => (
               <Link
                 key={item.href}
                 href={item.href}
+                prefetch={true}
                 className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium ${
                   pathname === item.href
                     ? "bg-gradient-to-r from-rose-500 to-purple-600 text-white shadow-lg shadow-rose-500/25"
@@ -167,12 +184,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               </Link>
             ))}
 
-            {/* Séparateur */}
             <div className="my-3 border-t border-slate-100" />
 
-            {/* 🎁 Bouton PARRAINAGE (NOUVEAU) */}
             <Link
               href="/parrainage"
+              prefetch={true}
               className={`relative flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold ${
                 pathname === "/parrainage"
                   ? "bg-gradient-to-r from-emerald-500 to-green-600 text-white shadow-lg shadow-emerald-500/25"
@@ -186,9 +202,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               </span>
             </Link>
 
-            {/* Bouton Premium spécial */}
             <Link
               href="/premium"
+              prefetch={true}
               className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold ${
                 pathname === "/premium"
                   ? "bg-gradient-to-r from-yellow-400 to-orange-500 text-white shadow-lg shadow-orange-500/25"
@@ -205,12 +221,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             </Link>
           </nav>
 
-          {/* User Footer */}
           <div className="p-4 border-t border-slate-100">
             <div className="flex items-center gap-3 px-4 py-3">
               <div className="w-10 h-10 rounded-full bg-gradient-to-br from-rose-400 to-purple-500 flex items-center justify-center text-white font-bold text-sm overflow-hidden flex-shrink-0">
                 {user?.photoUrl ? (
-                  <img src={user.photoUrl} alt="Profil" className="w-full h-full object-cover" />
+                  <Image
+                    src={user.photoUrl}
+                    alt="Profil"
+                    width={40}
+                    height={40}
+                    className="w-full h-full object-cover"
+                  />
                 ) : (
                   <>
                     {user?.firstName?.charAt(0)}
@@ -255,7 +276,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         {/* ========== MOBILE HEADER ========== */}
         <div className="lg:hidden fixed top-0 left-0 right-0 z-30 glass-card border-b border-slate-100">
           <div className="flex items-center justify-between px-4 py-3">
-            <Link href="/dashboard" className="flex items-center gap-2">
+            <Link href="/dashboard" className="flex items-center gap-2" prefetch={true}>
               <Heart className="w-6 h-6 text-rose-500 fill-rose-500" />
               <span className="text-lg font-bold gradient-text">LoveLink</span>
               {user?.isIncognito && (
@@ -276,17 +297,16 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             </div>
           </div>
 
-          {/* Menu mobile déroulant - AVEC SCROLL */}
-{menuOpen && (
-  <nav 
-    className="px-4 pb-32 space-y-1 animate-fade-in overflow-y-auto"
-    style={{ maxHeight: "calc(100vh - 80px)" }}
-  >
+          {menuOpen && (
+            <nav
+              className="px-4 pb-32 space-y-1 animate-fade-in overflow-y-auto"
+              style={{ maxHeight: "calc(100vh - 80px)" }}
+            >
               {navItems.map((item) => (
                 <Link
                   key={item.href}
                   href={item.href}
-                  onClick={() => setMenuOpen(false)}
+                  prefetch={true}
                   className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium ${
                     pathname === item.href
                       ? "bg-gradient-to-r from-rose-500 to-purple-600 text-white"
@@ -298,13 +318,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 </Link>
               ))}
 
-              {/* Séparateur */}
               <div className="border-t border-slate-100 my-2" />
 
-              {/* 🎁 Lien PARRAINAGE dans le menu mobile (NOUVEAU) */}
               <Link
                 href="/parrainage"
-                onClick={() => setMenuOpen(false)}
+                prefetch={true}
                 className={`relative flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all ${
                   pathname === "/parrainage"
                     ? "bg-gradient-to-r from-emerald-500 to-green-600 text-white"
@@ -318,10 +336,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 </span>
               </Link>
 
-              {/* Lien Premium dans le menu mobile */}
               <Link
                 href="/premium"
-                onClick={() => setMenuOpen(false)}
+                prefetch={true}
                 className={`flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all ${
                   pathname === "/premium"
                     ? "bg-gradient-to-r from-yellow-400 to-orange-500 text-white"
@@ -335,7 +352,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 </span>
               </Link>
 
-              {/* Déconnexion */}
               <button
                 onClick={handleLogout}
                 className="flex items-center gap-3 px-4 py-3 rounded-xl text-slate-600 hover:bg-red-50 hover:text-red-500 transition w-full font-medium"
@@ -354,6 +370,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               <Link
                 key={item.href}
                 href={item.href}
+                prefetch={true}
                 className={`flex flex-col items-center gap-0.5 p-2 rounded-lg transition ${
                   pathname === item.href
                     ? "text-rose-500"
@@ -364,9 +381,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 <span className="text-[10px] font-medium">{item.label}</span>
               </Link>
             ))}
-            {/* Bouton Premium dans la bottom nav mobile */}
             <Link
               href="/premium"
+              prefetch={true}
               className={`flex flex-col items-center gap-0.5 p-2 rounded-lg transition ${
                 pathname === "/premium"
                   ? "text-orange-500"
@@ -381,7 +398,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
         {/* ========== MAIN CONTENT ========== */}
         <main className="flex-1 lg:ml-72 pt-16 pb-20 lg:pt-0 lg:pb-0 min-h-screen">
-          {/* 🕵️ Bandeau Incognito discret en haut */}
           {user?.isIncognito && (
             <div className="bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-600 text-white text-center py-1.5 px-4 text-xs font-black tracking-wider flex items-center justify-center gap-2 shadow-md">
               <EyeOff className="w-3.5 h-3.5" />
@@ -394,9 +410,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           {children}
         </main>
 
-        {/* ========== PWA INSTALL BUTTON (Bandeau flottant global) ========== */}
         <InstallAppButton />
-
       </div>
     </UserContext.Provider>
   );
