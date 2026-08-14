@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef, useCallback, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { useUser } from "../layout";
+import Image from "next/image";
 import {
   Heart,
   Send,
@@ -70,6 +71,92 @@ const gradients = [
 
 const quickEmojis = ["❤️", "😂", "🔥", "👍", "🥰", "😍", "😘", "🎉"];
 
+// ✅ SKELETON LOADER pour la liste des matches
+function MatchesListSkeleton() {
+  return (
+    <div className="flex-1 overflow-y-auto p-4 space-y-3 animate-pulse">
+      {[...Array(5)].map((_, i) => (
+        <div key={i} className="flex items-center gap-3">
+          <div className="w-14 h-14 rounded-full bg-slate-200 flex-shrink-0" />
+          <div className="flex-1 space-y-2">
+            <div className="h-4 bg-slate-200 rounded-full w-32" />
+            <div className="h-3 bg-slate-100 rounded-full w-48" />
+          </div>
+          <div className="h-3 bg-slate-100 rounded-full w-8" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ✅ SKELETON LOADER pour le chat
+function ChatSkeleton() {
+  return (
+    <div className="flex-1 overflow-y-auto p-4 space-y-3 animate-pulse">
+      {/* Message reçu */}
+      <div className="flex justify-start mt-3">
+        <div className="h-10 w-48 bg-slate-200 rounded-2xl rounded-bl-md" />
+      </div>
+      {/* Message envoyé */}
+      <div className="flex justify-end mt-3">
+        <div className="h-10 w-40 bg-rose-100 rounded-2xl rounded-br-md" />
+      </div>
+      <div className="flex justify-end mt-0.5">
+        <div className="h-10 w-56 bg-rose-100 rounded-2xl rounded-tr-md" />
+      </div>
+      {/* Message reçu */}
+      <div className="flex justify-start mt-3">
+        <div className="h-10 w-52 bg-slate-200 rounded-2xl rounded-bl-md" />
+      </div>
+      <div className="flex justify-start mt-0.5">
+        <div className="h-10 w-36 bg-slate-200 rounded-2xl rounded-tl-md" />
+      </div>
+      {/* Message envoyé */}
+      <div className="flex justify-end mt-3">
+        <div className="h-10 w-44 bg-rose-100 rounded-2xl" />
+      </div>
+    </div>
+  );
+}
+
+// ✅ Avatar optimisé avec Next.js Image (réutilisable)
+function Avatar({
+  photoUrl,
+  firstName,
+  userId,
+  size = 56,
+  className = "",
+}: {
+  photoUrl: string | null;
+  firstName: string;
+  userId: number;
+  size?: number;
+  className?: string;
+}) {
+  const gradient = gradients[userId % gradients.length];
+
+  if (photoUrl) {
+    return (
+      <Image
+        src={photoUrl}
+        alt={firstName}
+        width={size}
+        height={size}
+        className={`rounded-full object-cover ${className}`}
+      />
+    );
+  }
+
+  return (
+   <div
+  style={{ width: size, height: size, fontSize: size * 0.35 }}
+  className={`rounded-full bg-gradient-to-br ${gradient} flex items-center justify-center text-white font-bold ${className}`}
+>
+      {firstName?.charAt(0)}
+    </div>
+  );
+}
+
 function MessagesContent() {
   const searchParams = useSearchParams();
   const { user } = useUser();
@@ -85,15 +172,18 @@ function MessagesContent() {
   const [showEmojis, setShowEmojis] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
-  // ✅ NOUVEAU : Refs pour éviter re-renders inutiles
+
+  // ✅ Refs déclarées ensemble en haut (évite le bug)
   const isTypingRef = useRef(false);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastMessageIdRef = useRef<number | null>(null);
   const shouldScrollRef = useRef(true);
+  // ✅ Ref pour éviter refetch matches si rien n'a changé
+  const lastMatchesHashRef = useRef<string>("");
 
   const scrollToBottom = useCallback((smooth = true) => {
-    messagesEndRef.current?.scrollIntoView({ 
-      behavior: smooth ? "smooth" : "auto" 
+    messagesEndRef.current?.scrollIntoView({
+      behavior: smooth ? "smooth" : "auto",
     });
   }, []);
 
@@ -102,7 +192,21 @@ function MessagesContent() {
       const res = await fetch("/api/matches");
       if (res.ok) {
         const data = await res.json();
-        setMatchesList(data.matches || []);
+        const matches: MatchData[] = data.matches || [];
+
+        // ✅ Ne mettre à jour QUE si la liste a vraiment changé
+        // Hash simple basé sur derniers messages + unread counts
+        const hash = matches
+          .map(
+            (m) =>
+              `${m.matchId}-${m.lastMessage?.createdAt || "none"}-${m.unreadCount}`
+          )
+          .join("|");
+
+        if (hash !== lastMatchesHashRef.current) {
+          lastMatchesHashRef.current = hash;
+          setMatchesList(matches);
+        }
       }
     } catch {
       // silently fail
@@ -113,7 +217,7 @@ function MessagesContent() {
 
   useEffect(() => {
     fetchMatchesList();
-    // ✅ Polling à 30s au lieu de 15s (moins agressif)
+    // ✅ 30s = bon équilibre réactivité / performance
     const interval = setInterval(fetchMatchesList, 30000);
     return () => clearInterval(interval);
   }, [fetchMatchesList]);
@@ -125,61 +229,63 @@ function MessagesContent() {
     }
   }, [searchParams]);
 
-  // ✅ CORRECTION MAJEURE : Ne met à jour que si les messages ont vraiment changé
-  const fetchMessages = useCallback(async (matchId: number, isInitial = false) => {
-    if (isInitial) setLoadingMessages(true);
-    
-    try {
-      const res = await fetch(`/api/messages/${matchId}`);
-      if (res.ok) {
-        const data = await res.json();
-        const newMessages: Message[] = data.messages || [];
-        
-        // ✅ Si initial, on remplace tout
-        if (isInitial) {
-          setChatMessages(newMessages);
-          setOtherUser(data.otherUser || null);
-          if (newMessages.length > 0) {
-            lastMessageIdRef.current = newMessages[newMessages.length - 1].id;
-          }
-          shouldScrollRef.current = true;
-          return;
-        }
-        
-        // ✅ Si polling, on vérifie s'il y a de nouveaux messages
-        const lastNewMessageId = newMessages.length > 0 
-          ? newMessages[newMessages.length - 1].id 
-          : null;
-        
-        // ✅ Ne mettre à jour QUE si nouveaux messages
-        if (lastNewMessageId !== lastMessageIdRef.current) {
-          setChatMessages(newMessages);
-          lastMessageIdRef.current = lastNewMessageId;
-          shouldScrollRef.current = true;
-          
-          // Update other user aussi (statut online, etc.)
-          setOtherUser((prev) => {
-            const newOther = data.otherUser;
-            if (!newOther) return prev;
-            // Seulement update si vraiment différent
-            if (
-              prev?.isOnline !== newOther.isOnline ||
-              prev?.lastSeen !== newOther.lastSeen
-            ) {
-              return newOther;
-            }
-            return prev;
-          });
-        }
-      }
-    } catch {
-      // silently fail
-    } finally {
-      if (isInitial) setLoadingMessages(false);
-    }
-  }, []);
+  // ✅ Fetch messages avec détection intelligente de changements
+  const fetchMessages = useCallback(
+    async (matchId: number, isInitial = false) => {
+      if (isInitial) setLoadingMessages(true);
 
-   // ✅ Fetch initial quand on ouvre une conversation + nettoyer les notifs
+      try {
+        const res = await fetch(`/api/messages/${matchId}`);
+        if (res.ok) {
+          const data = await res.json();
+          const newMessages: Message[] = data.messages || [];
+
+          if (isInitial) {
+            setChatMessages(newMessages);
+            setOtherUser(data.otherUser || null);
+            if (newMessages.length > 0) {
+              lastMessageIdRef.current =
+                newMessages[newMessages.length - 1].id;
+            }
+            shouldScrollRef.current = true;
+            return;
+          }
+
+          // ✅ Polling : ne mettre à jour QUE si nouveaux messages
+          const lastNewMessageId =
+            newMessages.length > 0
+              ? newMessages[newMessages.length - 1].id
+              : null;
+
+          if (lastNewMessageId !== lastMessageIdRef.current) {
+            setChatMessages(newMessages);
+            lastMessageIdRef.current = lastNewMessageId;
+            shouldScrollRef.current = true;
+
+            // ✅ Update statut online seulement si changé
+            setOtherUser((prev) => {
+              const newOther = data.otherUser;
+              if (!newOther) return prev;
+              if (
+                prev?.isOnline !== newOther.isOnline ||
+                prev?.lastSeen !== newOther.lastSeen
+              ) {
+                return newOther;
+              }
+              return prev;
+            });
+          }
+        }
+      } catch {
+        // silently fail
+      } finally {
+        if (isInitial) setLoadingMessages(false);
+      }
+    },
+    []
+  );
+
+  // ✅ Fetch initial quand on sélectionne une conversation
   useEffect(() => {
     if (selectedMatch) {
       lastMessageIdRef.current = null;
@@ -187,21 +293,17 @@ function MessagesContent() {
     }
   }, [selectedMatch, fetchMessages]);
 
-  // ✅ NOUVEAU : Nettoyer les notifs de messages quand on ouvre une conversation
+  // ✅ Clear notifs quand on ouvre une conversation
   useEffect(() => {
     if (!selectedMatch || !otherUser) return;
-    
-    // Supprimer toutes les notifs "message" provenant de cette personne
     fetch("/api/notifications/clear-messages", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ fromUserId: otherUser.id }),
-    }).catch(() => {
-      // silently fail - pas critique
-    });
+    }).catch(() => {});
   }, [selectedMatch, otherUser]);
 
-  // ✅ Scroll uniquement si nécessaire (pas à chaque render)
+  // ✅ Scroll uniquement si nécessaire
   useEffect(() => {
     if (shouldScrollRef.current && chatMessages.length > 0) {
       scrollToBottom();
@@ -209,17 +311,14 @@ function MessagesContent() {
     }
   }, [chatMessages, scrollToBottom]);
 
-  // ✅ POLLING INTELLIGENT : 10s au lieu de 3s, pause pendant frappe
+  // ✅ Polling intelligent : pause pendant frappe
   useEffect(() => {
     if (!selectedMatch) return;
-    
     const interval = setInterval(() => {
-      // ✅ Ne pas polling si l'utilisateur est en train d'écrire
       if (!isTypingRef.current) {
         fetchMessages(selectedMatch, false);
       }
-    }, 10000); // ✅ 10 secondes au lieu de 3
-    
+    }, 10000);
     return () => clearInterval(interval);
   }, [selectedMatch, fetchMessages]);
 
@@ -228,10 +327,10 @@ function MessagesContent() {
     if (!newMessage.trim() || !selectedMatch || sending) return;
 
     const messageToSend = newMessage;
-    setNewMessage(""); // ✅ Vider immédiatement pour UX fluide
+    setNewMessage("");
     setSending(true);
     setShowEmojis(false);
-    
+
     try {
       const res = await fetch(`/api/messages/${selectedMatch}`, {
         method: "POST",
@@ -245,11 +344,9 @@ function MessagesContent() {
         shouldScrollRef.current = true;
         fetchMatchesList();
       } else {
-        // Restaurer le message si échec
         setNewMessage(messageToSend);
       }
     } catch {
-      // Restaurer le message si échec
       setNewMessage(messageToSend);
     } finally {
       setSending(false);
@@ -273,7 +370,6 @@ function MessagesContent() {
         fetchMatchesList();
       }
     } catch {
-      // silently fail
     } finally {
       setSending(false);
     }
@@ -292,12 +388,8 @@ function MessagesContent() {
     try {
       const uploadRes = await fetch(
         `/api/upload?filename=${encodeURIComponent(file.name)}`,
-        {
-          method: "POST",
-          body: file,
-        }
+        { method: "POST", body: file }
       );
-
       if (!uploadRes.ok) throw new Error("Upload échoué");
 
       const blob = await uploadRes.json();
@@ -324,25 +416,18 @@ function MessagesContent() {
     }
   }
 
-  // ✅ Détecter si l'utilisateur tape (pour pauser le polling)
+  // ✅ Détection frappe avec ref déclarée en haut
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setNewMessage(e.target.value);
     isTypingRef.current = true;
-    
-    // Reset "isTyping" après 2 secondes d'inactivité
-    if (typingTimeoutRef.current) {
-      clearTimeout(typingTimeoutRef.current);
-    }
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     typingTimeoutRef.current = setTimeout(() => {
       isTypingRef.current = false;
     }, 2000);
   };
 
-  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
   function formatMessageTime(dateStr: string) {
-    const date = new Date(dateStr);
-    return date.toLocaleTimeString("fr-FR", {
+    return new Date(dateStr).toLocaleTimeString("fr-FR", {
       hour: "2-digit",
       minute: "2-digit",
     });
@@ -363,24 +448,25 @@ function MessagesContent() {
     });
   }
 
-  const newMatches = matchesList.filter((m) => !m.lastMessage);
-  const conversations = matchesList.filter((m) => m.lastMessage);
-
+  // ✅ Images dans les messages avec lazy loading
   const renderMessageContent = (content: string, _isMine: boolean) => {
     if (content.startsWith("[IMAGE]")) {
       const imageUrl = content.replace("[IMAGE]", "");
       return (
-        <img
-          src={imageUrl}
-          alt="Photo envoyée"
-          className="rounded-xl max-w-full max-h-64 object-cover cursor-pointer"
+        <div className="relative w-48 h-48 rounded-xl overflow-hidden cursor-pointer"
           onClick={() => window.open(imageUrl, "_blank")}
-        />
+        >
+          <Image
+            src={imageUrl}
+            alt="Photo envoyée"
+            fill
+            className="object-cover"
+            sizes="192px"
+          />
+        </div>
       );
     }
-
     const isEmojiOnly = /^\p{Emoji}+$/u.test(content) && content.length <= 4;
-
     return (
       <p className={`leading-relaxed ${isEmojiOnly ? "text-4xl" : "text-sm"}`}>
         {content}
@@ -388,9 +474,14 @@ function MessagesContent() {
     );
   };
 
+  const newMatches = matchesList.filter((m) => !m.lastMessage);
+  const conversations = matchesList.filter((m) => m.lastMessage);
+
   return (
     <div className="flex h-[calc(100vh-64px)] lg:h-screen">
-      {/* Sidebar Conversations */}
+      {/* ════════════════════════════════════════ */}
+      {/* SIDEBAR CONVERSATIONS */}
+      {/* ════════════════════════════════════════ */}
       <div
         className={`${
           selectedMatch ? "hidden md:flex" : "flex"
@@ -400,10 +491,9 @@ function MessagesContent() {
           <h2 className="text-2xl font-bold text-slate-900">Messages</h2>
         </div>
 
+        {/* ✅ Skeleton au lieu de spinner */}
         {loadingMatches ? (
-          <div className="flex-1 flex items-center justify-center">
-            <Heart className="w-8 h-8 text-rose-300 animate-pulse" />
-          </div>
+          <MatchesListSkeleton />
         ) : matchesList.length === 0 ? (
           <div className="flex-1 flex items-center justify-center p-6">
             <div className="text-center">
@@ -431,9 +521,7 @@ function MessagesContent() {
                 </h3>
                 <div className="flex gap-3 overflow-x-auto pb-2">
                   {newMatches.map((match) => {
-                    const gradient = gradients[match.user.id % gradients.length];
                     const isPremium = match.user.isPremium;
-
                     return (
                       <button
                         key={match.matchId}
@@ -441,7 +529,7 @@ function MessagesContent() {
                         className="flex flex-col items-center gap-1 flex-shrink-0"
                       >
                         <div className="relative">
-                         <div
+                          <div
                             className={`p-0.5 rounded-full ${
                               isPremium
                                 ? "bg-gradient-to-r from-yellow-400 via-orange-500 to-yellow-400 shadow-lg shadow-yellow-500/30"
@@ -450,19 +538,14 @@ function MessagesContent() {
                                 : "bg-gradient-to-r from-rose-500 via-purple-500 to-pink-500"
                             }`}
                           >
-                            {match.user.photoUrl ? (
-                              <img
-                                src={match.user.photoUrl}
-                                alt={match.user.firstName}
-                                className="w-16 h-16 rounded-full object-cover border-2 border-white"
-                              />
-                            ) : (
-                              <div
-                                className={`w-16 h-16 rounded-full bg-gradient-to-br ${gradient} flex items-center justify-center text-white font-bold text-lg border-2 border-white`}
-                              >
-                                {match.user.firstName?.charAt(0)}
-                              </div>
-                            )}
+                            {/* ✅ Avatar optimisé */}
+                            <Avatar
+                              photoUrl={match.user.photoUrl}
+                              firstName={match.user.firstName}
+                              userId={match.user.id}
+                              size={64}
+                              className="border-2 border-white"
+                            />
                           </div>
 
                           {isPremium && (
@@ -500,8 +583,8 @@ function MessagesContent() {
                 )}
 
                 {conversations.map((match) => {
-                  const gradient = gradients[match.user.id % gradients.length];
-                  const lastMsgIsMine = match.lastMessage?.senderId === user?.id;
+                  const lastMsgIsMine =
+                    match.lastMessage?.senderId === user?.id;
                   const isPremium = match.user.isPremium;
                   const isSelected = selectedMatch === match.matchId;
 
@@ -526,23 +609,16 @@ function MessagesContent() {
                             : ""
                         }`}
                       >
-                        {match.user.photoUrl ? (
-                          <img
-                            src={match.user.photoUrl}
-                            alt={match.user.firstName}
-                            className={`w-14 h-14 rounded-full object-cover ${
-                              isPremium ? "border-2 border-white" : ""
-                            }`}
-                          />
-                        ) : (
-                          <div
-                            className={`w-14 h-14 rounded-full bg-gradient-to-br ${gradient} flex items-center justify-center text-white font-bold text-lg ${
-                              isPremium ? "border-2 border-white" : ""
-                            }`}
-                          >
-                            {match.user.firstName?.charAt(0)}
-                          </div>
-                        )}
+                        {/* ✅ Avatar optimisé */}
+                        <Avatar
+                          photoUrl={match.user.photoUrl}
+                          firstName={match.user.firstName}
+                          userId={match.user.id}
+                          size={56}
+                          className={
+                            isPremium ? "border-2 border-white" : ""
+                          }
+                        />
 
                         {match.user.isOnline && (
                           <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 rounded-full border-2 border-white" />
@@ -556,7 +632,7 @@ function MessagesContent() {
                       </div>
 
                       <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between">
                           <div className="flex items-center gap-1 min-w-0">
                             <p className="font-semibold text-slate-900 truncate">
                               {match.user.firstName}
@@ -587,8 +663,9 @@ function MessagesContent() {
                             {lastMsgIsMine && (
                               <span className="text-slate-400">Toi:</span>
                             )}
-
-                            {match.lastMessage.content.startsWith("[IMAGE]") ? (
+                            {match.lastMessage.content.startsWith(
+                              "[IMAGE]"
+                            ) ? (
                               <span className="flex items-center gap-1">
                                 <ImageIcon className="w-3.5 h-3.5" />
                                 Photo
@@ -614,7 +691,9 @@ function MessagesContent() {
         )}
       </div>
 
-      {/* Chat Area */}
+      {/* ════════════════════════════════════════ */}
+      {/* ZONE DE CHAT */}
+      {/* ════════════════════════════════════════ */}
       {selectedMatch ? (
         <div className="flex-1 flex flex-col bg-gradient-to-br from-slate-50 to-rose-50/30">
           {/* Chat Header */}
@@ -639,25 +718,16 @@ function MessagesContent() {
                       : ""
                   }`}
                 >
-                  {otherUser.photoUrl ? (
-                    <img
-                      src={otherUser.photoUrl}
-                      alt={otherUser.firstName}
-                      className={`w-11 h-11 rounded-full object-cover ${
-                        otherUser.isPremium ? "border-2 border-white" : ""
-                      }`}
-                    />
-                  ) : (
-                    <div
-                      className={`w-11 h-11 rounded-full bg-gradient-to-br ${
-                        gradients[otherUser.id % gradients.length]
-                      } flex items-center justify-center text-white font-bold ${
-                        otherUser.isPremium ? "border-2 border-white" : ""
-                      }`}
-                    >
-                      {otherUser.firstName?.charAt(0)}
-                    </div>
-                  )}
+                  {/* ✅ Avatar optimisé dans le header */}
+                  <Avatar
+                    photoUrl={otherUser.photoUrl}
+                    firstName={otherUser.firstName}
+                    userId={otherUser.id}
+                    size={44}
+                    className={
+                      otherUser.isPremium ? "border-2 border-white" : ""
+                    }
+                  />
 
                   {otherUser.isOnline && (
                     <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-white" />
@@ -670,16 +740,14 @@ function MessagesContent() {
                   )}
                 </div>
 
-                  <div className="flex-1 min-w-0">
+                <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <p className="font-semibold text-slate-900 truncate">
                       {otherUser.firstName} {otherUser.lastName}
                     </p>
-
                     {otherUser.isVerified && (
                       <BadgeCheck className="w-4 h-4 text-blue-500 fill-blue-500 flex-shrink-0" />
                     )}
-
                     {otherUser.isPremium && (
                       <>
                         <Crown className="w-4 h-4 text-yellow-500 fill-yellow-500 flex-shrink-0" />
@@ -709,10 +777,9 @@ function MessagesContent() {
 
           {/* Messages */}
           <div className="flex-1 overflow-y-auto p-4 space-y-2">
+            {/* ✅ Skeleton au lieu de spinner */}
             {loadingMessages ? (
-              <div className="flex items-center justify-center h-full">
-                <Heart className="w-8 h-8 text-rose-300 animate-pulse" />
-              </div>
+              <ChatSkeleton />
             ) : chatMessages.length === 0 ? (
               <div className="flex items-center justify-center h-full">
                 <div className="text-center max-w-xs">
@@ -738,7 +805,6 @@ function MessagesContent() {
 
                 const isSameSenderAsPrev = prevMsg?.senderId === msg.senderId;
                 const isSameSenderAsNext = nextMsg?.senderId === msg.senderId;
-
                 const isFirstOfGroup = !isSameSenderAsPrev;
                 const isLastOfGroup = !isSameSenderAsNext;
                 const showTime = isLastOfGroup;
@@ -747,9 +813,9 @@ function MessagesContent() {
                 return (
                   <div
                     key={msg.id}
-                    className={`flex ${isMine ? "justify-end" : "justify-start"} ${
-                      isFirstOfGroup ? "mt-3" : "mt-0.5"
-                    }`}
+                    className={`flex ${
+                      isMine ? "justify-end" : "justify-start"
+                    } ${isFirstOfGroup ? "mt-3" : "mt-0.5"}`}
                   >
                     <div className="max-w-[75%]">
                       <div
@@ -823,7 +889,10 @@ function MessagesContent() {
           )}
 
           {/* Message Input */}
-          <form onSubmit={handleSend} className="p-3 bg-white border-t border-slate-100">
+          <form
+            onSubmit={handleSend}
+            className="p-3 bg-white border-t border-slate-100"
+          >
             <div className="flex items-center gap-2">
               <button
                 type="button"
@@ -833,7 +902,6 @@ function MessagesContent() {
                     ? "bg-rose-100 text-rose-600"
                     : "text-slate-400 hover:bg-slate-100"
                 }`}
-                title="Emojis"
               >
                 <Smile className="w-5 h-5" />
               </button>
@@ -851,7 +919,6 @@ function MessagesContent() {
                 onClick={() => fileInputRef.current?.click()}
                 disabled={uploadingImage}
                 className="p-2.5 rounded-full text-slate-400 hover:bg-slate-100 transition disabled:opacity-50"
-                title="Envoyer une photo"
               >
                 {uploadingImage ? (
                   <span className="text-xs">...</span>
@@ -873,7 +940,7 @@ function MessagesContent() {
                 disabled={!newMessage.trim() || sending}
                 className={`w-11 h-11 rounded-full flex items-center justify-center text-white hover:shadow-lg hover:scale-105 transition disabled:opacity-30 disabled:hover:scale-100 ${
                   otherUser?.isPremium
-                    ? "bg-gradient-to-r from-yellow-400 to-orange-500 shadow-yellow-500/30"
+                    ? "bg-gradient-to-r from-yellow-400 to-orange-500"
                     : "bg-gradient-to-r from-rose-500 to-purple-600"
                 }`}
               >
