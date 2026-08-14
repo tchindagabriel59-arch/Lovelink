@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useUser } from "../layout";
 import {
   Heart,
@@ -80,6 +81,84 @@ const gradients = [
   "from-emerald-400 to-teal-500",
 ];
 
+// ✅ SKELETON LOADER - Ressemble au vrai dashboard
+function DashboardSkeleton() {
+  return (
+    <div className="p-6 lg:p-8 max-w-6xl mx-auto animate-pulse">
+      {/* Header skeleton */}
+      <div className="mb-6 flex items-center gap-4">
+        <div className="w-16 h-16 rounded-2xl bg-slate-200" />
+        <div className="space-y-2">
+          <div className="h-8 w-56 bg-slate-200 rounded-xl" />
+          <div className="h-4 w-40 bg-slate-100 rounded-full" />
+        </div>
+      </div>
+
+      {/* Stats skeleton */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        {[...Array(4)].map((_, i) => (
+          <div key={i} className="rounded-2xl bg-slate-200 h-28" />
+        ))}
+      </div>
+
+      {/* Body skeleton */}
+      <div className="grid lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 space-y-4">
+          <div className="h-40 rounded-2xl bg-slate-200" />
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="h-24 rounded-2xl bg-slate-100" />
+            ))}
+          </div>
+          <div className="h-64 rounded-2xl bg-slate-100" />
+        </div>
+        <div className="space-y-4">
+          <div className="h-48 rounded-2xl bg-slate-100" />
+          <div className="h-36 rounded-2xl bg-slate-200" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ✅ Avatar optimisé réutilisable
+function Avatar({
+  photoUrl,
+  firstName,
+  lastName,
+  size = 64,
+  className = "",
+  rounded = "rounded-2xl",
+}: {
+  photoUrl: string | null;
+  firstName?: string;
+  lastName?: string;
+  size?: number;
+  className?: string;
+  rounded?: string;
+}) {
+  if (photoUrl) {
+    return (
+      <Image
+        src={photoUrl}
+        alt={firstName || ""}
+        width={size}
+        height={size}
+        className={`${rounded} object-cover ${className}`}
+      />
+    );
+  }
+  return (
+    <div
+      style={{ width: size, height: size, fontSize: size * 0.3 }}
+      className={`${rounded} bg-gradient-to-br from-rose-500 to-purple-600 flex items-center justify-center text-white font-bold shadow-md ${className}`}
+    >
+      {firstName?.charAt(0)}
+      {lastName?.charAt(0)}
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const { user } = useUser();
   const isPremium = user?.isPremium || false;
@@ -87,13 +166,8 @@ export default function DashboardPage() {
   const [recentMatches, setRecentMatches] = useState<MatchData[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchAllData();
-    const interval = setInterval(fetchAllData, 30000);
-    return () => clearInterval(interval);
-  }, []);
-
-  async function fetchAllData() {
+  // ✅ fetchAllData stable avec useCallback
+  const fetchAllData = useCallback(async () => {
     try {
       const [statsRes, matchesRes] = await Promise.all([
         fetch("/api/dashboard-stats"),
@@ -114,7 +188,15 @@ export default function DashboardPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
+
+  useEffect(() => {
+    fetchAllData();
+    // ✅ Dashboard : polling à 60s au lieu de 30s
+    // Les stats du dashboard ne changent pas toutes les 30s
+    const interval = setInterval(fetchAllData, 60000);
+    return () => clearInterval(interval);
+  }, [fetchAllData]);
 
   function timeAgo(dateStr: string) {
     const diff = Date.now() - new Date(dateStr).getTime();
@@ -123,75 +205,52 @@ export default function DashboardPage() {
     if (mins < 60) return `${mins}min`;
     const hours = Math.floor(mins / 60);
     if (hours < 24) return `${hours}h`;
-    const days = Math.floor(hours / 24);
-    return `${days}j`;
+    return `${Math.floor(hours / 24)}j`;
   }
 
   function getNotifIcon(type: string) {
     switch (type) {
-      case "like":
-        return "❤️";
-      case "super_like":
-        return "⭐";
-      case "match":
-        return "💕";
-      case "message":
-        return "💬";
-      default:
-        return "🔔";
+      case "like": return "❤️";
+      case "super_like": return "⭐";
+      case "match": return "💕";
+      case "message": return "💬";
+      default: return "🔔";
     }
   }
 
   function getNotifLink(type: string) {
     switch (type) {
       case "like":
-      case "super_like":
-        return "/likes-recus";
-      case "match":
-        return "/matches";
-      case "message":
-        return "/messages";
-      default:
-        return "/dashboard";
+      case "super_like": return "/likes-recus";
+      case "match": return "/matches";
+      case "message": return "/messages";
+      default: return "/dashboard";
     }
   }
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[80vh]">
-        <div className="text-center">
-          <Heart className="w-12 h-12 text-rose-400 animate-pulse mx-auto" />
-          <p className="mt-4 text-slate-600">Chargement de ton dashboard...</p>
-        </div>
-      </div>
-    );
-  }
+  // ✅ Skeleton au lieu de spinner simple
+  if (loading) return <DashboardSkeleton />;
 
   const stats = dashData?.stats;
   const completion = dashData?.completion || 0;
 
   return (
     <div className="p-6 lg:p-8 max-w-6xl mx-auto">
+
+      {/* ══════════════════════════════════ */}
       {/* HEADER */}
+      {/* ══════════════════════════════════ */}
       <div className="mb-6">
         <div className="flex items-center gap-4">
           <div className="relative">
-            {user?.photoUrl ? (
-              <img
-                src={user.photoUrl}
-                alt={user.firstName}
-                className={`w-16 h-16 rounded-2xl object-cover shadow-md ${
-                  isPremium ? "ring-4 ring-yellow-400" : ""
-                }`}
-              />
-            ) : (
-              <div className={`w-16 h-16 rounded-2xl bg-gradient-to-br from-rose-500 to-purple-600 flex items-center justify-center text-white font-bold text-2xl shadow-md ${
-                isPremium ? "ring-4 ring-yellow-400" : ""
-              }`}>
-                {user?.firstName?.charAt(0)}
-                {user?.lastName?.charAt(0)}
-              </div>
-            )}
+            {/* ✅ Next.js Image optimisée */}
+            <Avatar
+              photoUrl={user?.photoUrl || null}
+              firstName={user?.firstName}
+              lastName={user?.lastName}
+              size={64}
+              className={isPremium ? "ring-4 ring-yellow-400" : ""}
+            />
             {isPremium && (
               <div className="absolute -top-2 -right-2 w-7 h-7 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full flex items-center justify-center shadow-lg border-2 border-white">
                 <Crown className="w-4 h-4 text-white fill-white" />
@@ -201,7 +260,8 @@ export default function DashboardPage() {
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-3xl font-bold text-slate-900">
-                Bonjour, <span className="gradient-text">{user?.firstName}</span> 👋
+                Bonjour,{" "}
+                <span className="gradient-text">{user?.firstName}</span> 👋
               </h1>
               {user?.isVerified && (
                 <span className="inline-flex items-center gap-1 bg-gradient-to-r from-blue-100 to-cyan-100 text-blue-700 rounded-full px-3 py-1 text-xs font-black border border-blue-300">
@@ -252,41 +312,44 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* BANNIÈRE PREMIUM (si non-Premium et il y a des likes) */}
-      {!isPremium && ((stats?.likesReceived || 0) > 0 || (stats?.superLikesReceived || 0) > 0) && (
-        <div className="mb-6 relative overflow-hidden rounded-3xl bg-gradient-to-r from-yellow-400 via-orange-500 to-yellow-500 p-6 shadow-2xl">
-          <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-32 translate-x-32" />
-          <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/10 rounded-full translate-y-24 -translate-x-24" />
-          <div className="relative z-10 flex flex-col md:flex-row items-center gap-6">
-            <div className="flex-shrink-0">
-              <div className="w-20 h-20 bg-white/20 backdrop-blur rounded-2xl flex items-center justify-center animate-pulse">
-                <Crown className="w-10 h-10 text-white fill-white" />
+      {/* BANNIÈRE PREMIUM (si likes reçus et non Premium) */}
+      {!isPremium &&
+        ((stats?.likesReceived || 0) > 0 ||
+          (stats?.superLikesReceived || 0) > 0) && (
+          <div className="mb-6 relative overflow-hidden rounded-3xl bg-gradient-to-r from-yellow-400 via-orange-500 to-yellow-500 p-6 shadow-2xl">
+            <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-32 translate-x-32" />
+            <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/10 rounded-full translate-y-24 -translate-x-24" />
+            <div className="relative z-10 flex flex-col md:flex-row items-center gap-6">
+              <div className="flex-shrink-0">
+                <div className="w-20 h-20 bg-white/20 backdrop-blur rounded-2xl flex items-center justify-center animate-pulse">
+                  <Crown className="w-10 h-10 text-white fill-white" />
+                </div>
               </div>
-            </div>
-            <div className="flex-1 text-white text-center md:text-left">
-              <div className="flex items-center gap-2 mb-2 justify-center md:justify-start">
-                <Gem className="w-5 h-5" />
-                <span className="text-xs font-black uppercase tracking-widest bg-white/20 px-2 py-0.5 rounded-full">
-                  Offre spéciale
-                </span>
+              <div className="flex-1 text-white text-center md:text-left">
+                <div className="flex items-center gap-2 mb-2 justify-center md:justify-start">
+                  <Gem className="w-5 h-5" />
+                  <span className="text-xs font-black uppercase tracking-widest bg-white/20 px-2 py-0.5 rounded-full">
+                    Offre spéciale
+                  </span>
+                </div>
+                <h3 className="text-2xl font-black mb-2">
+                  {stats?.likesReceived} personne
+                  {(stats?.likesReceived || 0) > 1 ? "s ont" : " a"} craqué sur toi !
+                </h3>
+                <p className="text-white/90 text-sm md:text-base">
+                  Découvre qui + Super Likes illimités + Boosts 3x/jour avec Premium 👑
+                </p>
               </div>
-              <h3 className="text-2xl font-black mb-2">
-                {stats?.likesReceived} personne{(stats?.likesReceived || 0) > 1 ? "s ont" : " a"} craqué sur toi !
-              </h3>
-              <p className="text-white/90 text-sm md:text-base">
-                Découvre qui + Super Likes illimités + Boosts 3x/jour avec Premium 👑
-              </p>
+              <Link
+                href="/premium"
+                className="flex-shrink-0 bg-white text-orange-600 font-black px-6 py-3 rounded-xl shadow-lg hover:scale-105 transition-transform flex items-center gap-2 whitespace-nowrap"
+              >
+                <Sparkles className="w-5 h-5" />
+                Découvrir
+              </Link>
             </div>
-            <Link
-              href="/premium"
-              className="flex-shrink-0 bg-white text-orange-600 font-black px-6 py-3 rounded-xl shadow-lg hover:scale-105 transition-transform flex items-center gap-2 whitespace-nowrap"
-            >
-              <Sparkles className="w-5 h-5" />
-              Découvrir
-            </Link>
           </div>
-        </div>
-      )}
+        )}
 
       {/* BANDEAU PREMIUM ACTIF */}
       {isPremium && (
@@ -297,7 +360,7 @@ export default function DashboardPage() {
               Tu es <span className="text-orange-600">Premium</span> ! 🎉
             </p>
             <p className="text-xs text-slate-600">
-              Profite de tous les avantages : Super Likes illimités, Boosts 3x/jour, et bien plus.
+              Super Likes illimités, Boosts 3x/jour, et bien plus.
             </p>
           </div>
           <Link
@@ -309,28 +372,46 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {/* ══════════════════════════════════ */}
       {/* STATS PRINCIPALES */}
+      {/* ══════════════════════════════════ */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <StatCard
           icon={<Heart className="w-5 h-5" />}
           value={stats?.likesReceived || 0}
           label="Likes reçus"
-          sub={stats?.likesReceivedThisWeek ? `+${stats.likesReceivedThisWeek} cette semaine` : "Cette semaine"}
+          sub={
+            stats?.likesReceivedThisWeek
+              ? `+${stats.likesReceivedThisWeek} cette semaine`
+              : "Cette semaine"
+          }
           gradient="from-rose-500 to-pink-500"
-          badge={stats?.superLikesReceived ? `${stats.superLikesReceived} ⭐` : undefined}
+          badge={
+            stats?.superLikesReceived
+              ? `${stats.superLikesReceived} ⭐`
+              : undefined
+          }
         />
         <StatCard
           icon={<Sparkles className="w-5 h-5" />}
           value={stats?.matches || 0}
           label="Matchs"
-          sub={stats?.matchesThisWeek ? `+${stats.matchesThisWeek} cette semaine` : "Total"}
+          sub={
+            stats?.matchesThisWeek
+              ? `+${stats.matchesThisWeek} cette semaine`
+              : "Total"
+          }
           gradient="from-purple-500 to-violet-500"
         />
         <StatCard
           icon={<MessageCircle className="w-5 h-5" />}
           value={stats?.messagesSent || 0}
           label="Messages envoyés"
-          sub={stats?.unreadMessages ? `${stats.unreadMessages} non lu(s)` : "Continue !"}
+          sub={
+            stats?.unreadMessages
+              ? `${stats.unreadMessages} non lu(s)`
+              : "Continue !"
+          }
           gradient="from-emerald-500 to-teal-500"
           alert={(stats?.unreadMessages || 0) > 0}
         />
@@ -338,15 +419,24 @@ export default function DashboardPage() {
           icon={<Heart className="w-5 h-5 fill-current" />}
           value={stats?.likesGiven || 0}
           label="Likes envoyés"
-          sub={stats?.likesGivenToday ? `+${stats.likesGivenToday} aujourd'hui` : "Aujourd'hui"}
+          sub={
+            stats?.likesGivenToday
+              ? `+${stats.likesGivenToday} aujourd'hui`
+              : "Aujourd'hui"
+          }
           gradient="from-blue-500 to-cyan-500"
         />
       </div>
 
+      {/* ══════════════════════════════════ */}
+      {/* GRILLE PRINCIPALE */}
+      {/* ══════════════════════════════════ */}
       <div className="grid lg:grid-cols-3 gap-6">
-        {/* COLONNE GAUCHE */}
+
+        {/* COLONNE GAUCHE (2/3) */}
         <div className="lg:col-span-2 space-y-6">
-          {/* COMPLÉTUDE */}
+
+          {/* COMPLÉTUDE PROFIL */}
           {completion < 100 && (
             <div className="bg-gradient-to-br from-rose-500 via-purple-500 to-pink-500 rounded-2xl p-6 text-white relative overflow-hidden">
               <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-3xl -translate-y-8 translate-x-8" />
@@ -365,9 +455,7 @@ export default function DashboardPage() {
                         : "Excellent ! Encore un petit effort !"}
                     </p>
                   </div>
-                  <div className="text-right">
-                    <p className="text-4xl font-bold">{completion}%</p>
-                  </div>
+                  <p className="text-4xl font-bold">{completion}%</p>
                 </div>
                 <div className="w-full bg-white/20 rounded-full h-3 mb-4 overflow-hidden">
                   <div
@@ -401,7 +489,9 @@ export default function DashboardPage() {
                     className="flex items-center gap-3 p-3 rounded-xl bg-gradient-to-r from-amber-50 to-orange-50 hover:from-amber-100 hover:to-orange-100 transition group"
                   >
                     <span className="text-2xl">{sug.icon}</span>
-                    <p className="flex-1 text-sm text-slate-700 font-medium">{sug.text}</p>
+                    <p className="flex-1 text-sm text-slate-700 font-medium">
+                      {sug.text}
+                    </p>
                     <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-amber-600 transition" />
                   </Link>
                 ))}
@@ -462,12 +552,15 @@ export default function DashboardPage() {
                 Voir tout →
               </Link>
             </div>
+
             {recentMatches.length === 0 ? (
               <div className="text-center py-8">
                 <div className="w-16 h-16 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-3">
                   <Heart className="w-8 h-8 text-rose-300" />
                 </div>
-                <p className="text-slate-600 font-medium">Pas encore de matchs</p>
+                <p className="text-slate-600 font-medium">
+                  Pas encore de matchs
+                </p>
                 <p className="text-sm text-slate-400 mt-1 mb-4">
                   Commence à découvrir des profils !
                 </p>
@@ -490,21 +583,30 @@ export default function DashboardPage() {
                       className="group relative overflow-hidden rounded-xl aspect-square"
                     >
                       {match.user.photoUrl ? (
-                        <img
+                        // ✅ Next.js Image pour les matchs récents
+                        <Image
                           src={match.user.photoUrl}
                           alt={match.user.firstName}
-                          className="w-full h-full object-cover group-hover:scale-110 transition duration-300"
+                          fill
+                          className="object-cover group-hover:scale-110 transition duration-300"
+                          sizes="(max-width: 768px) 50vw, 150px"
                         />
                       ) : (
-                        <div className={`w-full h-full bg-gradient-to-br ${gradient} flex items-center justify-center text-white text-4xl font-bold`}>
+                        <div
+                          className={`w-full h-full bg-gradient-to-br ${gradient} flex items-center justify-center text-white text-4xl font-bold`}
+                        >
                           {match.user.firstName?.charAt(0)}
                         </div>
                       )}
                       <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
                       <div className="absolute bottom-2 left-2 right-2 text-white">
-                        <p className="font-bold text-sm truncate">{match.user.firstName}</p>
+                        <p className="font-bold text-sm truncate">
+                          {match.user.firstName}
+                        </p>
                         {match.user.city && (
-                          <p className="text-xs text-white/90 truncate">📍 {match.user.city}</p>
+                          <p className="text-xs text-white/90 truncate">
+                            📍 {match.user.city}
+                          </p>
                         )}
                       </div>
                       {match.user.isOnline && (
@@ -532,15 +634,35 @@ export default function DashboardPage() {
                     <Crown className="w-6 h-6 text-white fill-white" />
                   </div>
                   <div>
-                    <h3 className="text-lg font-black text-slate-900">Débloque tout ton potentiel</h3>
-                    <p className="text-xs text-slate-500">Passe Premium et multiplie tes chances</p>
+                    <h3 className="text-lg font-black text-slate-900">
+                      Débloque tout ton potentiel
+                    </h3>
+                    <p className="text-xs text-slate-500">
+                      Passe Premium et multiplie tes chances
+                    </p>
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3 mb-4">
-                  <PremiumFeature icon="👀" title="Vois qui t'a liké" desc="Débloque les profils" />
-                  <PremiumFeature icon="⭐" title="5 Super Likes/jour" desc="Au lieu de 1" />
-                  <PremiumFeature icon="🚀" title="3 Boosts/jour" desc="Au lieu de 1/24h" />
-                  <PremiumFeature icon="🕵️" title="Mode incognito" desc="Navigue en secret" />
+                  <PremiumFeature
+                    icon="👀"
+                    title="Vois qui t'a liké"
+                    desc="Débloque les profils"
+                  />
+                  <PremiumFeature
+                    icon="⭐"
+                    title="5 Super Likes/jour"
+                    desc="Au lieu de 1"
+                  />
+                  <PremiumFeature
+                    icon="🚀"
+                    title="3 Boosts/jour"
+                    desc="Au lieu de 1/24h"
+                  />
+                  <PremiumFeature
+                    icon="🕵️"
+                    title="Mode incognito"
+                    desc="Navigue en secret"
+                  />
                 </div>
                 <Link
                   href="/premium"
@@ -558,8 +680,11 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* COLONNE DROITE */}
+        {/* ══════════════════════════════════ */}
+        {/* COLONNE DROITE (1/3) */}
+        {/* ══════════════════════════════════ */}
         <div className="space-y-6">
+
           {/* NOTIFICATIONS */}
           <div className="bg-white rounded-2xl p-6 border border-slate-100">
             <div className="flex items-center justify-between mb-4">
@@ -573,6 +698,7 @@ export default function DashboardPage() {
                 </span>
               )}
             </div>
+
             {dashData?.recentNotifs && dashData.recentNotifs.length > 0 ? (
               <div className="space-y-2">
                 {dashData.recentNotifs.map((notif) => (
@@ -585,10 +711,13 @@ export default function DashboardPage() {
                         : "hover:bg-slate-50"
                     }`}
                   >
+                    {/* ✅ Next.js Image pour les notifs */}
                     {notif.fromUser?.photoUrl ? (
-                      <img
+                      <Image
                         src={notif.fromUser.photoUrl}
-                        alt=""
+                        alt={notif.fromUser.firstName || ""}
+                        width={36}
+                        height={36}
                         className="w-9 h-9 rounded-full object-cover flex-shrink-0"
                       />
                     ) : (
@@ -598,8 +727,12 @@ export default function DashboardPage() {
                     )}
                     <div className="flex-1 min-w-0">
                       <p className="text-sm text-slate-700">
-                        <span className="text-base mr-1">{getNotifIcon(notif.type)}</span>
-                        <strong>{notif.fromUser?.firstName || "Quelqu'un"}</strong>{" "}
+                        <span className="text-base mr-1">
+                          {getNotifIcon(notif.type)}
+                        </span>
+                        <strong>
+                          {notif.fromUser?.firstName || "Quelqu'un"}
+                        </strong>{" "}
                         {notif.content}
                       </p>
                       <p className="text-xs text-slate-400 mt-0.5">
@@ -671,16 +804,13 @@ export default function DashboardPage() {
                 </div>
                 <ul className="space-y-1.5 text-sm mb-4">
                   <li className="flex items-center gap-2">
-                    <Eye className="w-4 h-4" />
-                    Vois qui t&apos;a liké
+                    <Eye className="w-4 h-4" /> Vois qui t&apos;a liké
                   </li>
                   <li className="flex items-center gap-2">
-                    <Star className="w-4 h-4 fill-white" />
-                    Super Likes illimités
+                    <Star className="w-4 h-4 fill-white" /> Super Likes illimités
                   </li>
                   <li className="flex items-center gap-2">
-                    <Rocket className="w-4 h-4" />
-                    Boosts 3x/jour
+                    <Rocket className="w-4 h-4" /> Boosts 3x/jour
                   </li>
                 </ul>
                 <Link
@@ -702,22 +832,16 @@ export default function DashboardPage() {
             </h3>
             <div className="text-center">
               <div className="relative inline-block">
-                {user?.photoUrl ? (
-                  <img
-                    src={user.photoUrl}
-                    alt={user.firstName}
-                    className={`w-20 h-20 rounded-2xl object-cover mx-auto mb-3 shadow-md ${
-                      isPremium ? "ring-4 ring-yellow-400" : ""
-                    }`}
-                  />
-                ) : (
-                  <div className={`w-20 h-20 rounded-2xl bg-gradient-to-br from-rose-400 to-purple-500 flex items-center justify-center text-white text-2xl font-bold mx-auto mb-3 shadow-md ${
+                {/* ✅ Next.js Image dans Mon profil */}
+                <Avatar
+                  photoUrl={user?.photoUrl || null}
+                  firstName={user?.firstName}
+                  lastName={user?.lastName}
+                  size={80}
+                  className={`mx-auto mb-3 shadow-md ${
                     isPremium ? "ring-4 ring-yellow-400" : ""
-                  }`}>
-                    {user?.firstName?.charAt(0)}
-                    {user?.lastName?.charAt(0)}
-                  </div>
-                )}
+                  }`}
+                />
                 {isPremium && (
                   <div className="absolute -top-1 -right-1 w-6 h-6 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full flex items-center justify-center shadow-lg border-2 border-white">
                     <Crown className="w-3 h-3 text-white fill-white" />
@@ -756,14 +880,12 @@ export default function DashboardPage() {
   );
 }
 
+// ══════════════════════════════════
+// COMPOSANTS RÉUTILISABLES
+// ══════════════════════════════════
+
 function StatCard({
-  icon,
-  value,
-  label,
-  sub,
-  gradient,
-  badge,
-  alert,
+  icon, value, label, sub, gradient, badge, alert,
 }: {
   icon: React.ReactNode;
   value: number;
@@ -774,8 +896,10 @@ function StatCard({
   alert?: boolean;
 }) {
   return (
-    <div className={`bg-gradient-to-br ${gradient} rounded-2xl p-4 text-white shadow-md relative overflow-hidden`}>
-      {alert && (value > 0) && (
+    <div
+      className={`bg-gradient-to-br ${gradient} rounded-2xl p-4 text-white shadow-md relative overflow-hidden`}
+    >
+      {alert && value > 0 && (
         <div className="absolute top-2 right-2 w-2 h-2 bg-white rounded-full animate-pulse" />
       )}
       <div className="flex items-center justify-between mb-2">
@@ -796,13 +920,7 @@ function StatCard({
 }
 
 function ActionCard({
-  href,
-  icon,
-  label,
-  gradient,
-  badge,
-  alert,
-  locked,
+  href, icon, label, gradient, badge, alert, locked,
 }: {
   href: string;
   icon: React.ReactNode;
@@ -818,7 +936,13 @@ function ActionCard({
       className="group relative bg-white rounded-2xl p-4 border border-slate-100 hover:shadow-lg hover:-translate-y-1 transition-all"
     >
       {badge !== undefined && badge > 0 && (
-        <div className={`absolute -top-1 -right-1 min-w-[20px] h-5 ${alert ? "bg-rose-500" : "bg-purple-500"} text-white text-xs font-bold rounded-full flex items-center justify-center px-1.5 shadow-lg ${alert ? "animate-pulse" : ""}`}>
+        <div
+          className={`absolute -top-1 -right-1 min-w-[20px] h-5 ${
+            alert ? "bg-rose-500" : "bg-purple-500"
+          } text-white text-xs font-bold rounded-full flex items-center justify-center px-1.5 shadow-lg ${
+            alert ? "animate-pulse" : ""
+          }`}
+        >
           {badge > 9 ? "9+" : badge}
         </div>
       )}
@@ -827,7 +951,9 @@ function ActionCard({
           <Lock className="w-3 h-3 text-white" />
         </div>
       )}
-      <div className={`w-12 h-12 bg-gradient-to-br ${gradient} rounded-xl flex items-center justify-center text-white mb-2 group-hover:scale-110 transition`}>
+      <div
+        className={`w-12 h-12 bg-gradient-to-br ${gradient} rounded-xl flex items-center justify-center text-white mb-2 group-hover:scale-110 transition`}
+      >
         {icon}
       </div>
       <p className="text-sm font-bold text-slate-900">{label}</p>
@@ -835,7 +961,13 @@ function ActionCard({
   );
 }
 
-function PremiumFeature({ icon, title, desc }: { icon: string; title: string; desc: string }) {
+function PremiumFeature({
+  icon, title, desc,
+}: {
+  icon: string;
+  title: string;
+  desc: string;
+}) {
   return (
     <div className="p-3 bg-gradient-to-br from-yellow-50 to-orange-50 rounded-xl border border-yellow-200">
       <div className="text-2xl mb-1">{icon}</div>
