@@ -3,7 +3,7 @@ import { db } from "@/db";
 import { users, likes, blocks } from "@/db/schema";
 import { eq, notInArray, sql, and, gte, lte, ne, isNotNull } from "drizzle-orm";
 import { getCurrentUserId } from "@/lib/auth";
-import { requirePhoto } from "@/lib/photo-check"; // 🆕 Import
+import { requirePhoto } from "@/lib/photo-check";
 
 function calculateDistance(
   lat1: number,
@@ -35,19 +35,66 @@ export async function GET() {
     const photoCheck = await requirePhoto(userId);
     if (photoCheck) return photoCheck;
 
-    const [currentUser] = await db
-      .select({
-        prefGender: users.prefGender,
-        prefAgeMin: users.prefAgeMin,
-        prefAgeMax: users.prefAgeMax,
-        prefLookingFor: users.prefLookingFor,
-        prefMaxDistance: users.prefMaxDistance,
-        latitude: users.latitude,
-        longitude: users.longitude,
-      })
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1);
+    // ⚡ OPTIMISATION CRITIQUE : Lancer les 6 requêtes EN PARALLÈLE
+    // Au lieu de 6 allers-retours séquentiels vers Neon PostgreSQL, 1 seul aller-retour global.
+    const [
+      [currentUser],
+      alreadyActed,
+      myBlocks,
+      blockedByOthers,
+      superLikersReceived,
+      likersReceived,
+    ] = await Promise.all([
+      db
+        .select({
+          prefGender: users.prefGender,
+          prefAgeMin: users.prefAgeMin,
+          prefAgeMax: users.prefAgeMax,
+          prefLookingFor: users.prefLookingFor,
+          prefMaxDistance: users.prefMaxDistance,
+          latitude: users.latitude,
+          longitude: users.longitude,
+        })
+        .from(users)
+        .where(eq(users.id, userId))
+        .limit(1),
+
+      db
+        .select({ toUserId: likes.toUserId })
+        .from(likes)
+        .where(eq(likes.fromUserId, userId)),
+
+      db
+        .select({ blockedUserId: blocks.blockedUserId })
+        .from(blocks)
+        .where(eq(blocks.blockerUserId, userId)),
+
+      db
+        .select({ blockerUserId: blocks.blockerUserId })
+        .from(blocks)
+        .where(eq(blocks.blockedUserId, userId)),
+
+      db
+        .select({ fromUserId: likes.fromUserId })
+        .from(likes)
+        .where(
+          and(
+            eq(likes.toUserId, userId),
+            eq(likes.isLike, true),
+            eq(likes.isSuperLike, true)
+          )
+        ),
+
+      db
+        .select({ fromUserId: likes.fromUserId })
+        .from(likes)
+        .where(
+          and(
+            eq(likes.toUserId, userId),
+            eq(likes.isLike, true)
+          )
+        ),
+    ]);
 
     const prefGender = currentUser?.prefGender || "all";
     const prefAgeMin = currentUser?.prefAgeMin || 18;
@@ -57,52 +104,15 @@ export async function GET() {
     const userLat = currentUser?.latitude;
     const userLon = currentUser?.longitude;
 
-    const alreadyActed = await db
-      .select({ toUserId: likes.toUserId })
-      .from(likes)
-      .where(eq(likes.fromUserId, userId));
-
     const excludeIds = alreadyActed.map((r) => r.toUserId);
     excludeIds.push(userId);
 
-    // Exclure les utilisateurs bloqués
-    const myBlocks = await db
-      .select({ blockedUserId: blocks.blockedUserId })
-      .from(blocks)
-      .where(eq(blocks.blockerUserId, userId));
     const iBlocked = myBlocks.map((b) => b.blockedUserId);
-
-    const blockedByOthers = await db
-      .select({ blockerUserId: blocks.blockerUserId })
-      .from(blocks)
-      .where(eq(blocks.blockedUserId, userId));
     const blockedMe = blockedByOthers.map((b) => b.blockerUserId);
 
     excludeIds.push(...iBlocked, ...blockedMe);
 
-    // Super Likers reçus
-    const superLikersReceived = await db
-      .select({ fromUserId: likes.fromUserId })
-      .from(likes)
-      .where(
-        and(
-          eq(likes.toUserId, userId),
-          eq(likes.isLike, true),
-          eq(likes.isSuperLike, true)
-        )
-      );
     const superLikerIds = superLikersReceived.map((s) => s.fromUserId);
-
-    // Likers reçus (normaux)
-    const likersReceived = await db
-      .select({ fromUserId: likes.fromUserId })
-      .from(likes)
-      .where(
-        and(
-          eq(likes.toUserId, userId),
-          eq(likes.isLike, true)
-        )
-      );
     const likerIds = likersReceived.map((l) => l.fromUserId);
 
     const now = new Date();
@@ -120,21 +130,25 @@ export async function GET() {
     const conditions = [
       notInArray(users.id, excludeIds),
       eq(users.isBanned, false),
-      eq(users.isIncognito, false), // 🕵️ Cacher les profils en mode incognito
+      eq(users.isIncognito, false),
       lte(users.birthDate, maxBirthDate),
       gte(users.birthDate, minBirthDate),
-      // 🔒 NE MONTRER QUE LES PROFILS AVEC PHOTO
       isNotNull(users.photoUrl),
       ne(users.photoUrl, ""),
     ];
 
     if (prefGender !== "all") {
-      conditions.push(eq(users.gender, prefGender as "male" | "female" | "non_binary" | "other"));
+      conditions.push(
+        eq(users.gender, prefGender as "male" | "female" | "non_binary" | "other")
+      );
     }
 
     if (prefLookingFor !== "all") {
       conditions.push(
-        eq(users.lookingFor, prefLookingFor as "relationship" | "friendship" | "casual" | "marriage")
+        eq(
+          users.lookingFor,
+          prefLookingFor as "relationship" | "friendship" | "casual" | "marriage"
+        )
       );
     }
 
@@ -204,17 +218,14 @@ export async function GET() {
     // Tri : Boostés d'abord, puis Super Likes, puis Likes, puis reste
     const nowDate = new Date();
     profilesWithDistance.sort((a, b) => {
-      // Priorité 1 : Profils BOOSTÉS
       const aBoost = a.boostEndAt ? new Date(a.boostEndAt) > nowDate : false;
       const bBoost = b.boostEndAt ? new Date(b.boostEndAt) > nowDate : false;
       if (aBoost && !bBoost) return -1;
       if (!aBoost && bBoost) return 1;
 
-      // Priorité 2 : Super Likes reçus
       if (a.hasSuperLikedMe && !b.hasSuperLikedMe) return -1;
       if (!a.hasSuperLikedMe && b.hasSuperLikedMe) return 1;
 
-      // Priorité 3 : Likes reçus
       if (a.hasLikedMe && !b.hasLikedMe) return -1;
       if (!a.hasLikedMe && b.hasLikedMe) return 1;
       return 0;
@@ -222,7 +233,15 @@ export async function GET() {
 
     const profiles = profilesWithDistance.slice(0, 20);
 
-    return NextResponse.json({ profiles });
+    // ⚡ Cache navigateur de 15 secondes
+    return NextResponse.json(
+      { profiles },
+      {
+        headers: {
+          "Cache-Control": "private, max-age=15, stale-while-revalidate=30",
+        },
+      }
+    );
   } catch (error) {
     console.error("Discover error:", error);
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
