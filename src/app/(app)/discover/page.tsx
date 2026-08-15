@@ -165,6 +165,9 @@ export default function DiscoverPage() {
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const cardRef = useRef<HTMLDivElement>(null);
 
+  // ✅ Cache des images déjà préchargées (évite re-preload)
+  const preloadedImagesRef = useRef<Set<string>>(new Set());
+
   useEffect(() => {
     async function loadAll() {
       try {
@@ -199,18 +202,57 @@ export default function DiscoverPage() {
     setCurrentPhotoIndex(0);
   }, [currentIndex]);
 
+  // ✅ Preload ROUTES des 3 prochains profils
   useEffect(() => {
-    if (profiles[currentIndex + 1]) {
-      router.prefetch(`/discover/${profiles[currentIndex + 1].id}`);
+    for (let i = 1; i <= 3; i++) {
+      const next = profiles[currentIndex + i];
+      if (next) {
+        router.prefetch(`/discover/${next.id}`);
+      }
     }
   }, [currentIndex, profiles, router]);
 
+  // ✅ PRELOAD AGGRESSIF : 3 prochains profils × toutes leurs photos
   useEffect(() => {
-    const nextProfile = profiles[currentIndex + 1];
-    if (nextProfile?.photoUrl) {
-      const img = new window.Image();
-      img.src = nextProfile.photoUrl;
+    const imagesToPreload: string[] = [];
+
+    // Précharger les 3 prochains profils (photos principales prioritaires)
+    for (let i = 1; i <= 3; i++) {
+      const next = profiles[currentIndex + i];
+      if (next?.photoUrl && !preloadedImagesRef.current.has(next.photoUrl)) {
+        imagesToPreload.push(next.photoUrl);
+      }
     }
+
+    // Précharger AUSSI les photos secondaires des 2 prochains
+    for (let i = 1; i <= 2; i++) {
+      const next = profiles[currentIndex + i];
+      if (next) {
+        [
+          next.photo1Url,
+          next.photo2Url,
+          next.photo3Url,
+          next.photo4Url,
+        ].forEach((url) => {
+          if (url && !preloadedImagesRef.current.has(url)) {
+            imagesToPreload.push(url);
+          }
+        });
+      }
+    }
+
+    // Précharger avec délai (ne bloque pas la carte actuelle)
+    const timeouts: NodeJS.Timeout[] = [];
+    imagesToPreload.forEach((url, index) => {
+      const timeout = setTimeout(() => {
+        const img = new window.Image();
+        img.src = url;
+        preloadedImagesRef.current.add(url);
+      }, index * 80); // 80ms entre chaque preload
+      timeouts.push(timeout);
+    });
+
+    return () => timeouts.forEach(clearTimeout);
   }, [currentIndex, profiles]);
 
   // ✅ FIX BUG : Séquencer proprement
@@ -219,11 +261,9 @@ export default function DiscoverPage() {
       if (currentIndex >= profiles.length || animating) return;
       const profile = profiles[currentIndex];
 
-      // 1. Démarre l'animation
       setAnimating(isLike ? "right" : "left");
       setCanRewind(true);
 
-      // 2. API en parallèle
       fetch("/api/like", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -240,11 +280,9 @@ export default function DiscoverPage() {
         })
         .catch(() => {});
 
-      // 3. Après animation, reset ET change profil (ordre important)
       setTimeout(() => {
         setDragOffset({ x: 0, y: 0 });
         setCurrentIndex((i) => i + 1);
-        // Reset animating APRÈS le changement d'index (avec petit délai)
         setTimeout(() => {
           setAnimating(null);
         }, 20);
@@ -496,7 +534,6 @@ export default function DiscoverPage() {
   const gradient = gradients[currentProfile.id % gradients.length];
   const rotation = dragOffset.x / 20;
 
-  // ✅ FIX BUG : Tout le transform géré dans le style inline
   let cardTransform = "";
   let cardOpacity = 1;
 
@@ -734,21 +771,28 @@ export default function DiscoverPage() {
         }}
         className="relative w-full h-full lg:w-[420px] lg:h-[750px] lg:rounded-3xl overflow-hidden bg-black shadow-2xl"
       >
-        {/* PHOTO PLEIN ÉCRAN */}
+        {/* PHOTO PLEIN ÉCRAN avec placeholder gradient */}
         <div
           onClick={handlePhotoTap}
           className="absolute inset-0 select-none cursor-pointer"
         >
           {hasPhotos ? (
-            <Image
-              src={photos[currentPhotoIndex]}
-              alt={currentProfile.firstName}
-              fill
-              className="object-cover"
-              draggable={false}
-              priority={currentPhotoIndex === 0}
-              sizes="(max-width: 768px) 100vw, 420px"
-            />
+            <>
+              {/* ✅ Placeholder gradient pendant chargement */}
+              <div className={`absolute inset-0 bg-gradient-to-br ${gradient} animate-pulse`} />
+
+              <Image
+                src={photos[currentPhotoIndex]}
+                alt={currentProfile.firstName}
+                fill
+                className="object-cover relative z-[1]"
+                draggable={false}
+                priority
+                loading="eager"
+                quality={75}
+                sizes="(max-width: 768px) 100vw, 420px"
+              />
+            </>
           ) : (
             <div className={`w-full h-full bg-gradient-to-br ${gradient} flex items-center justify-center`}>
               <span className="text-9xl font-bold text-white/80">
@@ -822,7 +866,7 @@ export default function DiscoverPage() {
           </div>
         )}
 
-        {/* INDICATEURS SWIPE (visibles seulement pendant drag) */}
+        {/* INDICATEURS SWIPE */}
         {dragOffset.x > 50 && !animating && (
           <div className="absolute top-1/3 left-8 z-30 rotate-[-20deg] pointer-events-none">
             <div className="border-4 border-green-500 text-green-500 px-6 py-2 rounded-2xl text-4xl font-black">
