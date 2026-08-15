@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { matches, users, messages, blocks } from "@/db/schema";
-import { eq, or, and, desc, sql } from "drizzle-orm";
+import { eq, or, and, desc, sql, inArray, ne } from "drizzle-orm";
 import { getCurrentUserId } from "@/lib/auth";
 
 export async function GET() {
@@ -11,41 +11,76 @@ export async function GET() {
       return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
     }
 
-    // Exclure les utilisateurs bloqués
-    const myBlocks = await db
-      .select({ blockedUserId: blocks.blockedUserId })
-      .from(blocks)
-      .where(eq(blocks.blockerUserId, userId));
-    const iBlocked = myBlocks.map((b) => b.blockedUserId);
+    // ⚡ ÉTAPE 1 : Récupérer TOUS les matchs + blocages EN PARALLÈLE
+    const [userMatches, myBlocks, blockedByOthers] = await Promise.all([
+      db
+        .select({
+          matchId: matches.id,
+          user1Id: matches.user1Id,
+          user2Id: matches.user2Id,
+          matchedAt: matches.createdAt,
+        })
+        .from(matches)
+        .where(or(eq(matches.user1Id, userId), eq(matches.user2Id, userId)))
+        .orderBy(desc(matches.createdAt)),
 
-    const blockedByOthers = await db
-      .select({ blockerUserId: blocks.blockerUserId })
-      .from(blocks)
-      .where(eq(blocks.blockedUserId, userId));
-    const blockedMe = blockedByOthers.map((b) => b.blockerUserId);
+      db
+        .select({ blockedUserId: blocks.blockedUserId })
+        .from(blocks)
+        .where(eq(blocks.blockerUserId, userId)),
 
-    const blockedIds = [...new Set([...iBlocked, ...blockedMe])];
+      db
+        .select({ blockerUserId: blocks.blockerUserId })
+        .from(blocks)
+        .where(eq(blocks.blockedUserId, userId)),
+    ]);
 
-    const userMatches = await db
-      .select({
-        matchId: matches.id,
-        user1Id: matches.user1Id,
-        user2Id: matches.user2Id,
-        matchedAt: matches.createdAt,
-      })
-      .from(matches)
-      .where(or(eq(matches.user1Id, userId), eq(matches.user2Id, userId)))
-      .orderBy(desc(matches.createdAt));
+    // Si aucun match, retour immédiat
+    if (userMatches.length === 0) {
+      return NextResponse.json(
+        { matches: [] },
+        {
+          headers: {
+            "Cache-Control": "private, max-age=15, stale-while-revalidate=30",
+          },
+        }
+      );
+    }
 
-    const result = [];
+    // Blocages
+    const blockedIds = new Set([
+      ...myBlocks.map((b) => b.blockedUserId),
+      ...blockedByOthers.map((b) => b.blockerUserId),
+    ]);
 
-    for (const m of userMatches) {
+    // Filtrer les matchs valides
+    const validMatches = userMatches.filter((m) => {
       const otherId = m.user1Id === userId ? m.user2Id : m.user1Id;
+      return !blockedIds.has(otherId);
+    });
 
-      // Skip si l'autre utilisateur est bloqué
-      if (blockedIds.includes(otherId)) continue;
+    if (validMatches.length === 0) {
+      return NextResponse.json(
+        { matches: [] },
+        {
+          headers: {
+            "Cache-Control": "private, max-age=15, stale-while-revalidate=30",
+          },
+        }
+      );
+    }
 
-      const [otherUser] = await db
+    // Récupérer les IDs
+    const otherUserIds = validMatches.map((m) =>
+      m.user1Id === userId ? m.user2Id : m.user1Id
+    );
+    const matchIds = validMatches.map((m) => m.matchId);
+
+    // ⚡ ÉTAPE 2 : Récupérer TOUS les users + messages + unread EN PARALLÈLE
+    // 3 requêtes au lieu de 60+ !
+    const [otherUsers, lastMessagesData, unreadCounts] = await Promise.all([
+      // Tous les utilisateurs en 1 requête
+      db
         .select({
           id: users.id,
           firstName: users.firstName,
@@ -59,47 +94,82 @@ export async function GET() {
           isBanned: users.isBanned,
         })
         .from(users)
-        .where(eq(users.id, otherId))
-        .limit(1);
+        .where(inArray(users.id, otherUserIds)),
 
-      // Skip si l'autre est banni
-      if (!otherUser || otherUser.isBanned) continue;
+      // ⚡ TOUS les derniers messages en 1 requête (avec DISTINCT ON)
+      db.execute(sql`
+        SELECT DISTINCT ON (match_id)
+          match_id as "matchId",
+          content,
+          sender_id as "senderId",
+          created_at as "createdAt",
+          is_read as "isRead"
+        FROM messages
+        WHERE match_id = ANY(${matchIds})
+        ORDER BY match_id, created_at DESC
+      `),
 
-      // Dernier message
-      const [lastMsg] = await db
+      // ⚡ TOUS les unread counts en 1 requête (avec GROUP BY)
+      db
         .select({
-          content: messages.content,
-          senderId: messages.senderId,
-          createdAt: messages.createdAt,
-          isRead: messages.isRead,
+          matchId: messages.matchId,
+          count: sql<number>`count(*)::int`,
         })
-        .from(messages)
-        .where(eq(messages.matchId, m.matchId))
-        .orderBy(desc(messages.createdAt))
-        .limit(1);
-
-      // Compter messages non lus
-      const [unreadResult] = await db
-        .select({ count: sql<number>`count(*)::int` })
         .from(messages)
         .where(
           and(
-            eq(messages.matchId, m.matchId),
+            inArray(messages.matchId, matchIds),
             eq(messages.isRead, false),
-            sql`${messages.senderId} != ${userId}`
+            ne(messages.senderId, userId)
           )
-        );
+        )
+        .groupBy(messages.matchId),
+    ]);
 
-      result.push({
-        matchId: m.matchId,
-        matchedAt: m.matchedAt,
-        user: otherUser,
-        lastMessage: lastMsg || null,
-        unreadCount: unreadResult?.count || 0,
+    // Créer des Maps pour accès O(1)
+    const userMap = new Map(otherUsers.map((u) => [u.id, u]));
+
+    const lastMessageMap = new Map<number, any>();
+    for (const row of lastMessagesData.rows as any[]) {
+      lastMessageMap.set(row.matchId, {
+        content: row.content,
+        senderId: row.senderId,
+        createdAt: row.createdAt,
+        isRead: row.isRead,
       });
     }
 
-    return NextResponse.json({ matches: result });
+    const unreadMap = new Map(
+      unreadCounts.map((u) => [u.matchId, u.count])
+    );
+
+    // Construire le résultat final (aucune requête SQL supplémentaire)
+    const result = validMatches
+      .map((m) => {
+        const otherId = m.user1Id === userId ? m.user2Id : m.user1Id;
+        const otherUser = userMap.get(otherId);
+
+        // Skip si banni
+        if (!otherUser || otherUser.isBanned) return null;
+
+        return {
+          matchId: m.matchId,
+          matchedAt: m.matchedAt,
+          user: otherUser,
+          lastMessage: lastMessageMap.get(m.matchId) || null,
+          unreadCount: unreadMap.get(m.matchId) || 0,
+        };
+      })
+      .filter((m) => m !== null);
+
+    return NextResponse.json(
+      { matches: result },
+      {
+        headers: {
+          "Cache-Control": "private, max-age=15, stale-while-revalidate=30",
+        },
+      }
+    );
   } catch (error) {
     console.error("Matches error:", error);
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
