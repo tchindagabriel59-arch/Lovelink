@@ -196,3 +196,11 @@ export const referrals = pgTable("referrals", {
   rewardType: varchar("reward_type", { length: 30 }).default("premium_7d").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });
+// ⌨️ TYPING INDICATOR (X est en train d'écrire...)
+export const typingStatus = pgTable("typing_status", {
+  id: serial("id").primaryKey(),
+  matchId: integer("match_id").notNull().references(() => matches.id, { onDelete: "cascade" }),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  isTyping: boolean("is_typing").default(false).notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
