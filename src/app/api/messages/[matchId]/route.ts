@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { messages, matches, users } from "@/db/schema";
-import { eq, and, asc } from "drizzle-orm";
+import { eq, and, asc, ne } from "drizzle-orm";
 import { getCurrentUserId } from "@/lib/auth";
 import { createNotification } from "@/lib/notifications";
 import { sendPushToUser, PushTemplates } from "@/lib/push";
@@ -24,6 +24,7 @@ export async function GET(
       return NextResponse.json({ error: "Match invalide" }, { status: 400 });
     }
 
+    // ⚡ 1 seule requête pour vérifier le match
     const match = await db
       .select()
       .from(matches)
@@ -40,39 +41,46 @@ export async function GET(
       return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
     }
 
-    const allMessages = await db
-      .select()
-      .from(messages)
-      .where(eq(messages.matchId, matchId))
-      .orderBy(asc(messages.createdAt));
-
-    await db
-      .update(messages)
-      .set({ isRead: true })
-      .where(
-        and(
-          eq(messages.matchId, matchId),
-          eq(messages.isRead, false)
-        )
-      );
-
     const otherUserId =
       matchData.user1Id === userId ? matchData.user2Id : matchData.user1Id;
 
-    const otherUser = await db
-      .select({
-        id: users.id,
-        firstName: users.firstName,
-        lastName: users.lastName,
-        photoUrl: users.photoUrl,
-        isOnline: users.isOnline,
-        lastSeen: users.lastSeen,
-        isPremium: users.isPremium,
-        isVerified: users.isVerified,
-      })
-      .from(users)
-      .where(eq(users.id, otherUserId))
-      .limit(1);
+    // ⚡ 3 requêtes EN PARALLÈLE au lieu de séquentielles
+    const [allMessages, otherUser, _updateResult] = await Promise.all([
+      // Récupérer tous les messages
+      db
+        .select()
+        .from(messages)
+        .where(eq(messages.matchId, matchId))
+        .orderBy(asc(messages.createdAt)),
+
+      // Récupérer l'autre user
+      db
+        .select({
+          id: users.id,
+          firstName: users.firstName,
+          lastName: users.lastName,
+          photoUrl: users.photoUrl,
+          isOnline: users.isOnline,
+          lastSeen: users.lastSeen,
+          isPremium: users.isPremium,
+          isVerified: users.isVerified,
+        })
+        .from(users)
+        .where(eq(users.id, otherUserId))
+        .limit(1),
+
+      // ⚡ Marquer comme lus SEULEMENT les messages de l'autre user
+      db
+        .update(messages)
+        .set({ isRead: true })
+        .where(
+          and(
+            eq(messages.matchId, matchId),
+            eq(messages.isRead, false),
+            ne(messages.senderId, userId)
+          )
+        ),
+    ]);
 
     return NextResponse.json({
       messages: allMessages,
@@ -112,17 +120,32 @@ export async function POST(
       return NextResponse.json({ error: "Message vide" }, { status: 400 });
     }
 
-    const match = await db
-      .select()
-      .from(matches)
-      .where(eq(matches.id, matchId))
-      .limit(1);
+    // ⚡ Récupérer match + sender EN PARALLÈLE
+    const [match, senderData] = await Promise.all([
+      db
+        .select()
+        .from(matches)
+        .where(eq(matches.id, matchId))
+        .limit(1),
+
+      db
+        .select({
+          id: users.id,
+          firstName: users.firstName,
+          lastName: users.lastName,
+          photoUrl: users.photoUrl,
+        })
+        .from(users)
+        .where(eq(users.id, userId))
+        .limit(1),
+    ]);
 
     if (match.length === 0) {
       return NextResponse.json({ error: "Match introuvable" }, { status: 404 });
     }
 
     const matchData = match[0];
+    const sender = senderData[0];
 
     if (matchData.user1Id !== userId && matchData.user2Id !== userId) {
       return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
@@ -131,21 +154,9 @@ export async function POST(
     const recipientId =
       matchData.user1Id === userId ? matchData.user2Id : matchData.user1Id;
 
-    const senderData = await db
-      .select({
-        id: users.id,
-        firstName: users.firstName,
-        lastName: users.lastName,
-        photoUrl: users.photoUrl,
-      })
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1);
-
-    const sender = senderData[0];
-
     const cleanContent = content.trim();
 
+    // Insérer le message
     const newMessage = await db
       .insert(messages)
       .values({
@@ -160,27 +171,32 @@ export async function POST(
 
     const notifContent = isPhoto
       ? `📷 ${sender?.firstName ?? "Quelqu'un"} vous a envoyé une photo`
-      : `💬 ${sender?.firstName ?? "Quelqu'un"} : ${cleanContent.substring(0, 50)}${cleanContent.length > 50 ? "..." : ""}`;
-
-    await createNotification({
-      userId: recipientId,
-      type: "message",
-      fromUserId: userId,
-      content: notifContent,
-    });
+      : `💬 ${sender?.firstName ?? "Quelqu'un"} : ${cleanContent.substring(0, 50)}${
+          cleanContent.length > 50 ? "..." : ""
+        }`;
 
     const pushContent = isPhoto
       ? "📷 Vous a envoyé une photo"
       : cleanContent.substring(0, 100);
 
-    await sendPushToUser(
-      recipientId,
-      PushTemplates.message(sender?.firstName ?? "Quelqu'un", pushContent)
-    );
+    // ⚡ Notification + Push EN PARALLÈLE (pas d'attente inutile)
+    // On ne bloque pas la réponse pour ça
+    Promise.all([
+      createNotification({
+        userId: recipientId,
+        type: "message",
+        fromUserId: userId,
+        content: notifContent,
+      }),
+      sendPushToUser(
+        recipientId,
+        PushTemplates.message(sender?.firstName ?? "Quelqu'un", pushContent)
+      ),
+    ]).catch((err) => {
+      console.error("Notification error (non-blocking):", err);
+    });
 
-    // Emails de message desactives pour economiser le quota Resend
-    // La notification push suffit largement
-
+    // Retour immédiat au client
     return NextResponse.json({
       success: true,
       message: newMessage[0],
