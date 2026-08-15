@@ -175,6 +175,9 @@ function MessagesContent() {
 
   // ✅ Refs déclarées ensemble en haut (évite le bug)
   const isTypingRef = useRef(false);
+  // ⌨️ TYPING INDICATOR
+const [otherIsTyping, setOtherIsTyping] = useState(false);
+const lastTypingSentRef = useRef<number>(0);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastMessageIdRef = useRef<number | null>(null);
   const shouldScrollRef = useRef(true);
@@ -321,10 +324,45 @@ function MessagesContent() {
     }, 10000);
     return () => clearInterval(interval);
   }, [selectedMatch, fetchMessages]);
+  // ⌨️ POLLING TYPING : vérifier si l'autre est en train d'écrire (toutes les 3s)
+useEffect(() => {
+  if (!selectedMatch) {
+    setOtherIsTyping(false);
+    return;
+  }
+
+  const checkTyping = async () => {
+    try {
+      const res = await fetch(`/api/messages/typing?matchId=${selectedMatch}`);
+      if (res.ok) {
+        const data = await res.json();
+        setOtherIsTyping(data.isTyping || false);
+      }
+    } catch {}
+  };
+
+  checkTyping(); // Premier check immédiat
+  const interval = setInterval(checkTyping, 3000); // Puis toutes les 3s
+
+  return () => clearInterval(interval);
+}, [selectedMatch]);
+
+// ⌨️ Reset "otherIsTyping" quand on change de conversation
+useEffect(() => {
+  setOtherIsTyping(false);
+}, [selectedMatch]);
 
   async function handleSend(e: React.FormEvent) {
     e.preventDefault();
     if (!newMessage.trim() || !selectedMatch || sending) return;
+    // ⌨️ Stop typing quand on envoie
+if (selectedMatch) {
+  fetch("/api/messages/typing", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ matchId: selectedMatch, isTyping: false }),
+  }).catch(() => {});
+}
 
     const messageToSend = newMessage;
     setNewMessage("");
@@ -418,13 +456,33 @@ function MessagesContent() {
 
   // ✅ Détection frappe avec ref déclarée en haut
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setNewMessage(e.target.value);
-    isTypingRef.current = true;
-    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-    typingTimeoutRef.current = setTimeout(() => {
-      isTypingRef.current = false;
-    }, 2000);
-  };
+  setNewMessage(e.target.value);
+  isTypingRef.current = true;
+  
+  // ⌨️ Envoyer le statut "en train d'écrire" au serveur (throttle 2s)
+  const now = Date.now();
+  if (selectedMatch && now - lastTypingSentRef.current > 2000) {
+    lastTypingSentRef.current = now;
+    fetch("/api/messages/typing", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ matchId: selectedMatch, isTyping: true }),
+    }).catch(() => {});
+  }
+
+  if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+  typingTimeoutRef.current = setTimeout(() => {
+    isTypingRef.current = false;
+    // ⌨️ Envoyer "stop typing" au serveur
+    if (selectedMatch) {
+      fetch("/api/messages/typing", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ matchId: selectedMatch, isTyping: false }),
+      }).catch(() => {});
+    }
+  }, 2000);
+};
 
   function formatMessageTime(dateStr: string) {
     return new Date(dateStr).toLocaleTimeString("fr-FR", {
@@ -867,7 +925,27 @@ function MessagesContent() {
                 );
               })
             )}
+{/* ⌨️ TYPING INDICATOR */}
+{otherIsTyping && otherUser && (
+  <div className="flex justify-start mt-2 animate-fade-in">
+    <div className="max-w-[75%]">
+      <div className="bg-white text-slate-800 shadow-sm rounded-2xl rounded-bl-md px-4 py-3">
+        <div className="flex items-center gap-1">
+          <span className="text-xs text-slate-500 mr-1">
+            {otherUser.firstName} écrit
+          </span>
+          <span className="flex gap-1">
+            <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+            <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+            <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
 
+<div ref={messagesEndRef} />
             <div ref={messagesEndRef} />
           </div>
 
