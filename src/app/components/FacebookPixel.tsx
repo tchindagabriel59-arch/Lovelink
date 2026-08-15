@@ -18,7 +18,6 @@ function PixelTracker() {
   const searchParams = useSearchParams();
 
   useEffect(() => {
-    // Attendre que fbq soit complètement initialisé
     const trackPageView = () => {
       if (
         typeof window !== 'undefined' &&
@@ -30,7 +29,6 @@ function PixelTracker() {
       }
     };
 
-    // Petit délai pour s'assurer que le script est chargé
     const timer = setTimeout(trackPageView, 100);
     return () => clearTimeout(timer);
   }, [pathname, searchParams]);
@@ -54,6 +52,11 @@ export default function FacebookPixel() {
             t.src=v;s=b.getElementsByTagName(e)[0];
             s.parentNode.insertBefore(t,s)}(window, document,'script',
             'https://connect.facebook.net/en_US/fbevents.js');
+            
+            // ⚠️ IMPORTANT : Désactiver Advanced Matching auto AVANT init
+            fbq('set', 'autoConfig', false, '${FB_PIXEL_ID}');
+            
+            // Initialiser sans Advanced Matching automatique
             fbq('init', '${FB_PIXEL_ID}');
           `,
         }}
