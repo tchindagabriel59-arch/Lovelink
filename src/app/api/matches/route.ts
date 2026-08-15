@@ -35,7 +35,6 @@ export async function GET() {
         .where(eq(blocks.blockedUserId, userId)),
     ]);
 
-    // Si aucun match, retour immédiat
     if (userMatches.length === 0) {
       return NextResponse.json(
         { matches: [] },
@@ -70,16 +69,15 @@ export async function GET() {
       );
     }
 
-    // Récupérer les IDs
+    // IDs des autres users + IDs des matchs
     const otherUserIds = validMatches.map((m) =>
       m.user1Id === userId ? m.user2Id : m.user1Id
     );
     const matchIds = validMatches.map((m) => m.matchId);
 
-    // ⚡ ÉTAPE 2 : Récupérer TOUS les users + messages + unread EN PARALLÈLE
-    // 3 requêtes au lieu de 60+ !
-    const [otherUsers, lastMessagesData, unreadCounts] = await Promise.all([
-      // Tous les utilisateurs en 1 requête
+    // ⚡ ÉTAPE 2 : 3 requêtes EN PARALLÈLE (sans SQL brut)
+    const [otherUsers, allMessages, unreadCounts] = await Promise.all([
+      // Tous les utilisateurs
       db
         .select({
           id: users.id,
@@ -96,20 +94,21 @@ export async function GET() {
         .from(users)
         .where(inArray(users.id, otherUserIds)),
 
-      // ⚡ TOUS les derniers messages en 1 requête (avec DISTINCT ON)
-      db.execute(sql`
-        SELECT DISTINCT ON (match_id)
-          match_id as "matchId",
-          content,
-          sender_id as "senderId",
-          created_at as "createdAt",
-          is_read as "isRead"
-        FROM messages
-        WHERE match_id = ANY(${matchIds})
-        ORDER BY match_id, created_at DESC
-      `),
+      // ✅ CORRECTION : Récupérer tous les messages triés
+      // Puis on prend le plus récent par matchId côté JS
+      db
+        .select({
+          matchId: messages.matchId,
+          content: messages.content,
+          senderId: messages.senderId,
+          createdAt: messages.createdAt,
+          isRead: messages.isRead,
+        })
+        .from(messages)
+        .where(inArray(messages.matchId, matchIds))
+        .orderBy(desc(messages.createdAt)),
 
-      // ⚡ TOUS les unread counts en 1 requête (avec GROUP BY)
+      // Unread counts groupés par matchId
       db
         .select({
           matchId: messages.matchId,
@@ -126,30 +125,32 @@ export async function GET() {
         .groupBy(messages.matchId),
     ]);
 
-    // Créer des Maps pour accès O(1)
+    // Créer les Maps pour accès O(1)
     const userMap = new Map(otherUsers.map((u) => [u.id, u]));
 
+    // ✅ Ne garder que le DERNIER message par match (le premier dans le tableau trié)
     const lastMessageMap = new Map<number, any>();
-    for (const row of lastMessagesData.rows as any[]) {
-      lastMessageMap.set(row.matchId, {
-        content: row.content,
-        senderId: row.senderId,
-        createdAt: row.createdAt,
-        isRead: row.isRead,
-      });
+    for (const msg of allMessages) {
+      if (!lastMessageMap.has(msg.matchId)) {
+        lastMessageMap.set(msg.matchId, {
+          content: msg.content,
+          senderId: msg.senderId,
+          createdAt: msg.createdAt,
+          isRead: msg.isRead,
+        });
+      }
     }
 
     const unreadMap = new Map(
-      unreadCounts.map((u) => [u.matchId, u.count])
+      unreadCounts.map((u) => [u.matchId, Number(u.count)])
     );
 
-    // Construire le résultat final (aucune requête SQL supplémentaire)
+    // Construire le résultat final
     const result = validMatches
       .map((m) => {
         const otherId = m.user1Id === userId ? m.user2Id : m.user1Id;
         const otherUser = userMap.get(otherId);
 
-        // Skip si banni
         if (!otherUser || otherUser.isBanned) return null;
 
         return {
