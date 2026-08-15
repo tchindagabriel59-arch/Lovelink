@@ -120,32 +120,23 @@ function getAllPhotos(profile: Profile): string[] {
   ].filter((p): p is string => !!p && p.trim() !== "");
 }
 
-// ✅ SKELETON LOADER - Affiche pendant le chargement
+// ✅ SKELETON LOADER
 function DiscoverSkeleton() {
   return (
     <div className="fixed inset-0 bg-black lg:relative lg:min-h-screen lg:bg-gradient-to-br lg:from-slate-100 lg:to-rose-50 lg:flex lg:items-center lg:justify-center lg:p-4">
       <div className="relative w-full h-full lg:w-[420px] lg:h-[750px] lg:rounded-3xl overflow-hidden bg-slate-800 shadow-2xl animate-pulse">
-        {/* Fond simulé */}
         <div className="absolute inset-0 bg-gradient-to-br from-slate-700 to-slate-900" />
-
-        {/* Segments photos simulés */}
         <div className="absolute top-3 left-3 right-3 flex gap-1 z-20">
           <div className="flex-1 h-1 rounded-full bg-white/30" />
           <div className="flex-1 h-1 rounded-full bg-white/10" />
           <div className="flex-1 h-1 rounded-full bg-white/10" />
         </div>
-
-        {/* Gradient bas */}
         <div className="absolute bottom-0 left-0 right-0 h-72 bg-gradient-to-t from-black via-black/70 to-transparent z-10" />
-
-        {/* Infos simulées */}
         <div className="absolute bottom-48 lg:bottom-28 left-4 right-4 z-20 space-y-3">
           <div className="h-3 w-24 bg-white/20 rounded-full" />
           <div className="h-10 w-48 bg-white/30 rounded-xl" />
           <div className="h-4 w-32 bg-white/20 rounded-full" />
         </div>
-
-        {/* Boutons simulés */}
         <div className="absolute bottom-24 lg:bottom-4 left-0 right-0 flex items-center justify-center gap-3 z-30 px-4">
           <div className="w-11 h-11 bg-white/20 rounded-full" />
           <div className="w-14 h-14 bg-white/20 rounded-full" />
@@ -153,8 +144,6 @@ function DiscoverSkeleton() {
           <div className="w-14 h-14 bg-white/20 rounded-full" />
           <div className="w-11 h-11 bg-white/20 rounded-full" />
         </div>
-
-        {/* Texte chargement */}
         <div className="absolute inset-0 flex items-center justify-center z-40">
           <div className="text-center">
             <Heart className="w-12 h-12 text-rose-400 animate-pulse mx-auto fill-rose-400" />
@@ -200,12 +189,10 @@ export default function DiscoverPage() {
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const cardRef = useRef<HTMLDivElement>(null);
 
-  // ✅ OPTIMISATION 1 : Un seul fetch groupé au lieu de 3
+  // ✅ Load initial data en parallèle
   useEffect(() => {
     async function loadAll() {
       try {
-        // Lancer les 3 fetches EN PARALLÈLE (Promise.all)
-        // C'était déjà en parallèle mais maintenant on gère mieux
         const [profilesRes, superLikeRes, meRes] = await Promise.all([
           fetch("/api/discover"),
           fetch("/api/like"),
@@ -225,28 +212,25 @@ export default function DiscoverPage() {
           setCurrentUser(data.user);
         }
       } catch {
-        // Silencieux
+        // silently fail
       } finally {
         setLoading(false);
       }
     }
-
     loadAll();
   }, []);
 
-  // Reset photo index quand on change de profil
   useEffect(() => {
     setCurrentPhotoIndex(0);
   }, [currentIndex]);
 
-  // ✅ OPTIMISATION 2 : Prefetch du profil suivant
+  // ✅ Preload profil suivant
   useEffect(() => {
     if (profiles[currentIndex + 1]) {
       router.prefetch(`/discover/${profiles[currentIndex + 1].id}`);
     }
   }, [currentIndex, profiles, router]);
 
-  // ✅ OPTIMISATION 3 : Preload image du profil suivant
   useEffect(() => {
     const nextProfile = profiles[currentIndex + 1];
     if (nextProfile?.photoUrl) {
@@ -255,40 +239,44 @@ export default function DiscoverPage() {
     }
   }, [currentIndex, profiles]);
 
+  // ✅ CORRECTION BUG "PROFIL REVIENT" : Séquencer proprement
   const handleAction = useCallback(
     async (isLike: boolean) => {
       if (currentIndex >= profiles.length || animating) return;
       const profile = profiles[currentIndex];
+
+      // 1. Démarre l'animation de sortie
       setAnimating(isLike ? "right" : "left");
       setCanRewind(true);
 
-      try {
-        const res = await fetch("/api/like", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ toUserId: profile.id, isLike }),
-        });
-
-        if (res.ok) {
-          const data = await res.json();
-          if (data.isMatch) {
+      // 2. Requête API en parallèle (ne bloque pas)
+      fetch("/api/like", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ toUserId: profile.id, isLike }),
+      })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data?.isMatch) {
             setMatchPopup({
               firstName: profile.firstName,
               photoUrl: profile.photoUrl,
             });
           }
-        }
-      } catch {}
+        })
+        .catch(() => {});
 
+      // 3. Reset après animation (300ms)
       setTimeout(() => {
-        setCurrentIndex((i) => i + 1);
-        setAnimating(null);
         setDragOffset({ x: 0, y: 0 });
+        setAnimating(null);
+        setCurrentIndex((i) => i + 1);
       }, 300);
     },
     [currentIndex, profiles, animating]
   );
 
+  // ✅ CORRECTION BUG "PROFIL REVIENT" : Super Like aussi
   const handleSuperLike = useCallback(async () => {
     if (currentIndex >= profiles.length || animating) return;
     if (superLikeStatus && !superLikeStatus.canSuperLike) {
@@ -297,50 +285,51 @@ export default function DiscoverPage() {
     }
 
     const profile = profiles[currentIndex];
+
+    // 1. Anime
     setAnimating("up");
     setCanRewind(true);
 
-    try {
-      const res = await fetch("/api/like", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          toUserId: profile.id,
-          isLike: true,
-          isSuperLike: true,
-        }),
-      });
-
-      if (res.status === 403) {
-        setAnimating(null);
-        setShowLimitModal(true);
-        // Refresh super like status
-        fetch("/api/like")
-          .then((r) => r.json())
-          .then(setSuperLikeStatus)
-          .catch(() => {});
-        return;
-      }
-
-      if (res.ok) {
-        const data = await res.json();
-        if (data.isMatch) {
+    // 2. API en parallèle
+    fetch("/api/like", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        toUserId: profile.id,
+        isLike: true,
+        isSuperLike: true,
+      }),
+    })
+      .then(async (res) => {
+        if (res.status === 403) {
+          setShowLimitModal(true);
+          fetch("/api/like")
+            .then((r) => r.json())
+            .then(setSuperLikeStatus)
+            .catch(() => {});
+          return null;
+        }
+        return res.ok ? res.json() : null;
+      })
+      .then((data) => {
+        if (data?.isMatch) {
           setMatchPopup({
             firstName: profile.firstName,
             photoUrl: profile.photoUrl,
           });
         }
-        // Refresh super like status
         fetch("/api/like")
           .then((r) => r.json())
           .then(setSuperLikeStatus)
           .catch(() => {});
-      }
-    } catch {}
+      })
+      .catch(() => {});
 
+    // 3. Reset après animation
     setTimeout(() => {
-      setCurrentIndex((i) => i + 1);
+      setDragOffset({ x: 0, y: 0 });
       setAnimating(null);
+      setCurrentIndex((i) => i + 1);
     }, 300);
   }, [currentIndex, profiles, superLikeStatus, animating]);
 
@@ -444,12 +433,13 @@ export default function DiscoverPage() {
 
   // SWIPE GESTURES
   const handleTouchStart = (e: React.TouchEvent) => {
+    if (animating) return; // ✅ Bloque le drag si animation en cours
     const touch = e.touches[0];
     setDragStart({ x: touch.clientX, y: touch.clientY });
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
-    if (!dragStart) return;
+    if (!dragStart || animating) return;
     const touch = e.touches[0];
     setDragOffset({
       x: touch.clientX - dragStart.x,
@@ -475,11 +465,12 @@ export default function DiscoverPage() {
   };
 
   const handleMouseDown = (e: React.MouseEvent) => {
+    if (animating) return;
     setDragStart({ x: e.clientX, y: e.clientY });
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
-    if (!dragStart) return;
+    if (!dragStart || animating) return;
     setDragOffset({
       x: e.clientX - dragStart.x,
       y: e.clientY - dragStart.y,
@@ -504,7 +495,6 @@ export default function DiscoverPage() {
     }
   };
 
-  // ✅ SKELETON au lieu d'un spinner simple
   if (loading) {
     return <DiscoverSkeleton />;
   }
@@ -526,7 +516,6 @@ export default function DiscoverPage() {
             onClick={() => {
               setCurrentIndex(0);
               setLoading(true);
-              // Reload profils
               fetch("/api/discover")
                 .then((r) => r.json())
                 .then((data) => setProfiles(data.profiles || []))
@@ -547,6 +536,7 @@ export default function DiscoverPage() {
 
   return (
     <div className="fixed inset-0 bg-black lg:relative lg:min-h-screen lg:bg-gradient-to-br lg:from-slate-100 lg:to-rose-50 lg:flex lg:items-center lg:justify-center lg:p-4">
+
       {/* MODAL PREMIUM REQUIS */}
       {showPremiumModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4">
@@ -707,7 +697,6 @@ export default function DiscoverPage() {
           <div className="bg-white rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl mx-4">
             <div className="relative w-32 h-32 mx-auto mb-4">
               {matchPopup.photoUrl ? (
-                // ✅ Next.js Image dans le match popup
                 <Image
                   src={matchPopup.photoUrl}
                   alt={matchPopup.firstName}
@@ -755,9 +744,9 @@ export default function DiscoverPage() {
         </div>
       )}
 
-      {/* ═══════════════════════════════════════════════ */}
+      {/* ═══════════════════════════════════════ */}
       {/* CARTE PROFIL PRINCIPALE */}
-      {/* ═══════════════════════════════════════════════ */}
+      {/* ═══════════════════════════════════════ */}
       <div
         ref={cardRef}
         onTouchStart={handleTouchStart}
@@ -768,16 +757,19 @@ export default function DiscoverPage() {
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
         style={{
-          transform: `translate(${dragOffset.x}px, ${dragOffset.y}px) rotate(${rotation}deg)`,
-          transition: dragStart ? "none" : "all 0.3s ease",
+          // ✅ CORRECTION : Ne pas appliquer dragOffset pendant animation
+          transform: animating
+            ? undefined
+            : `translate(${dragOffset.x}px, ${dragOffset.y}px) rotate(${rotation}deg)`,
+          transition: dragStart ? "none" : "transform 0.3s ease, opacity 0.3s ease",
         }}
         className={`relative w-full h-full lg:w-[420px] lg:h-[750px] lg:rounded-3xl overflow-hidden bg-black shadow-2xl ${
           animating === "left"
-            ? "-translate-x-full -rotate-12 opacity-0"
+            ? "-translate-x-[150%] -rotate-12 opacity-0"
             : animating === "right"
-            ? "translate-x-full rotate-12 opacity-0"
+            ? "translate-x-[150%] rotate-12 opacity-0"
             : animating === "up"
-            ? "-translate-y-full opacity-0"
+            ? "-translate-y-[150%] opacity-0"
             : ""
         }`}
       >
@@ -787,7 +779,6 @@ export default function DiscoverPage() {
           className="absolute inset-0 select-none cursor-pointer"
         >
           {hasPhotos ? (
-            // ✅ OPTIMISATION CLÉE : Next.js Image au lieu de <img>
             <Image
               src={photos[currentPhotoIndex]}
               alt={currentProfile.firstName}
@@ -875,21 +866,21 @@ export default function DiscoverPage() {
         )}
 
         {/* INDICATEURS SWIPE */}
-        {dragOffset.x > 50 && (
+        {dragOffset.x > 50 && !animating && (
           <div className="absolute top-1/3 left-8 z-30 rotate-[-20deg] pointer-events-none">
             <div className="border-4 border-green-500 text-green-500 px-6 py-2 rounded-2xl text-4xl font-black">
               LIKE
             </div>
           </div>
         )}
-        {dragOffset.x < -50 && (
+        {dragOffset.x < -50 && !animating && (
           <div className="absolute top-1/3 right-8 z-30 rotate-[20deg] pointer-events-none">
             <div className="border-4 border-red-500 text-red-500 px-6 py-2 rounded-2xl text-4xl font-black">
               NOPE
             </div>
           </div>
         )}
-        {dragOffset.y < -50 && (
+        {dragOffset.y < -50 && !animating && (
           <div className="absolute top-1/3 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
             <div className="border-4 border-blue-500 text-blue-500 px-6 py-2 rounded-2xl text-4xl font-black">
               SUPER
@@ -950,13 +941,12 @@ export default function DiscoverPage() {
 
         {/* 5 BOUTONS D'ACTION EN BAS */}
         <div className="absolute bottom-24 lg:bottom-4 left-0 right-0 flex items-center justify-center gap-3 z-30 px-4">
-          {/* REWIND */}
           <button
             onClick={(e) => {
               e.stopPropagation();
               handleRewind();
             }}
-            disabled={!canRewind}
+            disabled={!canRewind || !!animating}
             className="relative w-11 h-11 bg-white rounded-full shadow-lg flex items-center justify-center text-amber-500 hover:scale-110 active:scale-95 transition disabled:opacity-40"
           >
             <RotateCcw className="w-5 h-5" strokeWidth={2.5} />
@@ -965,46 +955,46 @@ export default function DiscoverPage() {
             )}
           </button>
 
-          {/* PASS */}
           <button
             onClick={(e) => {
               e.stopPropagation();
               handleAction(false);
             }}
-            className="w-14 h-14 bg-white rounded-full shadow-xl flex items-center justify-center text-red-500 hover:scale-110 active:scale-95 transition"
+            disabled={!!animating}
+            className="w-14 h-14 bg-white rounded-full shadow-xl flex items-center justify-center text-red-500 hover:scale-110 active:scale-95 transition disabled:opacity-50"
           >
             <X className="w-8 h-8" strokeWidth={3} />
           </button>
 
-          {/* SUPER LIKE */}
           <button
             onClick={(e) => {
               e.stopPropagation();
               handleSuperLike();
             }}
-            className="relative w-12 h-12 bg-white rounded-full shadow-lg flex items-center justify-center text-blue-500 hover:scale-110 active:scale-95 transition"
+            disabled={!!animating}
+            className="relative w-12 h-12 bg-white rounded-full shadow-lg flex items-center justify-center text-blue-500 hover:scale-110 active:scale-95 transition disabled:opacity-50"
           >
             <Star className="w-6 h-6 fill-blue-500" strokeWidth={2} />
           </button>
 
-          {/* LIKE */}
           <button
             onClick={(e) => {
               e.stopPropagation();
               handleAction(true);
             }}
-            className="w-14 h-14 bg-white rounded-full shadow-xl flex items-center justify-center text-green-500 hover:scale-110 active:scale-95 transition"
+            disabled={!!animating}
+            className="w-14 h-14 bg-white rounded-full shadow-xl flex items-center justify-center text-green-500 hover:scale-110 active:scale-95 transition disabled:opacity-50"
           >
             <Heart className="w-8 h-8 fill-green-500" strokeWidth={2} />
           </button>
 
-          {/* MESSAGE DIRECT */}
           <button
             onClick={(e) => {
               e.stopPropagation();
               handleDirectMessage();
             }}
-            className="relative w-11 h-11 bg-white rounded-full shadow-lg flex items-center justify-center text-purple-500 hover:scale-110 active:scale-95 transition"
+            disabled={!!animating}
+            className="relative w-11 h-11 bg-white rounded-full shadow-lg flex items-center justify-center text-purple-500 hover:scale-110 active:scale-95 transition disabled:opacity-50"
           >
             <MessageCircle className="w-5 h-5" strokeWidth={2.5} />
             {!currentUser?.isPremium && (
