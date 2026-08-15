@@ -126,31 +126,8 @@ function DiscoverSkeleton() {
     <div className="fixed inset-0 bg-black lg:relative lg:min-h-screen lg:bg-gradient-to-br lg:from-slate-100 lg:to-rose-50 lg:flex lg:items-center lg:justify-center lg:p-4">
       <div className="relative w-full h-full lg:w-[420px] lg:h-[750px] lg:rounded-3xl overflow-hidden bg-slate-800 shadow-2xl animate-pulse">
         <div className="absolute inset-0 bg-gradient-to-br from-slate-700 to-slate-900" />
-        <div className="absolute top-3 left-3 right-3 flex gap-1 z-20">
-          <div className="flex-1 h-1 rounded-full bg-white/30" />
-          <div className="flex-1 h-1 rounded-full bg-white/10" />
-          <div className="flex-1 h-1 rounded-full bg-white/10" />
-        </div>
-        <div className="absolute bottom-0 left-0 right-0 h-72 bg-gradient-to-t from-black via-black/70 to-transparent z-10" />
-        <div className="absolute bottom-48 lg:bottom-28 left-4 right-4 z-20 space-y-3">
-          <div className="h-3 w-24 bg-white/20 rounded-full" />
-          <div className="h-10 w-48 bg-white/30 rounded-xl" />
-          <div className="h-4 w-32 bg-white/20 rounded-full" />
-        </div>
-        <div className="absolute bottom-24 lg:bottom-4 left-0 right-0 flex items-center justify-center gap-3 z-30 px-4">
-          <div className="w-11 h-11 bg-white/20 rounded-full" />
-          <div className="w-14 h-14 bg-white/20 rounded-full" />
-          <div className="w-12 h-12 bg-white/20 rounded-full" />
-          <div className="w-14 h-14 bg-white/20 rounded-full" />
-          <div className="w-11 h-11 bg-white/20 rounded-full" />
-        </div>
-        <div className="absolute inset-0 flex items-center justify-center z-40">
-          <div className="text-center">
-            <Heart className="w-12 h-12 text-rose-400 animate-pulse mx-auto fill-rose-400" />
-            <p className="mt-3 text-white/60 text-sm font-medium">
-              Chargement des profils...
-            </p>
-          </div>
+        <div className="absolute inset-0 flex items-center justify-center">
+          <Heart className="w-12 h-12 text-rose-400 animate-pulse fill-rose-400" />
         </div>
       </div>
     </div>
@@ -182,14 +159,12 @@ export default function DiscoverPage() {
   const [showPremiumModal, setShowPremiumModal] = useState(false);
   const [premiumFeature, setPremiumFeature] = useState<string>("");
 
-  // Swipe state
   const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(
     null
   );
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const cardRef = useRef<HTMLDivElement>(null);
 
-  // ✅ Load initial data en parallèle
   useEffect(() => {
     async function loadAll() {
       try {
@@ -224,7 +199,6 @@ export default function DiscoverPage() {
     setCurrentPhotoIndex(0);
   }, [currentIndex]);
 
-  // ✅ Preload profil suivant
   useEffect(() => {
     if (profiles[currentIndex + 1]) {
       router.prefetch(`/discover/${profiles[currentIndex + 1].id}`);
@@ -239,17 +213,17 @@ export default function DiscoverPage() {
     }
   }, [currentIndex, profiles]);
 
-  // ✅ CORRECTION BUG "PROFIL REVIENT" : Séquencer proprement
+  // ✅ FIX BUG : Séquencer proprement
   const handleAction = useCallback(
     async (isLike: boolean) => {
       if (currentIndex >= profiles.length || animating) return;
       const profile = profiles[currentIndex];
 
-      // 1. Démarre l'animation de sortie
+      // 1. Démarre l'animation
       setAnimating(isLike ? "right" : "left");
       setCanRewind(true);
 
-      // 2. Requête API en parallèle (ne bloque pas)
+      // 2. API en parallèle
       fetch("/api/like", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -266,17 +240,19 @@ export default function DiscoverPage() {
         })
         .catch(() => {});
 
-      // 3. Reset après animation (300ms)
+      // 3. Après animation, reset ET change profil (ordre important)
       setTimeout(() => {
         setDragOffset({ x: 0, y: 0 });
-        setAnimating(null);
         setCurrentIndex((i) => i + 1);
-      }, 300);
+        // Reset animating APRÈS le changement d'index (avec petit délai)
+        setTimeout(() => {
+          setAnimating(null);
+        }, 20);
+      }, 350);
     },
     [currentIndex, profiles, animating]
   );
 
-  // ✅ CORRECTION BUG "PROFIL REVIENT" : Super Like aussi
   const handleSuperLike = useCallback(async () => {
     if (currentIndex >= profiles.length || animating) return;
     if (superLikeStatus && !superLikeStatus.canSuperLike) {
@@ -286,11 +262,9 @@ export default function DiscoverPage() {
 
     const profile = profiles[currentIndex];
 
-    // 1. Anime
     setAnimating("up");
     setCanRewind(true);
 
-    // 2. API en parallèle
     fetch("/api/like", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -325,23 +299,22 @@ export default function DiscoverPage() {
       })
       .catch(() => {});
 
-    // 3. Reset après animation
     setTimeout(() => {
       setDragOffset({ x: 0, y: 0 });
-      setAnimating(null);
       setCurrentIndex((i) => i + 1);
-    }, 300);
+      setTimeout(() => {
+        setAnimating(null);
+      }, 20);
+    }, 350);
   }, [currentIndex, profiles, superLikeStatus, animating]);
 
   const handleRewind = useCallback(async () => {
     if (currentIndex === 0) return;
-
     if (!currentUser?.isPremium) {
       setPremiumFeature("rewind");
       setShowPremiumModal(true);
       return;
     }
-
     try {
       const res = await fetch("/api/like/rewind", { method: "POST" });
       if (res.ok) {
@@ -373,7 +346,6 @@ export default function DiscoverPage() {
           details: reportDetails,
         }),
       });
-
       if (res.ok) {
         alert("✅ Signalement envoyé");
         setShowReportModal(false);
@@ -390,17 +362,13 @@ export default function DiscoverPage() {
   async function handleBlock() {
     if (!currentProfile) return;
     if (!confirm(`Bloquer ${currentProfile.firstName} ?`)) return;
-
     try {
       const res = await fetch("/api/blocks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ blockedUserId: currentProfile.id }),
       });
-
-      if (res.ok) {
-        setCurrentIndex((i) => i + 1);
-      }
+      if (res.ok) setCurrentIndex((i) => i + 1);
     } catch {}
   }
 
@@ -431,9 +399,8 @@ export default function DiscoverPage() {
     else nextPhoto();
   };
 
-  // SWIPE GESTURES
   const handleTouchStart = (e: React.TouchEvent) => {
-    if (animating) return; // ✅ Bloque le drag si animation en cours
+    if (animating) return;
     const touch = e.touches[0];
     setDragStart({ x: touch.clientX, y: touch.clientY });
   };
@@ -451,11 +418,8 @@ export default function DiscoverPage() {
     if (!dragStart) return;
     const threshold = 100;
     if (Math.abs(dragOffset.x) > threshold) {
-      if (dragOffset.x > 0) {
-        handleAction(true);
-      } else {
-        handleAction(false);
-      }
+      if (dragOffset.x > 0) handleAction(true);
+      else handleAction(false);
     } else if (dragOffset.y < -threshold) {
       handleSuperLike();
     } else {
@@ -495,9 +459,7 @@ export default function DiscoverPage() {
     }
   };
 
-  if (loading) {
-    return <DiscoverSkeleton />;
-  }
+  if (loading) return <DiscoverSkeleton />;
 
   if (!currentProfile || currentIndex >= profiles.length) {
     return (
@@ -534,10 +496,29 @@ export default function DiscoverPage() {
   const gradient = gradients[currentProfile.id % gradients.length];
   const rotation = dragOffset.x / 20;
 
+  // ✅ FIX BUG : Tout le transform géré dans le style inline
+  let cardTransform = "";
+  let cardOpacity = 1;
+
+  if (animating === "left") {
+    cardTransform = "translateX(-150%) rotate(-30deg)";
+    cardOpacity = 0;
+  } else if (animating === "right") {
+    cardTransform = "translateX(150%) rotate(30deg)";
+    cardOpacity = 0;
+  } else if (animating === "up") {
+    cardTransform = "translateY(-150%)";
+    cardOpacity = 0;
+  } else if (dragStart) {
+    cardTransform = `translate(${dragOffset.x}px, ${dragOffset.y}px) rotate(${rotation}deg)`;
+  } else {
+    cardTransform = `translate(${dragOffset.x}px, ${dragOffset.y}px) rotate(${rotation}deg)`;
+  }
+
   return (
     <div className="fixed inset-0 bg-black lg:relative lg:min-h-screen lg:bg-gradient-to-br lg:from-slate-100 lg:to-rose-50 lg:flex lg:items-center lg:justify-center lg:p-4">
 
-      {/* MODAL PREMIUM REQUIS */}
+      {/* MODAL PREMIUM */}
       {showPremiumModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4">
           <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl">
@@ -591,11 +572,7 @@ export default function DiscoverPage() {
               </h2>
               <p className="text-slate-600">
                 {superLikeStatus?.isPremium ? (
-                  <>
-                    Tu as utilisé tes{" "}
-                    <strong>{superLikeStatus.limit} Super Likes</strong>{" "}
-                    aujourd'hui.
-                  </>
+                  <>Tu as utilisé tes <strong>{superLikeStatus.limit} Super Likes</strong> aujourd'hui.</>
                 ) : (
                   <>Passe Premium pour avoir 5 Super Likes/jour !</>
                 )}
@@ -633,9 +610,7 @@ export default function DiscoverPage() {
               </div>
               <div>
                 <h2 className="text-xl font-bold text-slate-900">Signaler</h2>
-                <p className="text-sm text-slate-500">
-                  {currentProfile.firstName}
-                </p>
+                <p className="text-sm text-slate-500">{currentProfile.firstName}</p>
               </div>
             </div>
 
@@ -657,9 +632,7 @@ export default function DiscoverPage() {
                     onChange={(e) => setSelectedReason(e.target.value)}
                     className="accent-red-500"
                   />
-                  <span className="text-sm font-medium text-slate-700">
-                    {reason.label}
-                  </span>
+                  <span className="text-sm font-medium text-slate-700">{reason.label}</span>
                 </label>
               ))}
             </div>
@@ -705,9 +678,7 @@ export default function DiscoverPage() {
                   className="w-32 h-32 rounded-full object-cover border-4 border-rose-500"
                 />
               ) : (
-                <div
-                  className={`w-32 h-32 rounded-full bg-gradient-to-br ${gradient} flex items-center justify-center text-white text-4xl font-bold border-4 border-rose-500`}
-                >
+                <div className={`w-32 h-32 rounded-full bg-gradient-to-br ${gradient} flex items-center justify-center text-white text-4xl font-bold border-4 border-rose-500`}>
                   {matchPopup.firstName.charAt(0)}
                 </div>
               )}
@@ -715,12 +686,9 @@ export default function DiscoverPage() {
                 <Heart className="w-6 h-6 text-white fill-white" />
               </div>
             </div>
-            <h2 className="text-3xl font-bold gradient-text mb-2">
-              C'est un match ! 🎉
-            </h2>
+            <h2 className="text-3xl font-bold gradient-text mb-2">C'est un match ! 🎉</h2>
             <p className="text-slate-600 mb-6">
-              Vous et <strong>{matchPopup.firstName}</strong> vous êtes
-              mutuellement likés !
+              Vous et <strong>{matchPopup.firstName}</strong> vous êtes mutuellement likés !
             </p>
             <div className="flex gap-3">
               <button
@@ -745,9 +713,10 @@ export default function DiscoverPage() {
       )}
 
       {/* ═══════════════════════════════════════ */}
-      {/* CARTE PROFIL PRINCIPALE */}
+      {/* CARTE PROFIL - key={currentIndex} pour forcer remount */}
       {/* ═══════════════════════════════════════ */}
       <div
+        key={currentIndex}
         ref={cardRef}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
@@ -757,21 +726,13 @@ export default function DiscoverPage() {
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
         style={{
-          // ✅ CORRECTION : Ne pas appliquer dragOffset pendant animation
-          transform: animating
-            ? undefined
-            : `translate(${dragOffset.x}px, ${dragOffset.y}px) rotate(${rotation}deg)`,
-          transition: dragStart ? "none" : "transform 0.3s ease, opacity 0.3s ease",
+          transform: cardTransform,
+          opacity: cardOpacity,
+          transition: dragStart
+            ? "none"
+            : "transform 350ms cubic-bezier(0.4, 0, 0.2, 1), opacity 350ms ease",
         }}
-        className={`relative w-full h-full lg:w-[420px] lg:h-[750px] lg:rounded-3xl overflow-hidden bg-black shadow-2xl ${
-          animating === "left"
-            ? "-translate-x-[150%] -rotate-12 opacity-0"
-            : animating === "right"
-            ? "translate-x-[150%] rotate-12 opacity-0"
-            : animating === "up"
-            ? "-translate-y-[150%] opacity-0"
-            : ""
-        }`}
+        className="relative w-full h-full lg:w-[420px] lg:h-[750px] lg:rounded-3xl overflow-hidden bg-black shadow-2xl"
       >
         {/* PHOTO PLEIN ÉCRAN */}
         <div
@@ -789,9 +750,7 @@ export default function DiscoverPage() {
               sizes="(max-width: 768px) 100vw, 420px"
             />
           ) : (
-            <div
-              className={`w-full h-full bg-gradient-to-br ${gradient} flex items-center justify-center`}
-            >
+            <div className={`w-full h-full bg-gradient-to-br ${gradient} flex items-center justify-center`}>
               <span className="text-9xl font-bold text-white/80">
                 {currentProfile.firstName.charAt(0)}
               </span>
@@ -799,7 +758,7 @@ export default function DiscoverPage() {
           )}
         </div>
 
-        {/* SEGMENTS PHOTOS EN HAUT */}
+        {/* SEGMENTS PHOTOS */}
         {photos.length > 1 && (
           <div className="absolute top-3 left-3 right-3 flex gap-1 z-20 pointer-events-none">
             {photos.map((_, i) => (
@@ -840,9 +799,7 @@ export default function DiscoverPage() {
           <div className="absolute top-7 right-3 z-20">
             <div className="flex items-center gap-1.5 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-full px-3 py-1.5 shadow-lg">
               <Crown className="w-3.5 h-3.5 text-white fill-white" />
-              <span className="text-[10px] font-black text-white tracking-widest">
-                PREMIUM
-              </span>
+              <span className="text-[10px] font-black text-white tracking-widest">PREMIUM</span>
             </div>
           </div>
         )}
@@ -865,7 +822,7 @@ export default function DiscoverPage() {
           </div>
         )}
 
-        {/* INDICATEURS SWIPE */}
+        {/* INDICATEURS SWIPE (visibles seulement pendant drag) */}
         {dragOffset.x > 50 && !animating && (
           <div className="absolute top-1/3 left-8 z-30 rotate-[-20deg] pointer-events-none">
             <div className="border-4 border-green-500 text-green-500 px-6 py-2 rounded-2xl text-4xl font-black">
@@ -894,12 +851,8 @@ export default function DiscoverPage() {
         {/* INFOS UTILISATEUR */}
         <div className="absolute bottom-48 lg:bottom-28 left-4 right-4 text-white z-20">
           <div className="flex items-center gap-2 mb-3">
-            <div
-              className={`w-2.5 h-2.5 rounded-full ${status.color} animate-pulse`}
-            />
-            <span className="text-sm font-medium text-white/90">
-              {status.text}
-            </span>
+            <div className={`w-2.5 h-2.5 rounded-full ${status.color} animate-pulse`} />
+            <span className="text-sm font-medium text-white/90">{status.text}</span>
           </div>
 
           <button
@@ -921,16 +874,13 @@ export default function DiscoverPage() {
               </span>
             </div>
 
-            {currentProfile.distance !== null &&
-              currentProfile.distance !== undefined && (
-                <p className="flex items-center gap-1 text-white/90 text-sm mt-1 drop-shadow">
-                  <MapPin className="w-4 h-4" />à{" "}
-                  {currentProfile.distance === 0
-                    ? "moins de 1"
-                    : currentProfile.distance}{" "}
-                  kilomètre{currentProfile.distance > 1 ? "s" : ""}
-                </p>
-              )}
+            {currentProfile.distance !== null && currentProfile.distance !== undefined && (
+              <p className="flex items-center gap-1 text-white/90 text-sm mt-1 drop-shadow">
+                <MapPin className="w-4 h-4" />
+                à {currentProfile.distance === 0 ? "moins de 1" : currentProfile.distance} kilomètre
+                {currentProfile.distance > 1 ? "s" : ""}
+              </p>
+            )}
 
             <div className="flex items-center gap-1 mt-2 text-white/70 text-xs">
               <ChevronUp className="w-3 h-3" />
@@ -939,7 +889,7 @@ export default function DiscoverPage() {
           </button>
         </div>
 
-        {/* 5 BOUTONS D'ACTION EN BAS */}
+        {/* 5 BOUTONS D'ACTION */}
         <div className="absolute bottom-24 lg:bottom-4 left-0 right-0 flex items-center justify-center gap-3 z-30 px-4">
           <button
             onClick={(e) => {
