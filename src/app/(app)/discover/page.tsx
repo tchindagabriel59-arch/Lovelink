@@ -707,14 +707,12 @@ export default function DiscoverPage() {
           <div className="bg-white rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl mx-4">
             <div className="relative w-32 h-32 mx-auto mb-4">
               {matchPopup.photoUrl ? (
-                <Image
-                  src={matchPopup.photoUrl}
-                  alt={matchPopup.firstName}
-                  width={128}
-                  height={128}
-                  className="w-32 h-32 rounded-full object-cover border-4 border-rose-500"
-                />
-              ) : (
+  <img
+    src={matchPopup.photoUrl}
+    alt={matchPopup.firstName}
+    className="w-32 h-32 rounded-full object-cover border-4 border-rose-500"
+  />
+) : (
                 <div className={`w-32 h-32 rounded-full bg-gradient-to-br ${gradient} flex items-center justify-center text-white text-4xl font-bold border-4 border-rose-500`}>
                   {matchPopup.firstName.charAt(0)}
                 </div>
@@ -777,23 +775,22 @@ export default function DiscoverPage() {
           className="absolute inset-0 select-none cursor-pointer"
         >
           {hasPhotos ? (
-            <>
-              {/* ✅ Placeholder gradient pendant chargement */}
-              <div className={`absolute inset-0 bg-gradient-to-br ${gradient} animate-pulse`} />
+  <>
+    {/* Placeholder gradient pendant chargement */}
+    <div className={`absolute inset-0 bg-gradient-to-br ${gradient} animate-pulse`} />
 
-              <Image
-                src={photos[currentPhotoIndex]}
-                alt={currentProfile.firstName}
-                fill
-                className="object-cover relative z-[1]"
-                draggable={false}
-                priority
-                loading="eager"
-                quality={75}
-                sizes="(max-width: 768px) 100vw, 420px"
-              />
-            </>
-          ) : (
+    {/* ✅ IMG NATIF au lieu de Next.js Image = BYPASS Vercel Optimization */}
+    {/* Les photos ImgBB sont déjà optimisées, pas besoin de re-optimiser */}
+    <img
+      src={photos[currentPhotoIndex]}
+      alt={currentProfile.firstName}
+      className="absolute inset-0 w-full h-full object-cover z-[1]"
+      draggable={false}
+      loading="eager"
+      decoding="async"
+    />
+  </>
+) : (
             <div className={`w-full h-full bg-gradient-to-br ${gradient} flex items-center justify-center`}>
               <span className="text-9xl font-bold text-white/80">
                 {currentProfile.firstName.charAt(0)}
