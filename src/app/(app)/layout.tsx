@@ -53,10 +53,24 @@ interface UserData {
   isAdmin?: boolean;
 }
 
+// ✅ NOUVEAU : Compteurs partagés
+interface UnreadCounts {
+  likesReceived: number;
+  matches: number;
+  unreadMessages: number;
+}
+
 const UserContext = createContext<{
   user: UserData | null;
   refreshUser: () => void;
-}>({ user: null, refreshUser: () => {} });
+  counts: UnreadCounts;
+  refreshCounts: () => void;
+}>({
+  user: null,
+  refreshUser: () => {},
+  counts: { likesReceived: 0, matches: 0, unreadMessages: 0 },
+  refreshCounts: () => {},
+});
 
 export function useUser() {
   return useContext(UserContext);
@@ -69,17 +83,18 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
 
-  // ✅ OPTIMISATION CLEF : Ne fetch l'utilisateur QU'UNE SEULE FOIS au montage
-  // Si on rappelle fetchUser plusieurs fois, on annule les précédents
+  // ✅ Compteurs pour les badges
+  const [counts, setCounts] = useState<UnreadCounts>({
+    likesReceived: 0,
+    matches: 0,
+    unreadMessages: 0,
+  });
+
   const hasFetchedRef = useRef(false);
 
   const fetchUser = useCallback(async () => {
     try {
-      const res = await fetch("/api/auth/me", {
-        // ✅ Cache navigateur : 30 secondes
-        // Évite de refaire la requête pendant les navigations rapides
-        cache: "default",
-      });
+      const res = await fetch("/api/auth/me");
       if (!res.ok) {
         router.push("/login");
         return;
@@ -97,22 +112,48 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     }
   }, [router]);
 
-  // ✅ Fetch UNIQUEMENT au premier montage (pas à chaque navigation)
+  // ✅ NOUVEAU : Fetch des compteurs
+  const fetchCounts = useCallback(async () => {
+    try {
+      const res = await fetch("/api/unread-counts");
+      if (res.ok) {
+        const data = await res.json();
+        setCounts({
+          likesReceived: data.likesReceived || 0,
+          matches: data.matches || 0,
+          unreadMessages: data.unreadMessages || 0,
+        });
+      }
+    } catch {
+      // silently fail
+    }
+  }, []);
+
   useEffect(() => {
     if (hasFetchedRef.current) return;
     hasFetchedRef.current = true;
     fetchUser();
-  }, [fetchUser]);
+    fetchCounts();
+  }, [fetchUser, fetchCounts]);
 
-  // ✅ Fermer le menu mobile automatiquement quand on change de page
+  // ✅ Auto-refresh compteurs toutes les 30s
+  useEffect(() => {
+    if (!user) return;
+    const interval = setInterval(fetchCounts, 30000);
+    return () => clearInterval(interval);
+  }, [user, fetchCounts]);
+
+  // ✅ Refresh compteurs au changement de page
+  useEffect(() => {
+    if (user) fetchCounts();
+  }, [pathname, user, fetchCounts]);
+
   useEffect(() => {
     setMenuOpen(false);
   }, [pathname]);
 
-  // 🎯 REDIRECTION FORCÉE : Si nouvel inscrit sans photo → /welcome
   useEffect(() => {
     if (!user) return;
-
     if (!user.photoUrl && pathname !== "/welcome") {
       router.push("/welcome");
     }
@@ -126,22 +167,73 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     router.push("/");
   };
 
+  // ✅ NAV items avec badges intégrés
   const navItems = [
-    { href: "/dashboard", label: "Accueil", icon: <Sparkles className="w-5 h-5" /> },
-    { href: "/discover", label: "Découvrir", icon: <Compass className="w-5 h-5" /> },
-    { href: "/likes-recus", label: "Qui m'a liké", icon: <Star className="w-5 h-5" /> },
-    { href: "/matches", label: "Matchs", icon: <Heart className="w-5 h-5" /> },
-    { href: "/messages", label: "Messages", icon: <MessageCircle className="w-5 h-5" /> },
-    { href: "/profile", label: "Profil", icon: <User className="w-5 h-5" /> },
-    { href: "/preferences", label: "Préférences", icon: <Settings className="w-5 h-5" /> },
-    { href: "/boost", label: "Boost", icon: <Zap className="w-5 h-5" /> },
-    { href: "/verification", label: "Vérification", icon: <ShieldCheck className="w-5 h-5" /> },
-    { href: "/guide", label: "Guide", icon: <Info className="w-5 h-5" /> },
+    {
+      href: "/dashboard",
+      label: "Accueil",
+      icon: <Sparkles className="w-5 h-5" />,
+      badge: 0,
+    },
+    {
+      href: "/discover",
+      label: "Découvrir",
+      icon: <Compass className="w-5 h-5" />,
+      badge: 0,
+    },
+    {
+      href: "/likes-recus",
+      label: "Qui m'a liké",
+      icon: <Star className="w-5 h-5" />,
+      badge: counts.likesReceived, // ✅ Badge likes
+    },
+    {
+      href: "/matches",
+      label: "Matchs",
+      icon: <Heart className="w-5 h-5" />,
+      badge: counts.matches, // ✅ Badge matchs
+    },
+    {
+      href: "/messages",
+      label: "Messages",
+      icon: <MessageCircle className="w-5 h-5" />,
+      badge: counts.unreadMessages, // ✅ Badge messages non lus (le plus important)
+      alert: true, // Rouge + pulse
+    },
+    {
+      href: "/profile",
+      label: "Profil",
+      icon: <User className="w-5 h-5" />,
+      badge: 0,
+    },
+    {
+      href: "/preferences",
+      label: "Préférences",
+      icon: <Settings className="w-5 h-5" />,
+      badge: 0,
+    },
+    {
+      href: "/boost",
+      label: "Boost",
+      icon: <Zap className="w-5 h-5" />,
+      badge: 0,
+    },
+    {
+      href: "/verification",
+      label: "Vérification",
+      icon: <ShieldCheck className="w-5 h-5" />,
+      badge: 0,
+    },
+    {
+      href: "/guide",
+      label: "Guide",
+      icon: <Info className="w-5 h-5" />,
+      badge: 0,
+    },
   ];
 
   const mobileNavItems = navItems.slice(0, 5);
 
-  // ✅ Loading minimaliste (déjà rapide)
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-rose-50 to-purple-50 flex items-center justify-center">
@@ -154,13 +246,20 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <UserContext.Provider value={{ user, refreshUser: fetchUser }}>
+    <UserContext.Provider
+      value={{
+        user,
+        refreshUser: fetchUser,
+        counts,
+        refreshCounts: fetchCounts,
+      }}
+    >
       <div className="min-h-screen bg-slate-50 flex">
 
         {/* ========== SIDEBAR DESKTOP ========== */}
         <aside className="hidden lg:flex w-72 bg-white border-r border-slate-100 flex-col fixed inset-y-0 left-0 z-30">
           <div className="p-6 flex items-center justify-between">
-            <Link href="/dashboard" className="flex items-center gap-2" prefetch={true}>
+            <Link href="/dashboard" className="flex items-center gap-2" prefetch>
               <Heart className="w-8 h-8 text-rose-500 fill-rose-500" />
               <span className="text-2xl font-bold gradient-text">LoveLink</span>
             </Link>
@@ -172,15 +271,29 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               <Link
                 key={item.href}
                 href={item.href}
-                prefetch={true}
-                className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium ${
+                prefetch
+                className={`relative flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium ${
                   pathname === item.href
                     ? "bg-gradient-to-r from-rose-500 to-purple-600 text-white shadow-lg shadow-rose-500/25"
                     : "text-slate-600 hover:bg-rose-50 hover:text-rose-600"
                 }`}
               >
                 {item.icon}
-                {item.label}
+                <span className="flex-1">{item.label}</span>
+                {/* ✅ Badge desktop */}
+                {item.badge > 0 && (
+                  <span
+                    className={`min-w-[22px] h-5 px-1.5 rounded-full text-[11px] font-black flex items-center justify-center shadow-md ${
+                      item.alert
+                        ? "bg-rose-500 text-white animate-pulse"
+                        : pathname === item.href
+                        ? "bg-white text-rose-600"
+                        : "bg-rose-500 text-white"
+                    }`}
+                  >
+                    {item.badge > 99 ? "99+" : item.badge}
+                  </span>
+                )}
               </Link>
             ))}
 
@@ -188,7 +301,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
             <Link
               href="/parrainage"
-              prefetch={true}
+              prefetch
               className={`relative flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold ${
                 pathname === "/parrainage"
                   ? "bg-gradient-to-r from-emerald-500 to-green-600 text-white shadow-lg shadow-emerald-500/25"
@@ -204,7 +317,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
             <Link
               href="/premium"
-              prefetch={true}
+              prefetch
               className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold ${
                 pathname === "/premium"
                   ? "bg-gradient-to-r from-yellow-400 to-orange-500 text-white shadow-lg shadow-orange-500/25"
@@ -255,12 +368,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   )}
                 </div>
                 <p className="text-xs text-slate-500 truncate">{user?.email}</p>
-                {user?.isIncognito && (
-                  <p className="text-[10px] text-purple-600 font-black mt-0.5 flex items-center gap-1">
-                    <EyeOff className="w-2.5 h-2.5" />
-                    MODE INCOGNITO
-                  </p>
-                )}
               </div>
               <button
                 onClick={handleLogout}
@@ -276,7 +383,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         {/* ========== MOBILE HEADER ========== */}
         <div className="lg:hidden fixed top-0 left-0 right-0 z-30 glass-card border-b border-slate-100">
           <div className="flex items-center justify-between px-4 py-3">
-            <Link href="/dashboard" className="flex items-center gap-2" prefetch={true}>
+            <Link href="/dashboard" className="flex items-center gap-2" prefetch>
               <Heart className="w-6 h-6 text-rose-500 fill-rose-500" />
               <span className="text-lg font-bold gradient-text">LoveLink</span>
               {user?.isIncognito && (
@@ -306,15 +413,29 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 <Link
                   key={item.href}
                   href={item.href}
-                  prefetch={true}
-                  className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium ${
+                  prefetch
+                  className={`relative flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium ${
                     pathname === item.href
                       ? "bg-gradient-to-r from-rose-500 to-purple-600 text-white"
                       : "text-slate-600 hover:bg-rose-50"
                   }`}
                 >
                   {item.icon}
-                  {item.label}
+                  <span className="flex-1">{item.label}</span>
+                  {/* ✅ Badge menu mobile */}
+                  {item.badge > 0 && (
+                    <span
+                      className={`min-w-[22px] h-5 px-1.5 rounded-full text-[11px] font-black flex items-center justify-center shadow-md ${
+                        item.alert
+                          ? "bg-rose-500 text-white animate-pulse"
+                          : pathname === item.href
+                          ? "bg-white text-rose-600"
+                          : "bg-rose-500 text-white"
+                      }`}
+                    >
+                      {item.badge > 99 ? "99+" : item.badge}
+                    </span>
+                  )}
                 </Link>
               ))}
 
@@ -322,7 +443,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
               <Link
                 href="/parrainage"
-                prefetch={true}
+                prefetch
                 className={`relative flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all ${
                   pathname === "/parrainage"
                     ? "bg-gradient-to-r from-emerald-500 to-green-600 text-white"
@@ -338,7 +459,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
               <Link
                 href="/premium"
-                prefetch={true}
+                prefetch
                 className={`flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all ${
                   pathname === "/premium"
                     ? "bg-gradient-to-r from-yellow-400 to-orange-500 text-white"
@@ -363,27 +484,39 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           )}
         </div>
 
-        {/* ========== MOBILE BOTTOM NAV ========== */}
+        {/* ========== MOBILE BOTTOM NAV avec BADGES ========== */}
         <div className="lg:hidden fixed bottom-0 left-0 right-0 z-30 bg-white border-t border-slate-100">
           <div className="flex items-center justify-around py-2">
             {mobileNavItems.map((item) => (
               <Link
                 key={item.href}
                 href={item.href}
-                prefetch={true}
-                className={`flex flex-col items-center gap-0.5 p-2 rounded-lg transition ${
+                prefetch
+                className={`relative flex flex-col items-center gap-0.5 p-2 rounded-lg transition ${
                   pathname === item.href
                     ? "text-rose-500"
                     : "text-slate-400 hover:text-slate-600"
                 }`}
               >
+                {/* ✅ BADGE sur l'icône (position absolue) */}
+                {item.badge > 0 && (
+                  <span
+                    className={`absolute top-0 right-1 min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-black flex items-center justify-center shadow-lg border-2 border-white ${
+                      item.alert
+                        ? "bg-rose-500 text-white animate-pulse"
+                        : "bg-rose-500 text-white"
+                    }`}
+                  >
+                    {item.badge > 9 ? "9+" : item.badge}
+                  </span>
+                )}
                 {item.icon}
                 <span className="text-[10px] font-medium">{item.label}</span>
               </Link>
             ))}
             <Link
               href="/premium"
-              prefetch={true}
+              prefetch
               className={`flex flex-col items-center gap-0.5 p-2 rounded-lg transition ${
                 pathname === "/premium"
                   ? "text-orange-500"
