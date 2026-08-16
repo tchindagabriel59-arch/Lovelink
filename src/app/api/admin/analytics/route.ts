@@ -53,17 +53,17 @@ export async function GET() {
         .from(users)
         .groupBy(users.gender),
 
-      // 🌍 Top 10 villes
-      db.execute(sql`
-        SELECT 
-          city,
-          COUNT(*)::int as count
-        FROM users
-        WHERE city IS NOT NULL AND city != ''
-        GROUP BY city
-        ORDER BY count DESC
-        LIMIT 10
-      `),
+      // 🌍 Top 10 villes (normalisées : tout en majuscule + trim)
+db.execute(sql`
+  SELECT 
+    UPPER(TRIM(city)) as city,
+    COUNT(*)::int as count
+  FROM users
+  WHERE city IS NOT NULL AND TRIM(city) != ''
+  GROUP BY UPPER(TRIM(city))
+  ORDER BY count DESC
+  LIMIT 10
+`),
 
       // 💰 Revenus aujourd'hui
       db
@@ -212,13 +212,13 @@ export async function GET() {
           : "#f59e0b",
     }));
 
-    // Traiter les villes
-    const citiesData = (topCities.rows as { city: string; count: number }[]).map(
-      (c) => ({
-        city: c.city,
-        count: Number(c.count),
-      })
-    );
+    // Traiter les villes (formater joliment : première lettre majuscule)
+const citiesData = (topCities.rows as { city: string; count: number }[]).map(
+  (c) => ({
+    city: c.city.charAt(0).toUpperCase() + c.city.slice(1).toLowerCase(),
+    count: Number(c.count),
+  })
+);
 
     return NextResponse.json(
       {
