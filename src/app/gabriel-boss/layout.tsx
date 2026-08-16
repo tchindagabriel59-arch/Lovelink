@@ -13,6 +13,7 @@ import {
   Menu,
   X,
   Home,
+  Activity,
 } from "lucide-react";
 
 interface Counts {
@@ -175,6 +176,22 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               NEW
             </span>
           </Link>
+          {/* 📊 MONITORING - NOUVEAU */}
+<Link
+  href="/gabriel-boss/monitoring"
+  prefetch
+  className={`relative flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium ${
+    pathname === "/gabriel-boss/monitoring"
+      ? "bg-gradient-to-r from-red-600 to-orange-600 text-white shadow-lg shadow-red-500/25"
+      : "text-slate-400 hover:bg-slate-800 hover:text-white"
+  }`}
+>
+  <Activity className="w-5 h-5" />
+  <span className="flex-1">Monitoring</span>
+  <span className="text-[9px] px-1.5 py-0.5 bg-red-500 text-white rounded-full font-black">
+    NEW
+  </span>
+</Link>
         </nav>
 
         {/* Footer sidebar */}
@@ -284,6 +301,22 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 NEW
               </span>
             </Link>
+            {/* 📊 MONITORING - NOUVEAU */}
+<Link
+  href="/gabriel-boss/monitoring"
+  prefetch
+  className={`relative flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium ${
+    pathname === "/gabriel-boss/monitoring"
+      ? "bg-gradient-to-r from-red-600 to-orange-600 text-white shadow-lg shadow-red-500/25"
+      : "text-slate-400 hover:bg-slate-800 hover:text-white"
+  }`}
+>
+  <Activity className="w-5 h-5" />
+  <span className="flex-1">Monitoring</span>
+  <span className="text-[9px] px-1.5 py-0.5 bg-red-500 text-white rounded-full font-black">
+    NEW
+  </span>
+</Link>
 
             <div className="my-3 border-t border-slate-800" />
 
