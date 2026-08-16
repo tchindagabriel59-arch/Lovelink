@@ -6,14 +6,38 @@ import { getCurrentUserId } from "@/lib/auth";
 import { createNotification } from "@/lib/notifications";
 import { sendPushToUser, PushTemplates } from "@/lib/push";
 import { requirePhoto } from "@/lib/photo-check";
+import { logApiCall } from "@/lib/api-logger";
 
+// ═══════════════════════════════════════
+// GET : Récupérer les messages d'une conversation
+// ═══════════════════════════════════════
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ matchId: string }> }
 ) {
+  // ✅ MONITORING
+  const startTime = Date.now();
+  const endpoint = "/api/messages/[matchId]";
+  const method = "GET";
+  const userAgent = req.headers.get("user-agent") || undefined;
+  const ipAddress =
+    req.headers.get("x-forwarded-for")?.split(",")[0].trim() ||
+    req.headers.get("x-real-ip") ||
+    undefined;
+
   try {
     const userId = await getCurrentUserId();
     if (!userId) {
+      logApiCall({
+        endpoint,
+        method,
+        statusCode: 401,
+        durationMs: Date.now() - startTime,
+        errorMessage: "Utilisateur non authentifié",
+        userAgent,
+        ipAddress,
+      });
+
       return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
     }
 
@@ -21,6 +45,17 @@ export async function GET(
     const matchId = parseInt(matchIdParam);
 
     if (isNaN(matchId)) {
+      logApiCall({
+        endpoint,
+        method,
+        statusCode: 400,
+        durationMs: Date.now() - startTime,
+        userId,
+        errorMessage: `matchId invalide: ${matchIdParam}`,
+        userAgent,
+        ipAddress,
+      });
+
       return NextResponse.json({ error: "Match invalide" }, { status: 400 });
     }
 
@@ -32,28 +67,48 @@ export async function GET(
       .limit(1);
 
     if (match.length === 0) {
+      logApiCall({
+        endpoint,
+        method,
+        statusCode: 404,
+        durationMs: Date.now() - startTime,
+        userId,
+        errorMessage: `Match introuvable: ${matchId}`,
+        userAgent,
+        ipAddress,
+      });
+
       return NextResponse.json({ error: "Match introuvable" }, { status: 404 });
     }
 
     const matchData = match[0];
 
     if (matchData.user1Id !== userId && matchData.user2Id !== userId) {
+      logApiCall({
+        endpoint,
+        method,
+        statusCode: 403,
+        durationMs: Date.now() - startTime,
+        userId,
+        errorMessage: `Accès refusé au match ${matchId}`,
+        userAgent,
+        ipAddress,
+      });
+
       return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
     }
 
     const otherUserId =
       matchData.user1Id === userId ? matchData.user2Id : matchData.user1Id;
 
-    // ⚡ 3 requêtes EN PARALLÈLE au lieu de séquentielles
+    // ⚡ 3 requêtes EN PARALLÈLE
     const [allMessages, otherUser, _updateResult] = await Promise.all([
-      // Récupérer tous les messages
       db
         .select()
         .from(messages)
         .where(eq(messages.matchId, matchId))
         .orderBy(asc(messages.createdAt)),
 
-      // Récupérer l'autre user
       db
         .select({
           id: users.id,
@@ -69,7 +124,6 @@ export async function GET(
         .where(eq(users.id, otherUserId))
         .limit(1),
 
-      // ⚡ Marquer comme lus SEULEMENT les messages de l'autre user
       db
         .update(messages)
         .set({ isRead: true })
@@ -82,6 +136,18 @@ export async function GET(
         ),
     ]);
 
+    // ✅ LOG : Succès 200
+    logApiCall({
+      endpoint,
+      method,
+      statusCode: 200,
+      durationMs: Date.now() - startTime,
+      userId,
+      errorMessage: `${allMessages.length} messages chargés (match ${matchId})`,
+      userAgent,
+      ipAddress,
+    });
+
     return NextResponse.json({
       messages: allMessages,
       otherUser: otherUser[0] ?? null,
@@ -89,34 +155,104 @@ export async function GET(
     });
   } catch (error) {
     console.error("Erreur GET messages:", error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+
+    logApiCall({
+      endpoint,
+      method,
+      statusCode: 500,
+      durationMs: Date.now() - startTime,
+      errorMessage,
+      userAgent,
+      ipAddress,
+    });
+
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
   }
 }
 
+// ═══════════════════════════════════════
+// POST : Envoyer un nouveau message
+// ═══════════════════════════════════════
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ matchId: string }> }
 ) {
+  // ✅ MONITORING
+  const startTime = Date.now();
+  const endpoint = "/api/messages/[matchId]";
+  const method = "POST";
+  const userAgent = req.headers.get("user-agent") || undefined;
+  const ipAddress =
+    req.headers.get("x-forwarded-for")?.split(",")[0].trim() ||
+    req.headers.get("x-real-ip") ||
+    undefined;
+
   try {
     const userId = await getCurrentUserId();
     if (!userId) {
+      logApiCall({
+        endpoint,
+        method,
+        statusCode: 401,
+        durationMs: Date.now() - startTime,
+        errorMessage: "Utilisateur non authentifié",
+        userAgent,
+        ipAddress,
+      });
+
       return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
     }
 
     // Blocage si pas de photo
     const photoCheck = await requirePhoto(userId);
-    if (photoCheck) return photoCheck;
+    if (photoCheck) {
+      logApiCall({
+        endpoint,
+        method,
+        statusCode: 403,
+        durationMs: Date.now() - startTime,
+        userId,
+        errorMessage: "Envoi message bloqué (pas de photo)",
+        userAgent,
+        ipAddress,
+      });
+
+      return photoCheck;
+    }
 
     const { matchId: matchIdParam } = await params;
     const matchId = parseInt(matchIdParam);
 
     if (isNaN(matchId)) {
+      logApiCall({
+        endpoint,
+        method,
+        statusCode: 400,
+        durationMs: Date.now() - startTime,
+        userId,
+        errorMessage: `matchId invalide: ${matchIdParam}`,
+        userAgent,
+        ipAddress,
+      });
+
       return NextResponse.json({ error: "Match invalide" }, { status: 400 });
     }
 
     const { content } = await req.json();
 
     if (!content || content.trim() === "") {
+      logApiCall({
+        endpoint,
+        method,
+        statusCode: 400,
+        durationMs: Date.now() - startTime,
+        userId,
+        errorMessage: "Message vide",
+        userAgent,
+        ipAddress,
+      });
+
       return NextResponse.json({ error: "Message vide" }, { status: 400 });
     }
 
@@ -141,6 +277,17 @@ export async function POST(
     ]);
 
     if (match.length === 0) {
+      logApiCall({
+        endpoint,
+        method,
+        statusCode: 404,
+        durationMs: Date.now() - startTime,
+        userId,
+        errorMessage: `Match introuvable: ${matchId}`,
+        userAgent,
+        ipAddress,
+      });
+
       return NextResponse.json({ error: "Match introuvable" }, { status: 404 });
     }
 
@@ -148,6 +295,17 @@ export async function POST(
     const sender = senderData[0];
 
     if (matchData.user1Id !== userId && matchData.user2Id !== userId) {
+      logApiCall({
+        endpoint,
+        method,
+        statusCode: 403,
+        durationMs: Date.now() - startTime,
+        userId,
+        errorMessage: `Accès refusé au match ${matchId}`,
+        userAgent,
+        ipAddress,
+      });
+
       return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
     }
 
@@ -179,8 +337,7 @@ export async function POST(
       ? "📷 Vous a envoyé une photo"
       : cleanContent.substring(0, 100);
 
-    // ⚡ Notification + Push EN PARALLÈLE (pas d'attente inutile)
-    // On ne bloque pas la réponse pour ça
+    // ⚡ Notification + Push EN PARALLÈLE
     Promise.all([
       createNotification({
         userId: recipientId,
@@ -196,6 +353,20 @@ export async function POST(
       console.error("Notification error (non-blocking):", err);
     });
 
+    // ✅ LOG : Succès 200 - message envoyé
+    logApiCall({
+      endpoint,
+      method,
+      statusCode: 200,
+      durationMs: Date.now() - startTime,
+      userId,
+      errorMessage: isPhoto
+        ? `📷 Photo envoyée à user ${recipientId}`
+        : `💬 Message envoyé à user ${recipientId} (${cleanContent.length} chars)`,
+      userAgent,
+      ipAddress,
+    });
+
     // Retour immédiat au client
     return NextResponse.json({
       success: true,
@@ -203,6 +374,18 @@ export async function POST(
     });
   } catch (error) {
     console.error("Erreur POST message:", error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+
+    logApiCall({
+      endpoint,
+      method,
+      statusCode: 500,
+      durationMs: Date.now() - startTime,
+      errorMessage,
+      userAgent,
+      ipAddress,
+    });
+
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
   }
 }
