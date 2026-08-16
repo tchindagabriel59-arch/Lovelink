@@ -53,7 +53,6 @@ interface UserData {
   isAdmin?: boolean;
 }
 
-// ✅ NOUVEAU : Compteurs partagés
 interface UnreadCounts {
   likesReceived: number;
   matches: number;
@@ -83,14 +82,27 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
 
-  // ✅ Compteurs pour les badges
   const [counts, setCounts] = useState<UnreadCounts>({
     likesReceived: 0,
     matches: 0,
     unreadMessages: 0,
   });
 
+  // ✅ NOUVEAU : Compteurs "vus" pour badges intelligents (localStorage)
+  const [seenMatchesCount, setSeenMatchesCount] = useState<number>(0);
+  const [seenLikesCount, setSeenLikesCount] = useState<number>(0);
+
   const hasFetchedRef = useRef(false);
+
+  // ✅ Charger les valeurs "vues" depuis localStorage au démarrage
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const savedMatches = localStorage.getItem("seenMatchesCount");
+      const savedLikes = localStorage.getItem("seenLikesCount");
+      if (savedMatches) setSeenMatchesCount(parseInt(savedMatches, 10));
+      if (savedLikes) setSeenLikesCount(parseInt(savedLikes, 10));
+    }
+  }, []);
 
   const fetchUser = useCallback(async () => {
     try {
@@ -112,7 +124,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     }
   }, [router]);
 
-  // ✅ NOUVEAU : Fetch des compteurs
   const fetchCounts = useCallback(async () => {
     try {
       const res = await fetch("/api/unread-counts");
@@ -136,17 +147,35 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     fetchCounts();
   }, [fetchUser, fetchCounts]);
 
-  // ✅ Auto-refresh compteurs toutes les 30s
   useEffect(() => {
     if (!user) return;
     const interval = setInterval(fetchCounts, 30000);
     return () => clearInterval(interval);
   }, [user, fetchCounts]);
 
-  // ✅ Refresh compteurs au changement de page
   useEffect(() => {
     if (user) fetchCounts();
   }, [pathname, user, fetchCounts]);
+
+  // ✅ NOUVEAU : Marquer les matchs comme "vus" quand on ouvre la page
+  useEffect(() => {
+    if (pathname === "/matches" && counts.matches > 0) {
+      setSeenMatchesCount(counts.matches);
+      if (typeof window !== "undefined") {
+        localStorage.setItem("seenMatchesCount", String(counts.matches));
+      }
+    }
+  }, [pathname, counts.matches]);
+
+  // ✅ NOUVEAU : Marquer les likes comme "vus" quand on ouvre la page
+  useEffect(() => {
+    if (pathname === "/likes-recus" && counts.likesReceived > 0) {
+      setSeenLikesCount(counts.likesReceived);
+      if (typeof window !== "undefined") {
+        localStorage.setItem("seenLikesCount", String(counts.likesReceived));
+      }
+    }
+  }, [pathname, counts.likesReceived]);
 
   useEffect(() => {
     setMenuOpen(false);
@@ -167,7 +196,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     router.push("/");
   };
 
-  // ✅ NAV items avec badges intégrés
+  // ✅ Calcul des badges intelligents (NOUVEAUX matchs/likes non vus)
+  const newMatchesBadge = Math.max(0, counts.matches - seenMatchesCount);
+  const newLikesBadge = Math.max(0, counts.likesReceived - seenLikesCount);
+
   const navItems = [
     {
       href: "/dashboard",
@@ -185,20 +217,20 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       href: "/likes-recus",
       label: "Qui m'a liké",
       icon: <Star className="w-5 h-5" />,
-      badge: counts.likesReceived, // ✅ Badge likes
+      badge: newLikesBadge, // ✅ Badge INTELLIGENT (nouveaux likes uniquement)
     },
     {
       href: "/matches",
       label: "Matchs",
       icon: <Heart className="w-5 h-5" />,
-      badge: counts.matches, // ✅ Badge matchs
+      badge: newMatchesBadge, // ✅ Badge INTELLIGENT (nouveaux matchs uniquement)
     },
     {
       href: "/messages",
       label: "Messages",
       icon: <MessageCircle className="w-5 h-5" />,
-      badge: counts.unreadMessages, // ✅ Badge messages non lus (le plus important)
-      alert: true, // Rouge + pulse
+      badge: counts.unreadMessages, // Reste basé sur non lus (déjà bien géré côté BDD)
+      alert: true,
     },
     {
       href: "/profile",
@@ -280,7 +312,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               >
                 {item.icon}
                 <span className="flex-1">{item.label}</span>
-                {/* ✅ Badge desktop */}
                 {item.badge > 0 && (
                   <span
                     className={`min-w-[22px] h-5 px-1.5 rounded-full text-[11px] font-black flex items-center justify-center shadow-md ${
@@ -422,7 +453,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 >
                   {item.icon}
                   <span className="flex-1">{item.label}</span>
-                  {/* ✅ Badge menu mobile */}
                   {item.badge > 0 && (
                     <span
                       className={`min-w-[22px] h-5 px-1.5 rounded-full text-[11px] font-black flex items-center justify-center shadow-md ${
@@ -498,7 +528,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                     : "text-slate-400 hover:text-slate-600"
                 }`}
               >
-                {/* ✅ BADGE sur l'icône (position absolue) */}
                 {item.badge > 0 && (
                   <span
                     className={`absolute top-0 right-1 min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-black flex items-center justify-center shadow-lg border-2 border-white ${
