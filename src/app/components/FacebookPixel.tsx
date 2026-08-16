@@ -19,15 +19,30 @@ function PixelTracker() {
 
   useEffect(() => {
     const trackPageView = () => {
-      if (
-        typeof window !== 'undefined' &&
-        typeof window.fbq === 'function' &&
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (window.fbq as any).loaded === true
-      ) {
-        window.fbq('track', 'PageView');
-      }
-    };
+  if (
+    typeof window !== 'undefined' &&
+    typeof window.fbq === 'function' &&
+    (window.fbq as any).loaded === true
+  ) {
+    // ✅ Générer un eventId pour déduplication Pixel + CAPI
+    const eventId = `pv-${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
+    
+    // 1. Envoyer au Pixel avec eventID
+    window.fbq('track', 'PageView', {}, { eventID: eventId });
+
+    // 2. Envoyer aussi au CAPI serveur (déduplication)
+    fetch('/api/analytics/pageview', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        eventId,
+        url: window.location.href,
+      }),
+    }).catch(() => {
+      // Silencieux, ne pas bloquer
+    });
+  }
+};
 
     const timer = setTimeout(trackPageView, 100);
     return () => clearTimeout(timer);
