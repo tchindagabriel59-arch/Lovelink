@@ -23,113 +23,138 @@ export async function GET() {
 
     // ⚡ Toutes les requêtes EN PARALLÈLE
     const [
-      inscriptions30d,
-      genderStats,
-      topCities,
-      revenueToday,
-      revenueWeek,
-      revenueMonth,
-      revenueYear,
-      revenueTotal,
-    ] = await Promise.all([
-      // 📈 Inscriptions 30 derniers jours (grouped by day + gender)
-      db.execute(sql`
-        SELECT 
-          DATE(created_at) as date,
-          gender,
-          COUNT(*)::int as count
-        FROM users
-        WHERE created_at >= ${thirtyDaysAgo.toISOString()}
-        GROUP BY DATE(created_at), gender
-        ORDER BY date ASC
-      `),
+  inscriptions30d,
+  genderStats,
+  topCities,
+  revenueToday,
+  revenueWeek,
+  revenueMonth,
+  revenueYear,
+  revenueTotal,
+  activityByHour,
+  sourcesData,
+] = await Promise.all([
+  // 📈 Inscriptions 30 derniers jours
+  db.execute(sql`
+    SELECT 
+      DATE(created_at) as date,
+      gender,
+      COUNT(*)::int as count
+    FROM users
+    WHERE created_at >= ${thirtyDaysAgo.toISOString()}
+    GROUP BY DATE(created_at), gender
+    ORDER BY date ASC
+  `),
 
-      // 📊 Ratio H/F
-      db
-        .select({
-          gender: users.gender,
-          count: sql<number>`count(*)::int`,
-        })
-        .from(users)
-        .groupBy(users.gender),
+  // 📊 Ratio H/F
+  db
+    .select({
+      gender: users.gender,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(users)
+    .groupBy(users.gender),
 
-      // 🌍 Top 10 villes (normalisées : tout en majuscule + trim)
-db.execute(sql`
-  SELECT 
-    UPPER(TRIM(city)) as city,
-    COUNT(*)::int as count
-  FROM users
-  WHERE city IS NOT NULL AND TRIM(city) != ''
-  GROUP BY UPPER(TRIM(city))
-  ORDER BY count DESC
-  LIMIT 10
-`),
+  // 🌍 Top 10 villes (normalisées)
+  db.execute(sql`
+    SELECT 
+      UPPER(TRIM(city)) as city,
+      COUNT(*)::int as count
+    FROM users
+    WHERE city IS NOT NULL AND TRIM(city) != ''
+    GROUP BY UPPER(TRIM(city))
+    ORDER BY count DESC
+    LIMIT 10
+  `),
 
-      // 💰 Revenus aujourd'hui
-      db
-        .select({
-          total: sql<number>`COALESCE(SUM(amount)::int, 0)`,
-          count: sql<number>`count(*)::int`,
-        })
-        .from(payments)
-        .where(
-          and(
-            eq(payments.status, "completed"),
-            gte(payments.completedAt, today)
-          )
-        ),
+  // 💰 Revenus aujourd'hui
+  db
+    .select({
+      total: sql<number>`COALESCE(SUM(amount)::int, 0)`,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(payments)
+    .where(
+      and(
+        eq(payments.status, "completed"),
+        gte(payments.completedAt, today)
+      )
+    ),
 
-      // 💰 Revenus 7 derniers jours
-      db
-        .select({
-          total: sql<number>`COALESCE(SUM(amount)::int, 0)`,
-          count: sql<number>`count(*)::int`,
-        })
-        .from(payments)
-        .where(
-          and(
-            eq(payments.status, "completed"),
-            gte(payments.completedAt, weekAgo)
-          )
-        ),
+  // 💰 Revenus 7 derniers jours
+  db
+    .select({
+      total: sql<number>`COALESCE(SUM(amount)::int, 0)`,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(payments)
+    .where(
+      and(
+        eq(payments.status, "completed"),
+        gte(payments.completedAt, weekAgo)
+      )
+    ),
 
-      // 💰 Revenus 30 derniers jours
-      db
-        .select({
-          total: sql<number>`COALESCE(SUM(amount)::int, 0)`,
-          count: sql<number>`count(*)::int`,
-        })
-        .from(payments)
-        .where(
-          and(
-            eq(payments.status, "completed"),
-            gte(payments.completedAt, monthAgo)
-          )
-        ),
+  // 💰 Revenus 30 derniers jours
+  db
+    .select({
+      total: sql<number>`COALESCE(SUM(amount)::int, 0)`,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(payments)
+    .where(
+      and(
+        eq(payments.status, "completed"),
+        gte(payments.completedAt, monthAgo)
+      )
+    ),
 
-      // 💰 Revenus 1 an
-      db
-        .select({
-          total: sql<number>`COALESCE(SUM(amount)::int, 0)`,
-          count: sql<number>`count(*)::int`,
-        })
-        .from(payments)
-        .where(
-          and(
-            eq(payments.status, "completed"),
-            gte(payments.completedAt, yearAgo)
-          )
-        ),
+  // 💰 Revenus 1 an
+  db
+    .select({
+      total: sql<number>`COALESCE(SUM(amount)::int, 0)`,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(payments)
+    .where(
+      and(
+        eq(payments.status, "completed"),
+        gte(payments.completedAt, yearAgo)
+      )
+    ),
 
-      // 💰 Revenus totaux
-      db
-        .select({
-          total: sql<number>`COALESCE(SUM(amount)::int, 0)`,
-          count: sql<number>`count(*)::int`,
-        })
-        .from(payments)
-        .where(eq(payments.status, "completed")),
-    ]);
+  // 💰 Revenus totaux
+  db
+    .select({
+      total: sql<number>`COALESCE(SUM(amount)::int, 0)`,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(payments)
+    .where(eq(payments.status, "completed")),
+
+  // ⏰ Activité par heure (basé sur last_seen des 7 derniers jours)
+  db.execute(sql`
+    SELECT 
+      EXTRACT(HOUR FROM last_seen)::int as hour,
+      COUNT(*)::int as count
+    FROM users
+    WHERE last_seen >= ${weekAgo.toISOString()}
+    GROUP BY EXTRACT(HOUR FROM last_seen)
+    ORDER BY hour ASC
+  `),
+
+  // 📱 Sources d'inscription (basé sur referred_by)
+  db.execute(sql`
+    SELECT 
+      CASE 
+        WHEN referred_by IS NOT NULL THEN 'parrainage'
+        ELSE 'direct'
+      END as source,
+      COUNT(*)::int as count
+    FROM users
+    GROUP BY source
+  `),
+]);
 
     // Traiter les inscriptions par jour
     const inscriptionsRaw = inscriptions30d.rows as {
@@ -219,14 +244,52 @@ const citiesData = (topCities.rows as { city: string; count: number }[]).map(
     count: Number(c.count),
   })
 );
+    // Traiter les heures d'activité (24h)
+const activityMap = new Map<number, number>();
+for (let i = 0; i < 24; i++) {
+  activityMap.set(i, 0);
+}
+for (const row of activityByHour.rows as { hour: number; count: number }[]) {
+  activityMap.set(Number(row.hour), Number(row.count));
+}
+const activityData = Array.from(activityMap.entries())
+  .map(([hour, count]) => ({
+    hour: `${hour}h`,
+    count,
+    // Icône selon l'heure
+    period:
+      hour >= 6 && hour < 12
+        ? "🌅"
+        : hour >= 12 && hour < 18
+        ? "☀️"
+        : hour >= 18 && hour < 22
+        ? "🌆"
+        : "🌙",
+  }))
+  .sort((a, b) => parseInt(a.hour) - parseInt(b.hour));
+
+// Traiter les sources d'inscription
+const sourcesRaw = sourcesData.rows as { source: string; count: number }[];
+const totalSources = sourcesRaw.reduce((sum, s) => sum + Number(s.count), 0);
+const sources = sourcesRaw.map((s) => ({
+  name: s.source === "parrainage" ? "🎁 Parrainage" : "🌐 Direct / Meta",
+  value: Number(s.count),
+  percentage:
+    totalSources > 0
+      ? ((Number(s.count) / totalSources) * 100).toFixed(1)
+      : "0",
+  color: s.source === "parrainage" ? "#10b981" : "#3b82f6",
+}));
 
     return NextResponse.json(
-      {
-        inscriptions: inscriptionsPerDay,
-        gender: genderData,
-        cities: citiesData,
-        revenue: {
-          today: {
+  {
+    inscriptions: inscriptionsPerDay,
+    gender: genderData,
+    cities: citiesData,
+    activity: activityData,
+    sources: sources,
+    revenue: {
+      today: {
             amount: Number(revenueToday[0]?.total || 0),
             count: Number(revenueToday[0]?.count || 0),
           },
