@@ -1,17 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import {
   Flag,
-  ArrowLeft,
   AlertTriangle,
   Ban,
   Check,
   X,
   Eye,
-  User,
   Calendar,
-  MessageSquare,
   Shield,
   Trash2,
 } from "lucide-react";
@@ -137,31 +135,20 @@ export default function AdminReportsPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
-      {/* Header */}
-      <header className="bg-slate-900 border-b border-slate-800 p-6">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <a
-              href="/gabriel-boss"
-              className="p-2 bg-slate-800 hover:bg-slate-700 rounded-lg transition"
-            >
-              <ArrowLeft className="w-5 h-5" />
-            </a>
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-gradient-to-br from-red-500 to-orange-500 rounded-xl flex items-center justify-center">
-                <Flag className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <h1 className="text-2xl font-bold">🚨 Signalements</h1>
-                <p className="text-sm text-slate-400">Modération de la communauté</p>
-              </div>
-            </div>
+      {/* Header simplifié */}
+      <header className="p-6 border-b border-slate-800">
+        <div className="max-w-7xl mx-auto flex items-center gap-3">
+          <div className="w-12 h-12 bg-gradient-to-br from-red-500 to-orange-500 rounded-xl flex items-center justify-center shadow-lg">
+            <Flag className="w-6 h-6 text-white" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold">🚨 Signalements</h1>
+            <p className="text-sm text-slate-400">Modération de la communauté</p>
           </div>
         </div>
       </header>
 
       <main className="max-w-7xl mx-auto p-6 space-y-6">
-        {/* Stats */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <StatMini label="Total" value={stats.total} color="text-white" />
           <StatMini label="⏳ En attente" value={stats.pending} color="text-yellow-400" />
@@ -169,26 +156,14 @@ export default function AdminReportsPage() {
           <StatMini label="🚫 Ignorés" value={stats.ignored} color="text-slate-400" />
         </div>
 
-        {/* Filtres */}
         <div className="flex flex-wrap gap-2">
-          <FilterButton current={filter} value="all" onClick={setFilter}>
-            Tous
-          </FilterButton>
-          <FilterButton current={filter} value="pending" onClick={setFilter}>
-            ⏳ En attente
-          </FilterButton>
-          <FilterButton current={filter} value="reviewed" onClick={setFilter}>
-            👁️ Examinés
-          </FilterButton>
-          <FilterButton current={filter} value="resolved" onClick={setFilter}>
-            ✅ Résolus
-          </FilterButton>
-          <FilterButton current={filter} value="ignored" onClick={setFilter}>
-            🚫 Ignorés
-          </FilterButton>
+          <FilterButton current={filter} value="all" onClick={setFilter}>Tous</FilterButton>
+          <FilterButton current={filter} value="pending" onClick={setFilter}>⏳ En attente</FilterButton>
+          <FilterButton current={filter} value="reviewed" onClick={setFilter}>👁️ Examinés</FilterButton>
+          <FilterButton current={filter} value="resolved" onClick={setFilter}>✅ Résolus</FilterButton>
+          <FilterButton current={filter} value="ignored" onClick={setFilter}>🚫 Ignorés</FilterButton>
         </div>
 
-        {/* Liste des signalements */}
         {loading ? (
           <div className="text-center py-12">
             <Shield className="w-12 h-12 text-slate-600 animate-pulse mx-auto" />
@@ -200,9 +175,7 @@ export default function AdminReportsPage() {
               <Check className="w-8 h-8 text-green-400" />
             </div>
             <h3 className="text-xl font-bold">Aucun signalement</h3>
-            <p className="text-slate-500 mt-2">
-              Ta communauté est saine ! 🌟
-            </p>
+            <p className="text-slate-500 mt-2">Ta communauté est saine ! 🌟</p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -217,11 +190,9 @@ export default function AdminReportsPage() {
         )}
       </main>
 
-      {/* Modal détails */}
       {selectedReport && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 overflow-y-auto">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-2xl w-full my-8">
-            {/* Header modal */}
             <div className="p-6 border-b border-slate-800 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <AlertTriangle className="w-6 h-6 text-red-400" />
@@ -236,7 +207,6 @@ export default function AdminReportsPage() {
             </div>
 
             <div className="p-6 space-y-6">
-              {/* Motif */}
               <div>
                 <p className="text-sm text-slate-400 mb-2">Motif du signalement</p>
                 <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-xl">
@@ -251,13 +221,11 @@ export default function AdminReportsPage() {
                 </div>
               </div>
 
-              {/* Signalé par */}
               <div>
                 <p className="text-sm text-slate-400 mb-2">Signalé par</p>
                 <UserBlock user={selectedReport.reporter} />
               </div>
 
-              {/* Utilisateur signalé */}
               <div>
                 <p className="text-sm text-slate-400 mb-2">
                   Utilisateur signalé
@@ -270,13 +238,11 @@ export default function AdminReportsPage() {
                 <UserBlock user={selectedReport.reported} highlight />
               </div>
 
-              {/* Date */}
               <div className="flex items-center gap-2 text-sm text-slate-500">
                 <Calendar className="w-4 h-4" />
                 {new Date(selectedReport.createdAt).toLocaleString("fr-FR")}
               </div>
 
-              {/* Actions */}
               <div className="border-t border-slate-800 pt-6">
                 <p className="text-sm font-semibold mb-3">Actions</p>
                 <div className="grid grid-cols-2 gap-3">
@@ -294,7 +260,7 @@ export default function AdminReportsPage() {
                       className="flex items-center justify-center gap-2 px-4 py-3 bg-red-500 hover:bg-red-600 rounded-xl font-semibold transition"
                     >
                       <Ban className="w-4 h-4" />
-                      Bannir l'utilisateur
+                      Bannir l&apos;utilisateur
                     </button>
                   )}
 
@@ -432,9 +398,11 @@ function UserBlock({
       highlight ? "bg-red-500/5 border-red-500/30" : "bg-slate-800/50 border-slate-700"
     }`}>
       {user.photoUrl ? (
-        <img
+        <Image
           src={user.photoUrl}
           alt={user.firstName}
+          width={56}
+          height={56}
           className="w-14 h-14 rounded-xl object-cover"
         />
       ) : (
