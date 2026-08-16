@@ -9,6 +9,8 @@ import {
   DollarSign,
   Calendar,
   Loader2,
+  Clock,
+  Share2,
 } from "lucide-react";
 import {
   LineChart,
@@ -44,6 +46,17 @@ interface AnalyticsData {
   cities: Array<{
     city: string;
     count: number;
+  }>;
+  activity: Array<{
+    hour: string;
+    count: number;
+    period: string;
+  }>;
+  sources: Array<{
+    name: string;
+    value: number;
+    percentage: string;
+    color: string;
   }>;
   revenue: {
     today: { amount: number; count: number };
@@ -369,7 +382,143 @@ export default function AnalyticsPage() {
             )}
           </section>
         </div>
+{/* ═══════════════════════════════════════ */}
+{/* ⏰ HEURES D'ACTIVITÉ + 📱 SOURCES */}
+{/* ═══════════════════════════════════════ */}
+<div className="grid lg:grid-cols-2 gap-6">
+  {/* Heures d'activité */}
+  <section className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+    <div className="flex items-center gap-2 mb-4">
+      <Clock className="w-5 h-5 text-amber-400" />
+      <h2 className="text-xl font-bold">⏰ Heures d&apos;activité</h2>
+    </div>
+    <p className="text-sm text-slate-400 mb-4">
+      Quand tes utilisateurs sont connectés (7 derniers jours)
+    </p>
 
+    <div className="w-full h-64">
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart data={data.activity}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+          <XAxis
+            dataKey="hour"
+            stroke="#64748b"
+            style={{ fontSize: "11px" }}
+            interval={2}
+          />
+          <YAxis
+            stroke="#64748b"
+            style={{ fontSize: "11px" }}
+            allowDecimals={false}
+          />
+          <Tooltip
+            contentStyle={{
+              backgroundColor: "#0f172a",
+              border: "1px solid #334155",
+              borderRadius: "12px",
+            }}
+            labelStyle={{ color: "#f59e0b" }}
+            formatter={(value: number) => [`${value} utilisateurs`, "Actifs"]}
+          />
+          <Bar dataKey="count" fill="#f59e0b" radius={[8, 8, 0, 0]} />
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+
+    {/* Info pic d'activité */}
+    {data.activity.length > 0 && (
+      <div className="mt-4 p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl">
+        <p className="text-sm text-amber-400 font-semibold">
+          💡 Pic d&apos;activité :{" "}
+          {
+            data.activity.reduce((max, curr) =>
+              curr.count > max.count ? curr : max
+            ).hour
+          }
+        </p>
+        <p className="text-xs text-amber-300/80 mt-1">
+          C&apos;est le meilleur moment pour envoyer des notifications !
+        </p>
+      </div>
+    )}
+  </section>
+
+  {/* Sources d'inscription */}
+  <section className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+    <div className="flex items-center gap-2 mb-4">
+      <Share2 className="w-5 h-5 text-emerald-400" />
+      <h2 className="text-xl font-bold">📱 Sources d&apos;inscription</h2>
+    </div>
+    <p className="text-sm text-slate-400 mb-4">
+      D&apos;où viennent tes utilisateurs
+    </p>
+
+    {data.sources.length === 0 ? (
+      <div className="text-center py-12 text-slate-500">
+        Aucune donnée disponible
+      </div>
+    ) : (
+      <>
+        <div className="w-full h-64">
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie
+                data={data.sources}
+                cx="50%"
+                cy="50%"
+                innerRadius={60}
+                outerRadius={100}
+                paddingAngle={5}
+                dataKey="value"
+                label={({ percentage }) => `${percentage}%`}
+                labelLine={false}
+              >
+                {data.sources.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={entry.color} />
+                ))}
+              </Pie>
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: "#0f172a",
+                  border: "1px solid #334155",
+                  borderRadius: "12px",
+                }}
+                formatter={(value: number, name: string) => [
+                  `${value} utilisateurs`,
+                  name,
+                ]}
+              />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* Légende */}
+        <div className="mt-4 space-y-2">
+          {data.sources.map((s) => (
+            <div
+              key={s.name}
+              className="flex items-center justify-between p-2 bg-slate-800/50 rounded-lg"
+            >
+              <div className="flex items-center gap-2">
+                <div
+                  className="w-3 h-3 rounded-full"
+                  style={{ backgroundColor: s.color }}
+                />
+                <span className="text-sm font-medium">{s.name}</span>
+              </div>
+              <div className="text-right">
+                <span className="text-sm font-bold">{s.value}</span>
+                <span className="text-xs text-slate-400 ml-2">
+                  ({s.percentage}%)
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </>
+    )}
+  </section>
+</div>
         {/* Info footer */}
         <p className="text-center text-xs text-slate-600">
           🔄 Données mises à jour toutes les 60 secondes
