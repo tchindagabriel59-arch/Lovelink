@@ -327,29 +327,19 @@ export default function AdminUsersPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
-      <header className="bg-slate-900 border-b border-slate-800 p-6 sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <a
-              href="/gabriel-boss"
-              className="p-2 bg-slate-800 hover:bg-slate-700 rounded-lg transition"
-            >
-              <ArrowLeft className="w-5 h-5" />
-            </a>
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-xl flex items-center justify-center">
-                <Users className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <h1 className="text-2xl font-bold">👥 Utilisateurs</h1>
-                <p className="text-sm text-slate-400">
-                  {filteredUsers.length} / {users.length} membres
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </header>
+      <header className="p-6 border-b border-slate-800">
+  <div className="max-w-7xl mx-auto flex items-center gap-3">
+    <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-xl flex items-center justify-center shadow-lg">
+      <Users className="w-6 h-6 text-white" />
+    </div>
+    <div>
+      <h1 className="text-2xl font-bold">👥 Utilisateurs</h1>
+      <p className="text-sm text-slate-400">
+        {filteredUsers.length} / {users.length} membres
+      </p>
+    </div>
+  </div>
+</header>
 
       <main className="max-w-7xl mx-auto p-6 space-y-6">
         <div className="grid grid-cols-3 lg:grid-cols-6 gap-3">
