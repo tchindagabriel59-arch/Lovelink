@@ -1,9 +1,10 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { users, likes, blocks } from "@/db/schema";
 import { eq, notInArray, sql, and, gte, lte, ne, isNotNull } from "drizzle-orm";
 import { getCurrentUserId } from "@/lib/auth";
 import { requirePhoto } from "@/lib/photo-check";
+import { logApiCall } from "@/lib/api-logger";
 
 function calculateDistance(
   lat1: number,
@@ -24,19 +25,53 @@ function calculateDistance(
   return R * c;
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  // ✅ MONITORING : Capture le temps de départ
+  const startTime = Date.now();
+  const endpoint = "/api/discover";
+  const method = "GET";
+  const userAgent = req.headers.get("user-agent") || undefined;
+  const ipAddress =
+    req.headers.get("x-forwarded-for")?.split(",")[0].trim() ||
+    req.headers.get("x-real-ip") ||
+    undefined;
+
   try {
     const userId = await getCurrentUserId();
     if (!userId) {
+      // ✅ LOG : Erreur 401 - non autorisé
+      logApiCall({
+        endpoint,
+        method,
+        statusCode: 401,
+        durationMs: Date.now() - startTime,
+        errorMessage: "Utilisateur non authentifié",
+        userAgent,
+        ipAddress,
+      });
+
       return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
     }
 
     // 🔒 BLOQUER SI PAS DE PHOTO
     const photoCheck = await requirePhoto(userId);
-    if (photoCheck) return photoCheck;
+    if (photoCheck) {
+      // ✅ LOG : Bloqué car pas de photo
+      logApiCall({
+        endpoint,
+        method,
+        statusCode: 403,
+        durationMs: Date.now() - startTime,
+        userId,
+        errorMessage: "Utilisateur sans photo bloqué",
+        userAgent,
+        ipAddress,
+      });
+
+      return photoCheck;
+    }
 
     // ⚡ OPTIMISATION CRITIQUE : Lancer les 6 requêtes EN PARALLÈLE
-    // Au lieu de 6 allers-retours séquentiels vers Neon PostgreSQL, 1 seul aller-retour global.
     const [
       [currentUser],
       alreadyActed,
@@ -233,6 +268,18 @@ export async function GET() {
 
     const profiles = profilesWithDistance.slice(0, 20);
 
+    // ✅ LOG : Succès 200 - profils récupérés
+    logApiCall({
+      endpoint,
+      method,
+      statusCode: 200,
+      durationMs: Date.now() - startTime,
+      userId,
+      errorMessage: `${profiles.length} profils retournés`,
+      userAgent,
+      ipAddress,
+    });
+
     // ⚡ Cache navigateur de 15 secondes
     return NextResponse.json(
       { profiles },
@@ -244,6 +291,19 @@ export async function GET() {
     );
   } catch (error) {
     console.error("Discover error:", error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+
+    // ✅ LOG : Erreur 500 - erreur serveur
+    logApiCall({
+      endpoint,
+      method,
+      statusCode: 500,
+      durationMs: Date.now() - startTime,
+      errorMessage,
+      userAgent,
+      ipAddress,
+    });
+
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
   }
 }
