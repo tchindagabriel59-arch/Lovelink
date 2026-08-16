@@ -1,19 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import {
   Crown,
-  ArrowLeft,
   DollarSign,
   TrendingUp,
-  Users,
   Search,
   Calendar,
   Mail,
   MapPin,
   X,
-  Gem,
-  Star,
   AlertTriangle,
   Clock,
   CheckCircle,
@@ -112,16 +109,13 @@ export default function AdminPremiumPage() {
     }
   }
 
-  // Filtres
   const filteredUsers = premiumUsers.filter((u) => {
-    // Recherche
     const searchMatch =
       search === "" ||
       u.firstName.toLowerCase().includes(search.toLowerCase()) ||
       u.lastName.toLowerCase().includes(search.toLowerCase()) ||
       u.email.toLowerCase().includes(search.toLowerCase());
 
-    // Filtre catégorie
     let categoryMatch = true;
     switch (filter) {
       case "premium":
@@ -144,27 +138,17 @@ export default function AdminPremiumPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
-      {/* Header */}
-      <header className="bg-slate-900 border-b border-slate-800 p-6 sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <a
-              href="/gabriel-boss"
-              className="p-2 bg-slate-800 hover:bg-slate-700 rounded-lg transition"
-            >
-              <ArrowLeft className="w-5 h-5" />
-            </a>
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-gradient-to-br from-amber-500 to-orange-500 rounded-xl flex items-center justify-center">
-                <Crown className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <h1 className="text-2xl font-bold">👑 Abonnés Premium</h1>
-                <p className="text-sm text-slate-400">
-                  {filteredUsers.length} / {premiumUsers.length} membres
-                </p>
-              </div>
-            </div>
+      {/* Header simplifié */}
+      <header className="p-6 border-b border-slate-800">
+        <div className="max-w-7xl mx-auto flex items-center gap-3">
+          <div className="w-12 h-12 bg-gradient-to-br from-amber-500 to-orange-500 rounded-xl flex items-center justify-center shadow-lg">
+            <Crown className="w-6 h-6 text-white" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold">👑 Abonnés Premium</h1>
+            <p className="text-sm text-slate-400">
+              {filteredUsers.length} / {premiumUsers.length} membres
+            </p>
           </div>
         </div>
       </header>
@@ -177,7 +161,6 @@ export default function AdminPremiumPage() {
           </div>
         ) : (
           <>
-            {/* KPIs Revenus */}
             {stats && (
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className="bg-gradient-to-br from-amber-500/20 to-orange-500/20 border border-amber-500/30 rounded-2xl p-5">
@@ -232,7 +215,6 @@ export default function AdminPremiumPage() {
               </div>
             )}
 
-            {/* Barre de recherche */}
             <div className="relative">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
               <input
@@ -244,26 +226,14 @@ export default function AdminPremiumPage() {
               />
             </div>
 
-            {/* Filtres */}
             <div className="flex flex-wrap gap-2">
-              <FilterBtn current={filter} value="all" onClick={setFilter}>
-                Tous
-              </FilterBtn>
-              <FilterBtn current={filter} value="premium" onClick={setFilter}>
-                💎 Premium
-              </FilterBtn>
-              <FilterBtn current={filter} value="gold" onClick={setFilter}>
-                🏆 Gold
-              </FilterBtn>
-              <FilterBtn current={filter} value="expiring" onClick={setFilter}>
-                ⏰ Expirent bientôt
-              </FilterBtn>
-              <FilterBtn current={filter} value="expired" onClick={setFilter}>
-                ❌ Expirés
-              </FilterBtn>
+              <FilterBtn current={filter} value="all" onClick={setFilter}>Tous</FilterBtn>
+              <FilterBtn current={filter} value="premium" onClick={setFilter}>💎 Premium</FilterBtn>
+              <FilterBtn current={filter} value="gold" onClick={setFilter}>🏆 Gold</FilterBtn>
+              <FilterBtn current={filter} value="expiring" onClick={setFilter}>⏰ Expirent bientôt</FilterBtn>
+              <FilterBtn current={filter} value="expired" onClick={setFilter}>❌ Expirés</FilterBtn>
             </div>
 
-            {/* Liste */}
             {filteredUsers.length === 0 ? (
               <div className="text-center py-12 bg-slate-900 border border-slate-800 rounded-2xl">
                 <Crown className="w-16 h-16 text-slate-700 mx-auto mb-4" />
@@ -287,11 +257,9 @@ export default function AdminPremiumPage() {
         )}
       </main>
 
-      {/* Modal détails abonné */}
       {selectedUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 overflow-y-auto">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-2xl w-full my-8">
-            {/* Header modal */}
             <div className="p-6 border-b border-slate-800 flex items-center justify-between">
               <h2 className="text-xl font-bold flex items-center gap-2">
                 <Crown className="w-5 h-5 text-amber-500" />
@@ -306,12 +274,13 @@ export default function AdminPremiumPage() {
             </div>
 
             <div className="p-6 space-y-6">
-              {/* Info principales */}
               <div className="flex items-start gap-4">
                 {selectedUser.photoUrl ? (
-                  <img
+                  <Image
                     src={selectedUser.photoUrl}
                     alt={selectedUser.firstName}
+                    width={96}
+                    height={96}
                     className="w-24 h-24 rounded-2xl object-cover border-2 border-amber-500/50"
                   />
                 ) : (
@@ -351,7 +320,6 @@ export default function AdminPremiumPage() {
                 </div>
               </div>
 
-              {/* Statut abonnement */}
               {selectedUser.premiumExpiresAt && (
                 <div className={`p-4 rounded-xl border ${
                   getDaysRemaining(selectedUser.premiumExpiresAt) < 0
@@ -389,7 +357,6 @@ export default function AdminPremiumPage() {
                 </div>
               )}
 
-              {/* Dernier paiement */}
               {selectedUser.lastPayment && (
                 <div className="bg-slate-800/50 rounded-xl p-4">
                   <p className="text-sm font-semibold text-slate-400 mb-3 flex items-center gap-2">
@@ -427,7 +394,6 @@ export default function AdminPremiumPage() {
                 </div>
               )}
 
-              {/* Date inscription */}
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div className="p-3 bg-slate-800/50 rounded-xl">
                   <p className="text-xs text-slate-500 flex items-center gap-1">
@@ -455,7 +421,6 @@ export default function AdminPremiumPage() {
                 </div>
               </div>
 
-              {/* Action */}
               <div className="border-t border-slate-800 pt-6">
                 <button
                   onClick={() => removePremium(selectedUser.id)}
@@ -522,12 +487,13 @@ function PremiumUserRow({
       onClick={onView}
     >
       <div className="flex items-center gap-4">
-        {/* Avatar */}
         <div className="relative flex-shrink-0">
           {user.photoUrl ? (
-            <img
+            <Image
               src={user.photoUrl}
               alt={user.firstName}
+              width={56}
+              height={56}
               className="w-14 h-14 rounded-xl object-cover border-2 border-amber-500/30"
             />
           ) : (
@@ -541,7 +507,6 @@ function PremiumUserRow({
           </div>
         </div>
 
-        {/* Infos */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <p className="font-bold truncate">
@@ -566,7 +531,6 @@ function PremiumUserRow({
           )}
         </div>
 
-        {/* Statut expiration */}
         <div className="text-right">
           {isExpired ? (
             <div className="text-red-400">
