@@ -196,31 +196,17 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
-      <header className="bg-slate-900 border-b border-slate-800 p-6">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-500 rounded-xl flex items-center justify-center">
-              <Crown className="w-6 h-6 text-white" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold">Gabriel BOSS 👑</h1>
-              <p className="text-sm text-slate-400">Contrôle total de LoveLink</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-green-500/10 border border-green-500/30 rounded-full">
-              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-              <span className="text-xs text-green-400 font-medium">EN DIRECT</span>
-            </div>
-            <a
-              href="/"
-              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-sm font-medium transition"
-            >
-              Retour au site
-            </a>
-          </div>
-        </div>
-      </header>
+      <header className="p-6 border-b border-slate-800">
+  <div className="max-w-7xl mx-auto flex items-center gap-3">
+    <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-500 rounded-xl flex items-center justify-center shadow-lg">
+      <Crown className="w-6 h-6 text-white" />
+    </div>
+    <div>
+      <h1 className="text-2xl font-bold">Dashboard</h1>
+      <p className="text-sm text-slate-400">Contrôle total de LoveLink</p>
+    </div>
+  </div>
+</header>
 
       <main className="max-w-7xl mx-auto p-6 space-y-6">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
