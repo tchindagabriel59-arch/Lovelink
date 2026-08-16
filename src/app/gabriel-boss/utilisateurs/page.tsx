@@ -4,7 +4,6 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 import Image from "next/image";
 import {
   Users,
-  ArrowLeft,
   Search,
   Ban,
   Check,
@@ -20,6 +19,8 @@ import {
   User,
   Eye,
   Clock,
+  Filter,
+  SlidersHorizontal,
 } from "lucide-react";
 
 interface UserItem {
@@ -48,6 +49,11 @@ interface UserItem {
   };
 }
 
+interface City {
+  name: string;
+  count: number;
+}
+
 function getAge(birthDate: string): number {
   const today = new Date();
   const birth = new Date(birthDate);
@@ -57,13 +63,11 @@ function getAge(birthDate: string): number {
   return age;
 }
 
-// ✅ SKELETON LOADER
 function UsersSkeleton() {
   return (
     <div className="min-h-screen bg-slate-950 text-white animate-pulse">
-      <header className="bg-slate-900 border-b border-slate-800 p-6">
-        <div className="max-w-7xl mx-auto flex items-center gap-4">
-          <div className="w-10 h-10 bg-slate-800 rounded-lg" />
+      <header className="p-6 border-b border-slate-800">
+        <div className="max-w-7xl mx-auto flex items-center gap-3">
           <div className="w-12 h-12 bg-slate-800 rounded-xl" />
           <div>
             <div className="h-6 w-40 bg-slate-800 rounded mb-2" />
@@ -88,7 +92,6 @@ function UsersSkeleton() {
   );
 }
 
-// ✅ Avatar optimisé
 function Avatar({
   photoUrl,
   firstName,
@@ -124,25 +127,47 @@ function Avatar({
   );
 }
 
+// ✅ Type des filtres avancés
+type AgeRange = "all" | "18-25" | "26-35" | "36-45" | "45+";
+type DateRange = "all" | "today" | "week" | "month" | "3months";
+type SortBy = "recent" | "active" | "likes" | "matches";
+
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<UserItem[]>([]);
+  const [cities, setCities] = useState<City[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<string>("all");
   const [selectedUser, setSelectedUser] = useState<UserItem | null>(null);
+
+  // ✅ NOUVEAUX FILTRES AVANCÉS
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [cityFilter, setCityFilter] = useState<string>("");
+  const [ageFilter, setAgeFilter] = useState<AgeRange>("all");
+  const [dateFilter, setDateFilter] = useState<DateRange>("all");
+  const [sortBy, setSortBy] = useState<SortBy>("recent");
   
+  // Modal Premium (garde ce qui existait)
   const [showPremiumModal, setShowPremiumModal] = useState(false);
   const [premiumPlan, setPremiumPlan] = useState<"premium" | "gold">("premium");
   const [premiumDuration, setPremiumDuration] = useState<string>("1month");
   const [savingPremium, setSavingPremium] = useState(false);
 
-  // ✅ Fetch une seule fois au chargement
   const fetchUsers = useCallback(async () => {
     try {
-      const res = await fetch("/api/admin/users/list");
-      if (res.ok) {
-        const data = await res.json();
+      const [usersRes, citiesRes] = await Promise.all([
+        fetch("/api/admin/users/list"),
+        fetch("/api/admin/cities"),
+      ]);
+
+      if (usersRes.ok) {
+        const data = await usersRes.json();
         setUsers(data.users || []);
+      }
+
+      if (citiesRes.ok) {
+        const data = await citiesRes.json();
+        setCities(data.cities || []);
       }
     } catch {
       // silently fail
@@ -280,9 +305,31 @@ export default function AdminUsersPage() {
     });
   }
 
-  // ✅ Filtrage optimisé avec useMemo (ne recalcule QUE si search ou filter change)
+  // ✅ Reset tous les filtres
+  const resetFilters = () => {
+    setSearch("");
+    setFilter("all");
+    setCityFilter("");
+    setAgeFilter("all");
+    setDateFilter("all");
+    setSortBy("recent");
+  };
+
+  // ✅ Compte les filtres actifs
+  const activeFiltersCount = useMemo(() => {
+    let count = 0;
+    if (filter !== "all") count++;
+    if (cityFilter) count++;
+    if (ageFilter !== "all") count++;
+    if (dateFilter !== "all") count++;
+    if (sortBy !== "recent") count++;
+    return count;
+  }, [filter, cityFilter, ageFilter, dateFilter, sortBy]);
+
+  // ✅ Filtrage AVANCÉ avec useMemo
   const filteredUsers = useMemo(() => {
-    return users.filter((u) => {
+    let result = users.filter((u) => {
+      // Recherche texte
       const searchMatch =
         search === "" ||
         u.firstName.toLowerCase().includes(search.toLowerCase()) ||
@@ -291,28 +338,106 @@ export default function AdminUsersPage() {
 
       if (!searchMatch) return false;
 
+      // Filtre catégorie
       switch (filter) {
         case "banned":
-          return u.isBanned;
+          if (!u.isBanned) return false;
+          break;
         case "admin":
-          return u.isAdmin;
+          if (!u.isAdmin) return false;
+          break;
         case "premium":
-          return u.isPremium;
+          if (!u.isPremium) return false;
+          break;
         case "online":
-          return u.isOnline;
+          if (!u.isOnline) return false;
+          break;
         case "male":
-          return u.gender === "male";
+          if (u.gender !== "male") return false;
+          break;
         case "female":
-          return u.gender === "female";
+          if (u.gender !== "female") return false;
+          break;
         case "active":
-          return !u.isBanned;
-        default:
-          return true;
+          if (u.isBanned) return false;
+          break;
       }
-    });
-  }, [users, search, filter]);
 
-  // ✅ Stats calculées avec useMemo (ne recalcule QUE si users change)
+      // Filtre ville
+      if (cityFilter) {
+        const userCity = (u.city || "").toLowerCase().trim();
+        if (userCity !== cityFilter.toLowerCase()) return false;
+      }
+
+      // Filtre âge
+      if (ageFilter !== "all") {
+        const age = getAge(u.birthDate);
+        switch (ageFilter) {
+          case "18-25":
+            if (age < 18 || age > 25) return false;
+            break;
+          case "26-35":
+            if (age < 26 || age > 35) return false;
+            break;
+          case "36-45":
+            if (age < 36 || age > 45) return false;
+            break;
+          case "45+":
+            if (age < 45) return false;
+            break;
+        }
+      }
+
+      // Filtre date d'inscription
+      if (dateFilter !== "all") {
+        const now = Date.now();
+        const created = new Date(u.createdAt).getTime();
+        const diffDays = (now - created) / (1000 * 60 * 60 * 24);
+        switch (dateFilter) {
+          case "today":
+            if (diffDays > 1) return false;
+            break;
+          case "week":
+            if (diffDays > 7) return false;
+            break;
+          case "month":
+            if (diffDays > 30) return false;
+            break;
+          case "3months":
+            if (diffDays > 90) return false;
+            break;
+        }
+      }
+
+      return true;
+    });
+
+    // Tri
+    switch (sortBy) {
+      case "recent":
+        result.sort(
+          (a, b) =>
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
+        break;
+      case "active":
+        result.sort((a, b) => {
+          const aTime = a.lastSeen ? new Date(a.lastSeen).getTime() : 0;
+          const bTime = b.lastSeen ? new Date(b.lastSeen).getTime() : 0;
+          return bTime - aTime;
+        });
+        break;
+      case "likes":
+        result.sort((a, b) => b.stats.likesReceived - a.stats.likesReceived);
+        break;
+      case "matches":
+        result.sort((a, b) => b.stats.matches - a.stats.matches);
+        break;
+    }
+
+    return result;
+  }, [users, search, filter, cityFilter, ageFilter, dateFilter, sortBy]);
+
   const stats = useMemo(() => ({
     total: users.length,
     active: users.filter((u) => !u.isBanned).length,
@@ -322,26 +447,31 @@ export default function AdminUsersPage() {
     online: users.filter((u) => u.isOnline).length,
   }), [users]);
 
-  // ✅ SKELETON au lieu de spinner
   if (loading) return <UsersSkeleton />;
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
       <header className="p-6 border-b border-slate-800">
-  <div className="max-w-7xl mx-auto flex items-center gap-3">
-    <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-xl flex items-center justify-center shadow-lg">
-      <Users className="w-6 h-6 text-white" />
-    </div>
-    <div>
-      <h1 className="text-2xl font-bold">👥 Utilisateurs</h1>
-      <p className="text-sm text-slate-400">
-        {filteredUsers.length} / {users.length} membres
-      </p>
-    </div>
-  </div>
-</header>
+        <div className="max-w-7xl mx-auto flex items-center gap-3">
+          <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-xl flex items-center justify-center shadow-lg">
+            <Users className="w-6 h-6 text-white" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold">👥 Utilisateurs</h1>
+            <p className="text-sm text-slate-400">
+              {filteredUsers.length} / {users.length} membres
+              {activeFiltersCount > 0 && (
+                <span className="ml-2 px-2 py-0.5 bg-purple-500/20 text-purple-400 rounded-full text-xs font-bold">
+                  {activeFiltersCount} filtre{activeFiltersCount > 1 ? "s" : ""} actif{activeFiltersCount > 1 ? "s" : ""}
+                </span>
+              )}
+            </p>
+          </div>
+        </div>
+      </header>
 
       <main className="max-w-7xl mx-auto p-6 space-y-6">
+        {/* Stats */}
         <div className="grid grid-cols-3 lg:grid-cols-6 gap-3">
           <MiniStat label="Total" value={stats.total} color="bg-blue-500/10 text-blue-400" />
           <MiniStat label="✅ Actifs" value={stats.active} color="bg-green-500/10 text-green-400" />
@@ -351,6 +481,7 @@ export default function AdminUsersPage() {
           <MiniStat label="🚫 Bannis" value={stats.banned} color="bg-red-500/10 text-red-400" />
         </div>
 
+        {/* Recherche */}
         <div className="relative">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
           <input
@@ -362,7 +493,8 @@ export default function AdminUsersPage() {
           />
         </div>
 
-        <div className="flex flex-wrap gap-2">
+        {/* Filtres rapides + bouton avancé */}
+        <div className="flex flex-wrap gap-2 items-center">
           <FilterBtn current={filter} value="all" onClick={setFilter}>Tous</FilterBtn>
           <FilterBtn current={filter} value="active" onClick={setFilter}>✅ Actifs</FilterBtn>
           <FilterBtn current={filter} value="online" onClick={setFilter}>🟢 En ligne</FilterBtn>
@@ -371,12 +503,162 @@ export default function AdminUsersPage() {
           <FilterBtn current={filter} value="banned" onClick={setFilter}>🚫 Bannis</FilterBtn>
           <FilterBtn current={filter} value="male" onClick={setFilter}>👨 Hommes</FilterBtn>
           <FilterBtn current={filter} value="female" onClick={setFilter}>👩 Femmes</FilterBtn>
+
+          {/* Bouton FILTRES AVANCÉS */}
+          <button
+            onClick={() => setShowAdvanced(!showAdvanced)}
+            className={`ml-auto flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition ${
+              showAdvanced || activeFiltersCount > 1
+                ? "bg-purple-600 text-white"
+                : "bg-slate-800 text-slate-400 hover:bg-slate-700"
+            }`}
+          >
+            <SlidersHorizontal className="w-4 h-4" />
+            Filtres avancés
+            {activeFiltersCount > 1 && (
+              <span className="px-1.5 py-0.5 bg-white text-purple-600 rounded-full text-xs font-black">
+                {activeFiltersCount}
+              </span>
+            )}
+          </button>
         </div>
 
+        {/* ═══════════════════════════════════════ */}
+        {/* PANNEAU FILTRES AVANCÉS */}
+        {/* ═══════════════════════════════════════ */}
+        {showAdvanced && (
+          <div className="bg-slate-900 border border-purple-500/30 rounded-2xl p-6 space-y-4">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <Filter className="w-5 h-5 text-purple-400" />
+                <h3 className="font-bold">Filtres avancés</h3>
+              </div>
+              {activeFiltersCount > 0 && (
+                <button
+                  onClick={resetFilters}
+                  className="text-xs text-red-400 hover:text-red-300 flex items-center gap-1"
+                >
+                  <X className="w-3 h-3" />
+                  Réinitialiser tout
+                </button>
+              )}
+            </div>
+
+            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* VILLE */}
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase mb-2 flex items-center gap-1">
+                  <MapPin className="w-3 h-3" />
+                  Ville
+                </label>
+                <select
+                  value={cityFilter}
+                  onChange={(e) => setCityFilter(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition"
+                >
+                  <option value="">Toutes les villes</option>
+                  {cities.map((c) => (
+                    <option key={c.name} value={c.name}>
+                      {c.name} ({c.count})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* ÂGE */}
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase mb-2 flex items-center gap-1">
+                  🎂 Tranche d&apos;âge
+                </label>
+                <select
+                  value={ageFilter}
+                  onChange={(e) => setAgeFilter(e.target.value as AgeRange)}
+                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition"
+                >
+                  <option value="all">Tous les âges</option>
+                  <option value="18-25">18 - 25 ans</option>
+                  <option value="26-35">26 - 35 ans</option>
+                  <option value="36-45">36 - 45 ans</option>
+                  <option value="45+">45 ans et plus</option>
+                </select>
+              </div>
+
+              {/* DATE INSCRIPTION */}
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase mb-2 flex items-center gap-1">
+                  <Calendar className="w-3 h-3" />
+                  Inscription
+                </label>
+                <select
+                  value={dateFilter}
+                  onChange={(e) => setDateFilter(e.target.value as DateRange)}
+                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition"
+                >
+                  <option value="all">Depuis toujours</option>
+                  <option value="today">Aujourd&apos;hui</option>
+                  <option value="week">Cette semaine</option>
+                  <option value="month">Ce mois</option>
+                  <option value="3months">3 derniers mois</option>
+                </select>
+              </div>
+
+              {/* TRI */}
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase mb-2 flex items-center gap-1">
+                  🔥 Trier par
+                </label>
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as SortBy)}
+                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition"
+                >
+                  <option value="recent">📅 Plus récent</option>
+                  <option value="active">🟢 Plus actif</option>
+                  <option value="likes">❤️ Plus de likes reçus</option>
+                  <option value="matches">💑 Plus de matchs</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Récap filtres actifs */}
+            {activeFiltersCount > 0 && (
+              <div className="pt-3 border-t border-slate-800">
+                <p className="text-xs text-slate-500 mb-2">Filtres appliqués :</p>
+                <div className="flex flex-wrap gap-2">
+                  {filter !== "all" && (
+                    <FilterChip label={`Catégorie: ${filter}`} onRemove={() => setFilter("all")} />
+                  )}
+                  {cityFilter && (
+                    <FilterChip label={`Ville: ${cityFilter}`} onRemove={() => setCityFilter("")} />
+                  )}
+                  {ageFilter !== "all" && (
+                    <FilterChip label={`Âge: ${ageFilter}`} onRemove={() => setAgeFilter("all")} />
+                  )}
+                  {dateFilter !== "all" && (
+                    <FilterChip label={`Date: ${dateFilter}`} onRemove={() => setDateFilter("all")} />
+                  )}
+                  {sortBy !== "recent" && (
+                    <FilterChip label={`Tri: ${sortBy}`} onRemove={() => setSortBy("recent")} />
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Liste utilisateurs */}
         {filteredUsers.length === 0 ? (
           <div className="text-center py-12 bg-slate-900 border border-slate-800 rounded-2xl">
             <User className="w-16 h-16 text-slate-700 mx-auto mb-4" />
             <p className="text-slate-500">Aucun utilisateur trouvé</p>
+            {activeFiltersCount > 0 && (
+              <button
+                onClick={resetFilters}
+                className="mt-4 px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-sm font-medium transition"
+              >
+                Réinitialiser les filtres
+              </button>
+            )}
           </div>
         ) : (
           <div className="grid gap-3">
@@ -613,11 +895,6 @@ export default function AdminUsersPage() {
                     <div className="text-3xl mb-2">💎</div>
                     <p className="font-bold text-lg">Premium</p>
                     <p className="text-xs text-slate-400 mt-1">2 500 FCFA/mois</p>
-                    <p className="text-xs text-slate-500 mt-2">
-                      Voir qui vous like<br />
-                      5 Super Likes/jour<br />
-                      Boost 3x/jour
-                    </p>
                   </button>
 
                   <button
@@ -631,11 +908,6 @@ export default function AdminUsersPage() {
                     <div className="text-3xl mb-2">🏆</div>
                     <p className="font-bold text-lg">Gold</p>
                     <p className="text-xs text-slate-400 mt-1">5 000 FCFA/mois</p>
-                    <p className="text-xs text-slate-500 mt-2">
-                      Tout Premium +<br />
-                      Priorité maximale<br />
-                      Badge doré exclusif
-                    </p>
                   </button>
                 </div>
               </div>
@@ -646,11 +918,11 @@ export default function AdminUsersPage() {
                 </p>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                   {[
-                    { value: "1month", label: "1 mois", price: premiumPlan === "premium" ? "2 500" : "5 000" },
-                    { value: "3months", label: "3 mois", price: premiumPlan === "premium" ? "7 000" : "14 000", discount: "-7%" },
-                    { value: "6months", label: "6 mois", price: premiumPlan === "premium" ? "13 000" : "26 000", discount: "-13%" },
-                    { value: "1year", label: "1 an", price: premiumPlan === "premium" ? "21 000" : "42 000", discount: "-30%" },
-                    { value: "lifetime", label: "À vie ⭐", price: "GRATUIT", special: true },
+                    { value: "1month", label: "1 mois" },
+                    { value: "3months", label: "3 mois" },
+                    { value: "6months", label: "6 mois" },
+                    { value: "1year", label: "1 an" },
+                    { value: "lifetime", label: "À vie ⭐" },
                   ].map((option) => (
                     <button
                       key={option.value}
@@ -661,22 +933,7 @@ export default function AdminUsersPage() {
                           : "border-slate-700 bg-slate-800/50 hover:border-slate-600"
                       }`}
                     >
-                      <div className="flex items-center justify-between mb-1">
-                        <p className="font-bold text-sm">{option.label}</p>
-                        {option.discount && (
-                          <span className="text-[10px] px-1.5 py-0.5 bg-green-500/20 text-green-400 rounded-full font-bold">
-                            {option.discount}
-                          </span>
-                        )}
-                        {option.special && (
-                          <span className="text-[10px] px-1.5 py-0.5 bg-purple-500/20 text-purple-400 rounded-full font-bold">
-                            OFFERT
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-xs text-slate-400">
-                        {option.price} {option.special ? "" : "FCFA"}
-                      </p>
+                      <p className="font-bold text-sm">{option.label}</p>
                     </button>
                   ))}
                 </div>
@@ -688,12 +945,6 @@ export default function AdminUsersPage() {
                     <p className="text-xs text-slate-400">Récapitulatif</p>
                     <p className="font-bold text-amber-400 mt-1">
                       {premiumPlan === "gold" ? "🏆 Gold" : "💎 Premium"}
-                      {" • "}
-                      {premiumDuration === "1month" ? "1 mois" 
-                        : premiumDuration === "3months" ? "3 mois"
-                        : premiumDuration === "6months" ? "6 mois"
-                        : premiumDuration === "1year" ? "1 an"
-                        : "À vie"}
                     </p>
                   </div>
                   <div className="text-right">
@@ -721,14 +972,7 @@ export default function AdminUsersPage() {
                   disabled={savingPremium}
                   className="flex-1 px-4 py-3 bg-gradient-to-r from-amber-500 to-orange-500 hover:shadow-lg text-white rounded-xl font-bold transition disabled:opacity-50 flex items-center justify-center gap-2"
                 >
-                  {savingPremium ? (
-                    "Activation..."
-                  ) : (
-                    <>
-                      <Crown className="w-4 h-4" />
-                      Activer Premium
-                    </>
-                  )}
+                  {savingPremium ? "Activation..." : "Activer Premium"}
                 </button>
               </div>
             </div>
@@ -774,12 +1018,26 @@ function FilterBtn({
   );
 }
 
+// ✅ Chip pour afficher les filtres actifs
+function FilterChip({ label, onRemove }: { label: string; onRemove: () => void }) {
+  return (
+    <div className="flex items-center gap-1.5 px-3 py-1 bg-purple-500/20 border border-purple-500/40 rounded-full text-xs font-medium text-purple-300">
+      {label}
+      <button
+        onClick={onRemove}
+        className="hover:bg-purple-500/30 rounded-full p-0.5 transition"
+      >
+        <X className="w-3 h-3" />
+      </button>
+    </div>
+  );
+}
+
 function UserRow({ user, onView }: { user: UserItem; onView: () => void }) {
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 hover:border-purple-500/50 transition">
       <div className="flex items-center gap-4">
         <div className="relative flex-shrink-0">
-          {/* ✅ Avatar optimisé avec Image Next.js */}
           <Avatar
             photoUrl={user.photoUrl}
             firstName={user.firstName}
