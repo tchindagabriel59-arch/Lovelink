@@ -11,6 +11,7 @@ import {
   findUserByReferralCode, 
   applyReferralReward 
 } from "@/lib/referral";
+import { logApiCall } from "@/lib/api-logger";
 
 // 🎯 Auto-définir la préférence de genre selon le genre de l'utilisateur
 function getDefaultPrefGender(userGender: string): "male" | "female" | "non_binary" | "other" | null {
@@ -28,6 +29,16 @@ function getDefaultPrefGender(userGender: string): "male" | "female" | "non_bina
 }
 
 export async function POST(req: NextRequest) {
+  // ✅ MONITORING : Capture le temps de départ
+  const startTime = Date.now();
+  const endpoint = "/api/auth/register";
+  const method = "POST";
+  const userAgent = req.headers.get("user-agent") || undefined;
+  const ipAddress =
+    req.headers.get("x-forwarded-for")?.split(",")[0].trim() ||
+    req.headers.get("x-real-ip") ||
+    undefined;
+
   try {
     const body = await req.json();
     const { 
@@ -38,10 +49,21 @@ export async function POST(req: NextRequest) {
       birthDate, 
       gender, 
       eventId: clientEventId,
-      referralCode: providedReferralCode, // 🆕 Code de parrainage optionnel
+      referralCode: providedReferralCode,
     } = body;
 
     if (!email || !password || !firstName || !lastName || !birthDate || !gender) {
+      // ✅ LOG : Erreur 400 - champs manquants
+      logApiCall({
+        endpoint,
+        method,
+        statusCode: 400,
+        durationMs: Date.now() - startTime,
+        errorMessage: "Champs requis manquants",
+        userAgent,
+        ipAddress,
+      });
+
       return NextResponse.json(
         { error: "Tous les champs sont requis" },
         { status: 400 }
@@ -55,6 +77,17 @@ export async function POST(req: NextRequest) {
       .limit(1);
 
     if (existing.length > 0) {
+      // ✅ LOG : Erreur 409 - email déjà utilisé
+      logApiCall({
+        endpoint,
+        method,
+        statusCode: 409,
+        durationMs: Date.now() - startTime,
+        errorMessage: `Email déjà utilisé : ${email}`,
+        userAgent,
+        ipAddress,
+      });
+
       return NextResponse.json(
         { error: "Cet email est déjà utilisé" },
         { status: 409 }
@@ -86,8 +119,8 @@ export async function POST(req: NextRequest) {
         prefGender: defaultPrefGender,
         prefAgeMin: 18,
         prefAgeMax: 99,
-        referralCode: newReferralCode, // 🆕
-        referredBy: referrer?.id || null, // 🆕
+        referralCode: newReferralCode,
+        referredBy: referrer?.id || null,
       })
       .returning();
 
@@ -110,7 +143,7 @@ export async function POST(req: NextRequest) {
     
     try {
       const clientIp = getClientIp(req as any);
-      const userAgent = req.headers.get('user-agent') || undefined;
+      const capiUserAgent = req.headers.get('user-agent') || undefined;
       const fbp = req.cookies.get('_fbp')?.value;
       const fbc = req.cookies.get('_fbc')?.value;
       const referer = req.headers.get('referer');
@@ -126,7 +159,7 @@ export async function POST(req: NextRequest) {
           lastName: lastName,
           country: 'sn',
           clientIpAddress: clientIp,
-          clientUserAgent: userAgent,
+          clientUserAgent: capiUserAgent,
           fbp: fbp,
           fbc: fbc,
         },
@@ -144,10 +177,10 @@ export async function POST(req: NextRequest) {
         email: newUser.email,
         firstName: newUser.firstName,
         lastName: newUser.lastName,
-        referralCode: newUser.referralCode, // 🆕
+        referralCode: newUser.referralCode,
       },
       metaEventId,
-      referralApplied: !!referrer, // 🆕 Le frontend saura si le parrainage a marché
+      referralApplied: !!referrer,
     });
 
     response.cookies.set("auth_token", token, {
@@ -158,9 +191,36 @@ export async function POST(req: NextRequest) {
       path: "/",
     });
 
+    // ✅ LOG : Succès 200 - inscription réussie
+    logApiCall({
+      endpoint,
+      method,
+      statusCode: 200,
+      durationMs: Date.now() - startTime,
+      userId: newUser.id,
+      errorMessage: referrer 
+        ? `Inscription réussie (parrainage: ${providedReferralCode})` 
+        : "Inscription réussie",
+      userAgent,
+      ipAddress,
+    });
+
     return response;
   } catch (error) {
     console.error("Registration error:", error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+
+    // ✅ LOG : Erreur 500 - erreur serveur
+    logApiCall({
+      endpoint,
+      method,
+      statusCode: 500,
+      durationMs: Date.now() - startTime,
+      errorMessage,
+      userAgent,
+      ipAddress,
+    });
+
     return NextResponse.json(
       { error: "Erreur lors de l'inscription" },
       { status: 500 }
