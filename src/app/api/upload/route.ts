@@ -1,17 +1,48 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { getCurrentUserId } from '@/lib/auth';
+import { logApiCall } from '@/lib/api-logger';
 
-// 🆕 Nouvelle façon Next.js App Router (au lieu de export const config)
+// 🆕 Nouvelle façon Next.js App Router
 export const runtime = 'nodejs';
 export const maxDuration = 60;
 
-export async function POST(request: Request): Promise<NextResponse> {
+export async function POST(request: NextRequest): Promise<NextResponse> {
+  // ✅ MONITORING
   const startTime = Date.now();
-  
+  const endpoint = "/api/upload";
+  const method = "POST";
+  const userAgent = request.headers.get("user-agent") || undefined;
+  const ipAddress =
+    request.headers.get("x-forwarded-for")?.split(",")[0].trim() ||
+    request.headers.get("x-real-ip") ||
+    undefined;
+
+  // Récupérer userId (optionnel car upload peut fonctionner sans auth stricte)
+  let userId: number | null = null;
+  try {
+    userId = await getCurrentUserId();
+  } catch {
+    // Silencieux
+  }
+
   try {
     const apiKey = process.env.IMGBB_API_KEY;
     
     if (!apiKey) {
       console.error("[UPLOAD] IMGBB_API_KEY manquante");
+      
+      // ✅ LOG : Config manquante
+      logApiCall({
+        endpoint,
+        method,
+        statusCode: 500,
+        durationMs: Date.now() - startTime,
+        userId,
+        errorMessage: "IMGBB_API_KEY manquante dans les env vars",
+        userAgent,
+        ipAddress,
+      });
+
       return NextResponse.json(
         { error: "Configuration serveur manquante. Contacte le support." },
         { status: 500 }
@@ -19,6 +50,17 @@ export async function POST(request: Request): Promise<NextResponse> {
     }
 
     if (!request.body) {
+      logApiCall({
+        endpoint,
+        method,
+        statusCode: 400,
+        durationMs: Date.now() - startTime,
+        userId,
+        errorMessage: "Aucun fichier fourni (body vide)",
+        userAgent,
+        ipAddress,
+      });
+
       return NextResponse.json(
         { error: "Aucun fichier fourni" },
         { status: 400 }
@@ -33,6 +75,17 @@ export async function POST(request: Request): Promise<NextResponse> {
 
     // 🛡️ Vérification taille (32 MB = limite ImgBB)
     if (buffer.byteLength > 32 * 1024 * 1024) {
+      logApiCall({
+        endpoint,
+        method,
+        statusCode: 400,
+        durationMs: Date.now() - startTime,
+        userId,
+        errorMessage: `Fichier trop lourd : ${sizeInMB.toFixed(1)} MB (max 32 MB)`,
+        userAgent,
+        ipAddress,
+      });
+
       return NextResponse.json(
         { error: `Photo trop lourde (${sizeInMB.toFixed(1)} MB). Maximum : 32 MB` },
         { status: 400 }
@@ -40,6 +93,17 @@ export async function POST(request: Request): Promise<NextResponse> {
     }
 
     if (buffer.byteLength === 0) {
+      logApiCall({
+        endpoint,
+        method,
+        statusCode: 400,
+        durationMs: Date.now() - startTime,
+        userId,
+        errorMessage: "Fichier vide (0 bytes)",
+        userAgent,
+        ipAddress,
+      });
+
       return NextResponse.json(
         { error: "Fichier vide" },
         { status: 400 }
@@ -68,7 +132,7 @@ export async function POST(request: Request): Promise<NextResponse> {
         const data = await response.json();
 
         if (data.success) {
-          return data;
+          return { data, attempts: attempt };
         }
 
         // Détecter les erreurs de quota ImgBB
@@ -95,10 +159,22 @@ export async function POST(request: Request): Promise<NextResponse> {
     }
 
     // Upload avec retry
-    const data = await uploadWithRetry();
+    const { data, attempts } = await uploadWithRetry();
 
     const duration = Date.now() - startTime;
     console.log(`[UPLOAD] ✅ Succès en ${duration}ms`);
+
+    // ✅ LOG : Succès 200 - upload réussi
+    logApiCall({
+      endpoint,
+      method,
+      statusCode: 200,
+      durationMs: duration,
+      userId,
+      errorMessage: `✅ Upload réussi : ${sizeInMB.toFixed(2)} MB${attempts > 1 ? ` (${attempts} tentatives)` : ""}`,
+      userAgent,
+      ipAddress,
+    });
 
     return NextResponse.json({
       url: data.data.url,
@@ -109,8 +185,22 @@ export async function POST(request: Request): Promise<NextResponse> {
     const duration = Date.now() - startTime;
     console.error(`[UPLOAD] ❌ Échec après ${duration}ms:`, error);
 
+    const errorMessage = error?.message || String(error);
+
     // Messages d'erreur clairs pour l'utilisateur
-    if (error.message === "QUOTA_EXCEEDED") {
+    if (errorMessage === "QUOTA_EXCEEDED") {
+      // ✅ LOG : Quota ImgBB dépassé (CRITIQUE !)
+      logApiCall({
+        endpoint,
+        method,
+        statusCode: 503,
+        durationMs: duration,
+        userId,
+        errorMessage: "🚨 QUOTA IMGBB DÉPASSÉ - Photo non uploadée",
+        userAgent,
+        ipAddress,
+      });
+
       return NextResponse.json(
         { 
           error: "Le service de photos est temporairement saturé. Réessaie dans quelques minutes.",
@@ -121,16 +211,40 @@ export async function POST(request: Request): Promise<NextResponse> {
     }
 
     if (error.name === 'TimeoutError') {
+      // ✅ LOG : Timeout
+      logApiCall({
+        endpoint,
+        method,
+        statusCode: 408,
+        durationMs: duration,
+        userId,
+        errorMessage: `⏱️ Timeout upload (30s dépassées)`,
+        userAgent,
+        ipAddress,
+      });
+
       return NextResponse.json(
         { error: "La photo prend trop de temps à s'envoyer. Vérifie ta connexion internet." },
         { status: 408 }
       );
     }
 
+    // ✅ LOG : Erreur 500 générale
+    logApiCall({
+      endpoint,
+      method,
+      statusCode: 500,
+      durationMs: duration,
+      userId,
+      errorMessage: `❌ Upload échoué : ${errorMessage}`,
+      userAgent,
+      ipAddress,
+    });
+
     return NextResponse.json(
       { 
         error: "Impossible d'envoyer la photo. Réessaie ou choisis une autre photo.",
-        details: String(error?.message || error)
+        details: errorMessage
       },
       { status: 500 }
     );
