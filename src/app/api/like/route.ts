@@ -5,18 +5,42 @@ import { eq, and } from "drizzle-orm";
 import { getCurrentUserId } from "@/lib/auth";
 import { createNotification } from "@/lib/notifications";
 import { sendPushToUser, PushTemplates } from "@/lib/push";
-import { sendMatchEmail } from "@/lib/emails"; // 🆕 AJOUT
+import { sendMatchEmail } from "@/lib/emails";
 import { requirePhoto } from "@/lib/photo-check";
+import { logApiCall } from "@/lib/api-logger";
 
 const SUPER_LIKE_LIMITS = {
   free: 1,
   premium: 5,
 };
 
-export async function GET() {
+// ═══════════════════════════════════════
+// GET : Récupérer le statut des Super Likes
+// ═══════════════════════════════════════
+export async function GET(req: NextRequest) {
+  // ✅ MONITORING
+  const startTime = Date.now();
+  const endpoint = "/api/like";
+  const method = "GET";
+  const userAgent = req.headers.get("user-agent") || undefined;
+  const ipAddress =
+    req.headers.get("x-forwarded-for")?.split(",")[0].trim() ||
+    req.headers.get("x-real-ip") ||
+    undefined;
+
   try {
     const userId = await getCurrentUserId();
     if (!userId) {
+      logApiCall({
+        endpoint,
+        method,
+        statusCode: 401,
+        durationMs: Date.now() - startTime,
+        errorMessage: "Utilisateur non authentifié",
+        userAgent,
+        ipAddress,
+      });
+
       return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
     }
 
@@ -48,6 +72,18 @@ export async function GET() {
     const used = todaySuperLikes.length;
     const remaining = Math.max(0, limit - used);
 
+    // ✅ LOG : Succès 200
+    logApiCall({
+      endpoint,
+      method,
+      statusCode: 200,
+      durationMs: Date.now() - startTime,
+      userId,
+      errorMessage: `Super likes: ${used}/${limit} (${isPremium ? "Premium" : "Free"})`,
+      userAgent,
+      ipAddress,
+    });
+
     return NextResponse.json({
       superLikesUsed: used,
       superLikesLimit: limit,
@@ -56,25 +92,83 @@ export async function GET() {
     });
   } catch (error) {
     console.error("Erreur GET like:", error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+
+    logApiCall({
+      endpoint,
+      method,
+      statusCode: 500,
+      durationMs: Date.now() - startTime,
+      errorMessage,
+      userAgent,
+      ipAddress,
+    });
+
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
   }
 }
 
+// ═══════════════════════════════════════
+// POST : Créer un like / super like / dislike
+// ═══════════════════════════════════════
 export async function POST(req: NextRequest) {
+  // ✅ MONITORING
+  const startTime = Date.now();
+  const endpoint = "/api/like";
+  const method = "POST";
+  const userAgent = req.headers.get("user-agent") || undefined;
+  const ipAddress =
+    req.headers.get("x-forwarded-for")?.split(",")[0].trim() ||
+    req.headers.get("x-real-ip") ||
+    undefined;
+
   try {
     const userId = await getCurrentUserId();
     if (!userId) {
+      logApiCall({
+        endpoint,
+        method,
+        statusCode: 401,
+        durationMs: Date.now() - startTime,
+        errorMessage: "Utilisateur non authentifié",
+        userAgent,
+        ipAddress,
+      });
+
       return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
     }
 
     // 🔒 BLOQUER SI PAS DE PHOTO
     const photoCheck = await requirePhoto(userId);
-    if (photoCheck) return photoCheck;
+    if (photoCheck) {
+      logApiCall({
+        endpoint,
+        method,
+        statusCode: 403,
+        durationMs: Date.now() - startTime,
+        userId,
+        errorMessage: "Like bloqué (pas de photo)",
+        userAgent,
+        ipAddress,
+      });
+
+      return photoCheck;
+    }
 
     const { toUserId, isLike, isSuperLike } = await req.json();
-    // ...
 
     if (!toUserId || isLike === undefined) {
+      logApiCall({
+        endpoint,
+        method,
+        statusCode: 400,
+        durationMs: Date.now() - startTime,
+        userId,
+        errorMessage: "Données manquantes (toUserId ou isLike)",
+        userAgent,
+        ipAddress,
+      });
+
       return NextResponse.json({ error: "Données manquantes" }, { status: 400 });
     }
 
@@ -107,6 +201,17 @@ export async function POST(req: NextRequest) {
       ).length;
 
       if (todayCount >= limit) {
+        logApiCall({
+          endpoint,
+          method,
+          statusCode: 403,
+          durationMs: Date.now() - startTime,
+          userId,
+          errorMessage: `Limite Super Like atteinte (${todayCount}/${limit}, Premium: ${isPremium})`,
+          userAgent,
+          ipAddress,
+        });
+
         return NextResponse.json(
           {
             error: isPremium
@@ -133,6 +238,17 @@ export async function POST(req: NextRequest) {
       .limit(1);
 
     if (existingLike.length > 0) {
+      logApiCall({
+        endpoint,
+        method,
+        statusCode: 400,
+        durationMs: Date.now() - startTime,
+        userId,
+        errorMessage: `Doublon : déjà liké user ${toUserId}`,
+        userAgent,
+        ipAddress,
+      });
+
       return NextResponse.json({ error: "Déjà liké" }, { status: 400 });
     }
 
@@ -231,16 +347,14 @@ export async function POST(req: NextRequest) {
             PushTemplates.match(toUserData?.firstName ?? "Quelqu'un")
           );
 
-          // 📧 EMAIL MATCH : Envoyer seulement au destinataire pour économiser le quota Resend
-// L'utilisateur qui vient d'être "matché" reçoit l'email (celui qui a été liké en dernier)
-// La personne qui a liké voit déjà l'animation de match sur son écran
-if (toUserData?.email && fromUserData?.firstName) {
-  sendMatchEmail(
-    toUserData.email,
-    toUserData.firstName ?? "Cher membre",
-    fromUserData.firstName
-  ).catch((err) => console.error("Erreur email match:", err));
-}
+          // 📧 EMAIL MATCH
+          if (toUserData?.email && fromUserData?.firstName) {
+            sendMatchEmail(
+              toUserData.email,
+              toUserData.firstName ?? "Cher membre",
+              fromUserData.firstName
+            ).catch((err) => console.error("Erreur email match:", err));
+          }
         }
       } else {
         // Pas de match → notif like simple ou super like
@@ -252,7 +366,6 @@ if (toUserData?.email && fromUserData?.firstName) {
             content: `⭐ ${fromUserData?.firstName ?? "Quelqu'un"} vous a envoyé un Super Like !`,
           });
 
-          // 🔔 Push notification SUPER LIKE
           await sendPushToUser(
             toUserId,
             PushTemplates.superLike(fromUserData?.firstName ?? "Quelqu'un")
@@ -265,7 +378,6 @@ if (toUserData?.email && fromUserData?.firstName) {
             content: `💜 ${fromUserData?.firstName ?? "Quelqu'un"} vous a liké !`,
           });
 
-          // 🔔 Push notification LIKE
           await sendPushToUser(
             toUserId,
             PushTemplates.like(fromUserData?.firstName ?? "Quelqu'un")
@@ -274,6 +386,26 @@ if (toUserData?.email && fromUserData?.firstName) {
       }
     }
 
+    // ✅ LOG : Succès 200 - action réalisée
+    const actionLabel = matchCreated
+      ? `💕 MATCH créé avec user ${toUserId}!`
+      : isLike
+      ? isSuperLike
+        ? `⭐ Super Like envoyé à user ${toUserId}`
+        : `❤️ Like envoyé à user ${toUserId}`
+      : `❌ Pass sur user ${toUserId}`;
+
+    logApiCall({
+      endpoint,
+      method,
+      statusCode: 200,
+      durationMs: Date.now() - startTime,
+      userId,
+      errorMessage: actionLabel,
+      userAgent,
+      ipAddress,
+    });
+
     return NextResponse.json({
       success: true,
       matchCreated,
@@ -281,6 +413,18 @@ if (toUserData?.email && fromUserData?.firstName) {
     });
   } catch (error) {
     console.error("Erreur POST like:", error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+
+    logApiCall({
+      endpoint,
+      method,
+      statusCode: 500,
+      durationMs: Date.now() - startTime,
+      errorMessage,
+      userAgent,
+      ipAddress,
+    });
+
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
   }
 }
