@@ -204,3 +204,16 @@ export const typingStatus = pgTable("typing_status", {
   isTyping: boolean("is_typing").default(false).notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
+// 📊 MONITORING - Logs des requêtes API
+export const apiLogs = pgTable("api_logs", {
+  id: serial("id").primaryKey(),
+  endpoint: varchar("endpoint", { length: 200 }).notNull(),
+  method: varchar("method", { length: 10 }).notNull(),
+  statusCode: integer("status_code").notNull(),
+  durationMs: integer("duration_ms").notNull(),
+  userId: integer("user_id").references(() => users.id, { onDelete: "set null" }),
+  errorMessage: text("error_message"),
+  userAgent: text("user_agent"),
+  ipAddress: varchar("ip_address", { length: 45 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
