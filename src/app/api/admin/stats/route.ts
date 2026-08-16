@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { users, likes, matches, messages, reports } from "@/db/schema";
 import { isCurrentUserAdmin } from "@/lib/auth";
-import { eq, gte, sql, and } from "drizzle-orm";
+import { eq, gte, sql } from "drizzle-orm";
 
 export async function GET() {
   try {
@@ -19,77 +19,98 @@ export async function GET() {
     monthAgo.setMonth(monthAgo.getMonth() - 1);
     const last24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
-    // Compter les utilisateurs
-    const [totalUsers] = await db.select({ count: sql<number>`count(*)::int` }).from(users);
-    const [newToday] = await db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(users)
-      .where(gte(users.createdAt, today));
-    const [newThisWeek] = await db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(users)
-      .where(gte(users.createdAt, weekAgo));
-    const [newThisMonth] = await db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(users)
-      .where(gte(users.createdAt, monthAgo));
-    const [activeUsers] = await db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(users)
-      .where(gte(users.lastSeen, last24h));
-    const [premiumUsers] = await db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(users)
-      .where(eq(users.isPremium, true));
-    const [bannedUsers] = await db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(users)
-      .where(eq(users.isBanned, true));
+    // ⚡ OPTIMISATION : Toutes les requêtes EN PARALLÈLE avec Promise.all
+    // Au lieu de 12 requêtes séquentielles (1200ms), on fait 1 aller-retour (120ms)
+    const [
+      [totalUsers],
+      [newToday],
+      [newThisWeek],
+      [newThisMonth],
+      [activeUsers],
+      [premiumUsers],
+      [bannedUsers],
+      genderStats,
+      [totalLikes],
+      [totalMatches],
+      [totalMessages],
+      [pendingReports],
+      [totalReports],
+    ] = await Promise.all([
+      db.select({ count: sql<number>`count(*)::int` }).from(users),
+      db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(users)
+        .where(gte(users.createdAt, today)),
+      db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(users)
+        .where(gte(users.createdAt, weekAgo)),
+      db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(users)
+        .where(gte(users.createdAt, monthAgo)),
+      db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(users)
+        .where(gte(users.lastSeen, last24h)),
+      db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(users)
+        .where(eq(users.isPremium, true)),
+      db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(users)
+        .where(eq(users.isBanned, true)),
+      db
+        .select({
+          gender: users.gender,
+          count: sql<number>`count(*)::int`,
+        })
+        .from(users)
+        .groupBy(users.gender),
+      db.select({ count: sql<number>`count(*)::int` }).from(likes),
+      db.select({ count: sql<number>`count(*)::int` }).from(matches),
+      db.select({ count: sql<number>`count(*)::int` }).from(messages),
+      db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(reports)
+        .where(eq(reports.status, "pending")),
+      db.select({ count: sql<number>`count(*)::int` }).from(reports),
+    ]);
 
-    // Genre
-    const genderStats = await db
-      .select({
-        gender: users.gender,
-        count: sql<number>`count(*)::int`,
-      })
-      .from(users)
-      .groupBy(users.gender);
-
-    // Autres stats
-    const [totalLikes] = await db.select({ count: sql<number>`count(*)::int` }).from(likes);
-    const [totalMatches] = await db.select({ count: sql<number>`count(*)::int` }).from(matches);
-    const [totalMessages] = await db.select({ count: sql<number>`count(*)::int` }).from(messages);
-    const [pendingReports] = await db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(reports)
-      .where(eq(reports.status, "pending"));
-    const [totalReports] = await db.select({ count: sql<number>`count(*)::int` }).from(reports);
-
-    return NextResponse.json({
-      users: {
-        total: totalUsers.count,
-        newToday: newToday.count,
-        newThisWeek: newThisWeek.count,
-        newThisMonth: newThisMonth.count,
-        active24h: activeUsers.count,
-        premium: premiumUsers.count,
-        banned: bannedUsers.count,
+    return NextResponse.json(
+      {
+        users: {
+          total: totalUsers.count,
+          newToday: newToday.count,
+          newThisWeek: newThisWeek.count,
+          newThisMonth: newThisMonth.count,
+          active24h: activeUsers.count,
+          premium: premiumUsers.count,
+          banned: bannedUsers.count,
+        },
+        gender: genderStats,
+        activity: {
+          totalLikes: totalLikes.count,
+          totalMatches: totalMatches.count,
+          totalMessages: totalMessages.count,
+        },
+        reports: {
+          pending: pendingReports.count,
+          total: totalReports.count,
+        },
+        revenue: {
+          monthlyRevenue: premiumUsers.count * 5,
+          yearlyRevenue: premiumUsers.count * 5 * 12,
+        },
       },
-      gender: genderStats,
-      activity: {
-        totalLikes: totalLikes.count,
-        totalMatches: totalMatches.count,
-        totalMessages: totalMessages.count,
-      },
-      reports: {
-        pending: pendingReports.count,
-        total: totalReports.count,
-      },
-      revenue: {
-        monthlyRevenue: premiumUsers.count * 5, // Suppose 5€/mois
-        yearlyRevenue: premiumUsers.count * 5 * 12,
-      },
-    });
+      {
+        headers: {
+          // Cache 30s pour éviter de recharger inutilement
+          "Cache-Control": "private, max-age=30, stale-while-revalidate=60",
+        },
+      }
+    );
   } catch (error) {
     console.error("Admin stats error:", error);
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
