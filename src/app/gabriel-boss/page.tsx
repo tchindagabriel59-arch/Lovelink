@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
+import Image from "next/image";
 import {
   Users,
   Heart,
@@ -45,61 +46,93 @@ interface Stats {
   };
 }
 
+// ✅ SKELETON LOADER
+function DashboardSkeleton() {
+  return (
+    <div className="min-h-screen bg-slate-950 text-white animate-pulse">
+      <header className="bg-slate-900 border-b border-slate-800 p-6">
+        <div className="max-w-7xl mx-auto flex items-center gap-3">
+          <div className="w-12 h-12 bg-slate-800 rounded-xl" />
+          <div>
+            <div className="h-6 w-40 bg-slate-800 rounded mb-2" />
+            <div className="h-4 w-56 bg-slate-800 rounded" />
+          </div>
+        </div>
+      </header>
+      <main className="max-w-7xl mx-auto p-6 space-y-6">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="h-32 bg-slate-900 border border-slate-800 rounded-2xl" />
+          ))}
+        </div>
+        <div className="h-24 bg-slate-900 border border-slate-800 rounded-2xl" />
+        <div className="h-40 bg-slate-900 border border-slate-800 rounded-2xl" />
+        <div className="grid lg:grid-cols-2 gap-6">
+          <div className="h-48 bg-slate-900 border border-slate-800 rounded-2xl" />
+          <div className="h-48 bg-slate-900 border border-slate-800 rounded-2xl" />
+        </div>
+      </main>
+    </div>
+  );
+}
+
 export default function AdminDashboard() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [pendingVerifications, setPendingVerifications] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
-  // 🆕 États pour la relance photos
   const [sendingRelance, setSendingRelance] = useState(false);
   const [relanceResult, setRelanceResult] = useState<{
     success: boolean;
     message: string;
   } | null>(null);
 
-  useEffect(() => {
-    fetchStats();
-    fetchVerifications();
-    const interval = setInterval(() => {
-      fetchStats();
-      fetchVerifications();
-    }, 30000);
-    return () => clearInterval(interval);
-  }, []);
+  // ✅ Hash pour éviter les re-renders inutiles
+  const lastStatsHashRef = useRef<string>("");
 
-  async function fetchStats() {
+  // ✅ Fetch groupé et optimisé
+  const fetchAll = useCallback(async () => {
     try {
-      const res = await fetch("/api/admin/stats");
-      if (res.status === 403) {
+      const [statsRes, verifRes] = await Promise.all([
+        fetch("/api/admin/stats"),
+        fetch("/api/admin/verifications?filter=pending"),
+      ]);
+
+      if (statsRes.status === 403) {
         setError(true);
         setLoading(false);
         return;
       }
-      if (res.ok) {
-        const data = await res.json();
-        setStats(data);
+
+      if (statsRes.ok) {
+        const data = await statsRes.json();
+        // ✅ Ne mettre à jour QUE si les stats ont changé
+        const hash = JSON.stringify(data);
+        if (hash !== lastStatsHashRef.current) {
+          lastStatsHashRef.current = hash;
+          setStats(data);
+        }
+      }
+
+      if (verifRes.ok) {
+        const data = await verifRes.json();
+        setPendingVerifications(data.pendingCount || 0);
       }
     } catch {
       setError(true);
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
-  async function fetchVerifications() {
-    try {
-      const res = await fetch("/api/admin/verifications?filter=pending");
-      if (res.ok) {
-        const data = await res.json();
-        setPendingVerifications(data.pendingCount || 0);
-      }
-    } catch {
-      // silently fail
-    }
-  }
+  useEffect(() => {
+    fetchAll();
+    // ✅ Polling à 60s au lieu de 30s (dashboard admin change pas si vite)
+    const interval = setInterval(fetchAll, 60000);
+    return () => clearInterval(interval);
+  }, [fetchAll]);
 
-  // 🆕 Fonction de relance photos
   async function handleRelancePhotos() {
     if (!confirm("Envoyer un email de relance à tous les utilisateurs sans photo ?")) {
       return;
@@ -125,28 +158,19 @@ export default function AdminDashboard() {
           message: `❌ Erreur : ${data.error || "Impossible d'envoyer les emails"}`,
         });
       }
-    } catch (err) {
+    } catch {
       setRelanceResult({
         success: false,
         message: "❌ Erreur de connexion",
       });
     } finally {
       setSendingRelance(false);
-      // Effacer le message après 8 secondes
       setTimeout(() => setRelanceResult(null), 8000);
     }
   }
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
-        <div className="text-center">
-          <Shield className="w-16 h-16 text-purple-500 animate-pulse mx-auto" />
-          <p className="mt-4 text-slate-400">Vérification des autorisations...</p>
-        </div>
-      </div>
-    );
-  }
+  // ✅ SKELETON au lieu de spinner
+  if (loading) return <DashboardSkeleton />;
 
   if (error || !stats) {
     return (
@@ -172,7 +196,6 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
-      {/* Header */}
       <header className="bg-slate-900 border-b border-slate-800 p-6">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -200,7 +223,6 @@ export default function AdminDashboard() {
       </header>
 
       <main className="max-w-7xl mx-auto p-6 space-y-6">
-        {/* KPIs principaux */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard
             icon={<Users className="w-6 h-6" />}
@@ -233,7 +255,7 @@ export default function AdminDashboard() {
           />
         </div>
 
-        {/* 🆕 CARTE RELANCE PHOTOS */}
+        {/* CARTE RELANCE PHOTOS */}
         <div className="bg-gradient-to-r from-rose-500/20 to-pink-500/20 border-2 border-rose-500/50 rounded-2xl p-6 relative overflow-hidden">
           <div className="absolute top-0 right-0 w-32 h-32 bg-rose-500/10 rounded-full blur-3xl" />
           <div className="relative flex items-center justify-between flex-wrap gap-4">
@@ -269,7 +291,6 @@ export default function AdminDashboard() {
             </button>
           </div>
 
-          {/* Message de résultat */}
           {relanceResult && (
             <div
               className={`mt-4 p-4 rounded-xl relative ${
@@ -283,7 +304,6 @@ export default function AdminDashboard() {
           )}
         </div>
 
-        {/* 🆕 ALERTE VÉRIFICATIONS EN ATTENTE */}
         {pendingVerifications > 0 && (
           <div className="bg-gradient-to-r from-blue-500/20 to-cyan-500/20 border-2 border-blue-500/50 rounded-2xl p-6 relative overflow-hidden">
             <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-3xl" />
@@ -313,7 +333,6 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* Croissance */}
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
           <div className="flex items-center gap-2 mb-4">
             <TrendingUp className="w-5 h-5 text-purple-400" />
@@ -326,7 +345,6 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* Activité */}
         <div className="grid lg:grid-cols-2 gap-6">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
             <div className="flex items-center gap-2 mb-4">
@@ -334,21 +352,9 @@ export default function AdminDashboard() {
               <h2 className="text-lg font-bold">💕 Activité amoureuse</h2>
             </div>
             <div className="space-y-3">
-              <ActivityRow
-                icon="❤️"
-                label="Likes totaux"
-                value={stats.activity.totalLikes.toLocaleString()}
-              />
-              <ActivityRow
-                icon="💑"
-                label="Matchs totaux"
-                value={stats.activity.totalMatches.toLocaleString()}
-              />
-              <ActivityRow
-                icon="💬"
-                label="Messages envoyés"
-                value={stats.activity.totalMessages.toLocaleString()}
-              />
+              <ActivityRow icon="❤️" label="Likes totaux" value={stats.activity.totalLikes.toLocaleString()} />
+              <ActivityRow icon="💑" label="Matchs totaux" value={stats.activity.totalMatches.toLocaleString()} />
+              <ActivityRow icon="💬" label="Messages envoyés" value={stats.activity.totalMessages.toLocaleString()} />
             </div>
           </div>
 
@@ -386,7 +392,6 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* Revenus */}
         <div className="bg-gradient-to-br from-amber-500/10 to-orange-500/10 border border-amber-500/30 rounded-2xl p-6">
           <div className="flex items-center gap-2 mb-4">
             <DollarSign className="w-5 h-5 text-amber-400" />
@@ -395,18 +400,12 @@ export default function AdminDashboard() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <p className="text-sm text-slate-400">Revenus mensuels</p>
-              <p className="text-3xl font-bold text-amber-400">
-                {stats.revenue.monthlyRevenue} €
-              </p>
-              <p className="text-xs text-slate-500 mt-1">
-                {stats.users.premium} abonnés × 5€
-              </p>
+              <p className="text-3xl font-bold text-amber-400">{stats.revenue.monthlyRevenue} €</p>
+              <p className="text-xs text-slate-500 mt-1">{stats.users.premium} abonnés × 5€</p>
             </div>
             <div>
               <p className="text-sm text-slate-400">Revenus annuels estimés</p>
-              <p className="text-3xl font-bold text-orange-400">
-                {stats.revenue.yearlyRevenue} €
-              </p>
+              <p className="text-3xl font-bold text-orange-400">{stats.revenue.yearlyRevenue} €</p>
               <p className="text-xs text-slate-500 mt-1">Projection sur 12 mois</p>
             </div>
           </div>
@@ -415,7 +414,6 @@ export default function AdminDashboard() {
           </p>
         </div>
 
-        {/* Alertes modération */}
         {(stats.reports.pending > 0 || stats.users.banned > 0) && (
           <div className="bg-red-500/10 border border-red-500/30 rounded-2xl p-6">
             <div className="flex items-center gap-2 mb-4">
@@ -441,13 +439,8 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* Actions rapides */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <QuickAction 
-            href="/gabriel-boss/utilisateurs" 
-            icon={<Users />} 
-            label="Utilisateurs" 
-          />
+          <QuickAction href="/gabriel-boss/utilisateurs" icon={<Users />} label="Utilisateurs" />
           <QuickAction 
             href="/gabriel-boss/signalements" 
             icon={<Flag />} 
@@ -462,35 +455,19 @@ export default function AdminDashboard() {
             badge={pendingVerifications > 0 ? pendingVerifications : undefined}
             highlight
           />
-          <QuickAction 
-            href="/gabriel-boss/abonnes" 
-            icon={<Crown />} 
-            label="Abonnés Premium" 
-          />
+          <QuickAction href="/gabriel-boss/abonnes" icon={<Crown />} label="Abonnés Premium" />
         </div>
 
         <p className="text-center text-xs text-slate-600 mt-8">
-          🔄 Actualisation automatique toutes les 30 secondes
+          🔄 Actualisation automatique toutes les 60 secondes
         </p>
       </main>
     </div>
   );
 }
 
-function StatCard({
-  icon,
-  label,
-  value,
-  color,
-  trend,
-  alert,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: number;
-  color: string;
-  trend?: string;
-  alert?: boolean;
+function StatCard({ icon, label, value, color, trend, alert }: {
+  icon: React.ReactNode; label: string; value: number; color: string; trend?: string; alert?: boolean;
 }) {
   return (
     <div className={`bg-slate-900 border ${alert ? "border-red-500/50" : "border-slate-800"} rounded-2xl p-5`}>
@@ -526,45 +503,23 @@ function ActivityRow({ icon, label, value }: { icon: string; label: string; valu
   );
 }
 
-function QuickAction({
-  href,
-  icon,
-  label,
-  badge,
-  alert,
-  highlight,
-}: {
-  href: string;
-  icon: React.ReactNode;
-  label: string;
-  badge?: number;
-  alert?: boolean;
-  highlight?: boolean;
+function QuickAction({ href, icon, label, badge, alert, highlight }: {
+  href: string; icon: React.ReactNode; label: string; badge?: number; alert?: boolean; highlight?: boolean;
 }) {
   return (
     <a
       href={href}
       className={`relative bg-slate-900 border rounded-2xl p-5 transition group ${
-        highlight 
-          ? "border-blue-500/50 hover:border-blue-500" 
-          : alert 
-          ? "border-red-500/50 hover:border-red-500" 
-          : "border-slate-800 hover:border-purple-500/50"
+        highlight ? "border-blue-500/50 hover:border-blue-500" : alert ? "border-red-500/50 hover:border-red-500" : "border-slate-800 hover:border-purple-500/50"
       }`}
     >
       {badge !== undefined && badge > 0 && (
-        <div className={`absolute -top-2 -right-2 min-w-[24px] h-6 ${
-          alert ? "bg-red-500" : highlight ? "bg-blue-500" : "bg-purple-500"
-        } text-white text-xs font-bold rounded-full flex items-center justify-center px-2 shadow-lg animate-pulse`}>
+        <div className={`absolute -top-2 -right-2 min-w-[24px] h-6 ${alert ? "bg-red-500" : highlight ? "bg-blue-500" : "bg-purple-500"} text-white text-xs font-bold rounded-full flex items-center justify-center px-2 shadow-lg animate-pulse`}>
           {badge > 9 ? "9+" : badge}
         </div>
       )}
       <div className={`w-10 h-10 rounded-lg flex items-center justify-center mb-3 group-hover:scale-110 transition ${
-        highlight 
-          ? "bg-blue-500/10 text-blue-400"
-          : alert
-          ? "bg-red-500/10 text-red-400"
-          : "bg-purple-500/10 text-purple-400"
+        highlight ? "bg-blue-500/10 text-blue-400" : alert ? "bg-red-500/10 text-red-400" : "bg-purple-500/10 text-purple-400"
       }`}>
         {icon}
       </div>
