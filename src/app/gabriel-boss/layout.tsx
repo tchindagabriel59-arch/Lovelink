@@ -13,8 +13,6 @@ import {
   Menu,
   X,
   Home,
-  LogOut,
-  Sparkles,
 } from "lucide-react";
 
 interface Counts {
@@ -48,12 +46,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   useEffect(() => {
     fetchCounts();
-    // Refresh compteurs toutes les 60s
     const interval = setInterval(fetchCounts, 60000);
     return () => clearInterval(interval);
   }, [fetchCounts]);
 
-  // Fermer menu mobile au changement de page
   useEffect(() => {
     setMobileMenuOpen(false);
   }, [pathname]);
@@ -71,7 +67,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       icon: <Users className="w-5 h-5" />,
       badge: counts.users,
       badgeColor: "bg-blue-500",
-      showBadge: false, // Affiche pas le badge (juste le count)
+      showBadge: false,
     },
     {
       href: "/gabriel-boss/abonnes",
@@ -143,7 +139,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 {item.icon}
                 <span className="flex-1">{item.label}</span>
 
-                {/* Badge */}
                 {item.badge > 0 && (
                   <span
                     className={`min-w-[22px] h-5 px-1.5 rounded-full text-[11px] font-black flex items-center justify-center ${
@@ -164,20 +159,22 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           {/* Séparateur */}
           <div className="my-4 border-t border-slate-800" />
 
-          {/* Section future : Analytics + Monitoring */}
-          <div className="px-4 py-2">
-            <p className="text-[10px] text-slate-600 uppercase tracking-widest font-black">
-              À venir
-            </p>
-          </div>
-
-          <div className="px-4 py-3 rounded-xl bg-slate-800/50 border border-slate-700/50">
-            <div className="flex items-center gap-2 text-slate-500">
-              <BarChart3 className="w-4 h-4" />
-              <span className="text-xs">Analytics 📊</span>
-            </div>
-            <p className="text-[10px] text-slate-600 mt-1">Bientôt disponible</p>
-          </div>
+          {/* ✨ ANALYTICS - NOUVEAU */}
+          <Link
+            href="/gabriel-boss/analytics"
+            prefetch
+            className={`relative flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium ${
+              pathname === "/gabriel-boss/analytics"
+                ? "bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg shadow-purple-500/25"
+                : "text-slate-400 hover:bg-slate-800 hover:text-white"
+            }`}
+          >
+            <BarChart3 className="w-5 h-5" />
+            <span className="flex-1">Analytics</span>
+            <span className="text-[9px] px-1.5 py-0.5 bg-purple-500 text-white rounded-full font-black">
+              NEW
+            </span>
+          </Link>
         </nav>
 
         {/* Footer sidebar */}
@@ -270,6 +267,23 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 </Link>
               );
             })}
+
+            {/* ✨ ANALYTICS - NOUVEAU (mobile) */}
+            <Link
+              href="/gabriel-boss/analytics"
+              prefetch
+              className={`relative flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium ${
+                pathname === "/gabriel-boss/analytics"
+                  ? "bg-gradient-to-r from-purple-600 to-pink-600 text-white"
+                  : "text-slate-400 hover:bg-slate-800 hover:text-white"
+              }`}
+            >
+              <BarChart3 className="w-5 h-5" />
+              <span className="flex-1">Analytics</span>
+              <span className="text-[9px] px-1.5 py-0.5 bg-purple-500 text-white rounded-full font-black">
+                NEW
+              </span>
+            </Link>
 
             <div className="my-3 border-t border-slate-800" />
 
