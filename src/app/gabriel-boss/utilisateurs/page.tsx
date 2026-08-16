@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
+import Image from "next/image";
 import {
   Users,
   ArrowLeft,
@@ -18,8 +19,6 @@ import {
   Mail,
   User,
   Eye,
-  Gem,
-  Star,
   Clock,
 } from "lucide-react";
 
@@ -58,6 +57,73 @@ function getAge(birthDate: string): number {
   return age;
 }
 
+// ✅ SKELETON LOADER
+function UsersSkeleton() {
+  return (
+    <div className="min-h-screen bg-slate-950 text-white animate-pulse">
+      <header className="bg-slate-900 border-b border-slate-800 p-6">
+        <div className="max-w-7xl mx-auto flex items-center gap-4">
+          <div className="w-10 h-10 bg-slate-800 rounded-lg" />
+          <div className="w-12 h-12 bg-slate-800 rounded-xl" />
+          <div>
+            <div className="h-6 w-40 bg-slate-800 rounded mb-2" />
+            <div className="h-4 w-32 bg-slate-800 rounded" />
+          </div>
+        </div>
+      </header>
+      <main className="max-w-7xl mx-auto p-6 space-y-6">
+        <div className="grid grid-cols-3 lg:grid-cols-6 gap-3">
+          {[...Array(6)].map((_, i) => (
+            <div key={i} className="h-16 bg-slate-900 border border-slate-800 rounded-xl" />
+          ))}
+        </div>
+        <div className="h-12 bg-slate-900 border border-slate-800 rounded-xl" />
+        <div className="grid gap-3">
+          {[...Array(5)].map((_, i) => (
+            <div key={i} className="h-20 bg-slate-900 border border-slate-800 rounded-xl" />
+          ))}
+        </div>
+      </main>
+    </div>
+  );
+}
+
+// ✅ Avatar optimisé
+function Avatar({
+  photoUrl,
+  firstName,
+  lastName,
+  size = 56,
+  className = "",
+}: {
+  photoUrl: string;
+  firstName: string;
+  lastName: string;
+  size?: number;
+  className?: string;
+}) {
+  if (photoUrl) {
+    return (
+      <Image
+        src={photoUrl}
+        alt={firstName}
+        width={size}
+        height={size}
+        className={`rounded-xl object-cover ${className}`}
+      />
+    );
+  }
+  return (
+    <div
+      style={{ width: size, height: size, fontSize: size * 0.35 }}
+      className={`rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white font-bold ${className}`}
+    >
+      {firstName.charAt(0)}
+      {lastName.charAt(0)}
+    </div>
+  );
+}
+
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<UserItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -65,17 +131,13 @@ export default function AdminUsersPage() {
   const [filter, setFilter] = useState<string>("all");
   const [selectedUser, setSelectedUser] = useState<UserItem | null>(null);
   
-  // ✅ NOUVEAU : State pour le modal Premium
   const [showPremiumModal, setShowPremiumModal] = useState(false);
   const [premiumPlan, setPremiumPlan] = useState<"premium" | "gold">("premium");
   const [premiumDuration, setPremiumDuration] = useState<string>("1month");
   const [savingPremium, setSavingPremium] = useState(false);
 
-  useEffect(() => {
-    fetchUsers();
-  }, []);
-
-  async function fetchUsers() {
+  // ✅ Fetch une seule fois au chargement
+  const fetchUsers = useCallback(async () => {
     try {
       const res = await fetch("/api/admin/users/list");
       if (res.ok) {
@@ -87,10 +149,13 @@ export default function AdminUsersPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
+
+  useEffect(() => {
+    fetchUsers();
+  }, [fetchUsers]);
 
   async function toggleRole(userId: number, role: string, value: boolean) {
-    // ✅ NOUVEAU : Si c'est "Rendre Premium", ouvrir le modal au lieu de confirmer
     if (role === "isPremium" && value === true) {
       setShowPremiumModal(true);
       return;
@@ -125,7 +190,6 @@ export default function AdminUsersPage() {
     }
   }
 
-  // ✅ NOUVELLE FONCTION : Confirmer l'attribution Premium
   async function confirmPremium() {
     if (!selectedUser) return;
     setSavingPremium(true);
@@ -190,7 +254,6 @@ export default function AdminUsersPage() {
     }
   }
 
-  // Calcul date expiration pour affichage dans le modal
   function getExpiryDate(): string {
     const now = new Date();
     let expiry = new Date(now);
@@ -217,54 +280,53 @@ export default function AdminUsersPage() {
     });
   }
 
-  // Filtres
-  const filteredUsers = users.filter((u) => {
-    const searchMatch =
-      search === "" ||
-      u.firstName.toLowerCase().includes(search.toLowerCase()) ||
-      u.lastName.toLowerCase().includes(search.toLowerCase()) ||
-      u.email.toLowerCase().includes(search.toLowerCase());
+  // ✅ Filtrage optimisé avec useMemo (ne recalcule QUE si search ou filter change)
+  const filteredUsers = useMemo(() => {
+    return users.filter((u) => {
+      const searchMatch =
+        search === "" ||
+        u.firstName.toLowerCase().includes(search.toLowerCase()) ||
+        u.lastName.toLowerCase().includes(search.toLowerCase()) ||
+        u.email.toLowerCase().includes(search.toLowerCase());
 
-    let categoryMatch = true;
-    switch (filter) {
-      case "banned":
-        categoryMatch = u.isBanned;
-        break;
-      case "admin":
-        categoryMatch = u.isAdmin;
-        break;
-      case "premium":
-        categoryMatch = u.isPremium;
-        break;
-      case "online":
-        categoryMatch = u.isOnline;
-        break;
-      case "male":
-        categoryMatch = u.gender === "male";
-        break;
-      case "female":
-        categoryMatch = u.gender === "female";
-        break;
-      case "active":
-        categoryMatch = !u.isBanned;
-        break;
-    }
+      if (!searchMatch) return false;
 
-    return searchMatch && categoryMatch;
-  });
+      switch (filter) {
+        case "banned":
+          return u.isBanned;
+        case "admin":
+          return u.isAdmin;
+        case "premium":
+          return u.isPremium;
+        case "online":
+          return u.isOnline;
+        case "male":
+          return u.gender === "male";
+        case "female":
+          return u.gender === "female";
+        case "active":
+          return !u.isBanned;
+        default:
+          return true;
+      }
+    });
+  }, [users, search, filter]);
 
-  const stats = {
+  // ✅ Stats calculées avec useMemo (ne recalcule QUE si users change)
+  const stats = useMemo(() => ({
     total: users.length,
     active: users.filter((u) => !u.isBanned).length,
     banned: users.filter((u) => u.isBanned).length,
     admins: users.filter((u) => u.isAdmin).length,
     premium: users.filter((u) => u.isPremium).length,
     online: users.filter((u) => u.isOnline).length,
-  };
+  }), [users]);
+
+  // ✅ SKELETON au lieu de spinner
+  if (loading) return <UsersSkeleton />;
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
-      {/* Header */}
       <header className="bg-slate-900 border-b border-slate-800 p-6 sticky top-0 z-40">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-4">
@@ -321,12 +383,7 @@ export default function AdminUsersPage() {
           <FilterBtn current={filter} value="female" onClick={setFilter}>👩 Femmes</FilterBtn>
         </div>
 
-        {loading ? (
-          <div className="text-center py-12">
-            <Shield className="w-12 h-12 text-slate-600 animate-pulse mx-auto" />
-            <p className="mt-4 text-slate-500">Chargement...</p>
-          </div>
-        ) : filteredUsers.length === 0 ? (
+        {filteredUsers.length === 0 ? (
           <div className="text-center py-12 bg-slate-900 border border-slate-800 rounded-2xl">
             <User className="w-16 h-16 text-slate-700 mx-auto mb-4" />
             <p className="text-slate-500">Aucun utilisateur trouvé</p>
@@ -360,18 +417,13 @@ export default function AdminUsersPage() {
 
             <div className="p-6 space-y-6">
               <div className="flex items-start gap-4">
-                {selectedUser.photoUrl ? (
-                  <img
-                    src={selectedUser.photoUrl}
-                    alt={selectedUser.firstName}
-                    className="w-24 h-24 rounded-2xl object-cover"
-                  />
-                ) : (
-                  <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white font-bold text-3xl">
-                    {selectedUser.firstName.charAt(0)}
-                    {selectedUser.lastName.charAt(0)}
-                  </div>
-                )}
+                <Avatar
+                  photoUrl={selectedUser.photoUrl}
+                  firstName={selectedUser.firstName}
+                  lastName={selectedUser.lastName}
+                  size={96}
+                  className="rounded-2xl"
+                />
                 <div className="flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
                     <h3 className="text-2xl font-bold">
@@ -530,11 +582,10 @@ export default function AdminUsersPage() {
         </div>
       )}
 
-      {/* ✅ NOUVEAU : MODAL PREMIUM AVEC CHOIX FORMULE + DURÉE */}
+      {/* MODAL PREMIUM */}
       {showPremiumModal && selectedUser && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/90 p-4 overflow-y-auto">
           <div className="bg-slate-900 border border-amber-500/30 rounded-2xl max-w-2xl w-full my-8 shadow-2xl">
-            {/* Header */}
             <div className="p-6 border-b border-slate-800 flex items-center justify-between bg-gradient-to-r from-amber-500/10 to-orange-500/10">
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 bg-gradient-to-br from-amber-500 to-orange-500 rounded-xl flex items-center justify-center shadow-lg">
@@ -556,7 +607,6 @@ export default function AdminUsersPage() {
             </div>
 
             <div className="p-6 space-y-6">
-              {/* Choix formule */}
               <div>
                 <p className="text-sm font-semibold text-slate-300 mb-3">
                   1. Choisir la formule
@@ -600,7 +650,6 @@ export default function AdminUsersPage() {
                 </div>
               </div>
 
-              {/* Choix durée */}
               <div>
                 <p className="text-sm font-semibold text-slate-300 mb-3">
                   2. Choisir la durée
@@ -643,7 +692,6 @@ export default function AdminUsersPage() {
                 </div>
               </div>
 
-              {/* Récap */}
               <div className="p-4 bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/30 rounded-xl">
                 <div className="flex items-center justify-between">
                   <div>
@@ -670,7 +718,6 @@ export default function AdminUsersPage() {
                 </div>
               </div>
 
-              {/* Boutons */}
               <div className="flex gap-3 pt-2">
                 <button
                   onClick={() => setShowPremiumModal(false)}
@@ -742,17 +789,13 @@ function UserRow({ user, onView }: { user: UserItem; onView: () => void }) {
     <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 hover:border-purple-500/50 transition">
       <div className="flex items-center gap-4">
         <div className="relative flex-shrink-0">
-          {user.photoUrl ? (
-            <img
-              src={user.photoUrl}
-              alt={user.firstName}
-              className="w-14 h-14 rounded-xl object-cover"
-            />
-          ) : (
-            <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white font-bold">
-              {user.firstName.charAt(0)}{user.lastName.charAt(0)}
-            </div>
-          )}
+          {/* ✅ Avatar optimisé avec Image Next.js */}
+          <Avatar
+            photoUrl={user.photoUrl}
+            firstName={user.firstName}
+            lastName={user.lastName}
+            size={56}
+          />
           {user.isOnline && (
             <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-green-500 rounded-full border-2 border-slate-900" />
           )}
