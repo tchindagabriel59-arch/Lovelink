@@ -34,6 +34,7 @@ interface DashboardStats {
     likesReceived: number;
     likesReceivedThisWeek: number;
     superLikesReceived: number;
+    pendingLikes: number; // ✅ AJOUT
     matches: number;
     matchesThisWeek: number;
     messagesSent: number;
@@ -159,16 +160,14 @@ export default function DashboardPage() {
   const isPremium = user?.isPremium || false;
   const [dashData, setDashData] = useState<DashboardStats | null>(null);
   const [recentMatches, setRecentMatches] = useState<MatchData[]>([]);
-  const [pendingLikesCount, setPendingLikesCount] = useState(0); // ✅ AJOUT
   const [loading, setLoading] = useState(true);
 
-  // ✅ fetchAllData avec appel /api/likes-received
+  // ✅ SIMPLIFIÉ : 2 API calls seulement (au lieu de 3)
   const fetchAllData = useCallback(async () => {
     try {
-      const [statsRes, matchesRes, likesRes] = await Promise.all([
+      const [statsRes, matchesRes] = await Promise.all([
         fetch("/api/dashboard-stats"),
         fetch("/api/matches"),
-        fetch("/api/likes-received"), // ✅ AJOUT
       ]);
 
       if (statsRes.ok) {
@@ -179,12 +178,6 @@ export default function DashboardPage() {
       if (matchesRes.ok) {
         const data = await matchesRes.json();
         setRecentMatches(data.matches?.slice(0, 4) || []);
-      }
-
-      // ✅ AJOUT : Vrai nombre de likes EN ATTENTE
-      if (likesRes.ok) {
-        const data = await likesRes.json();
-        setPendingLikesCount(data.likes?.length || 0);
       }
     } catch {
       // silently fail
@@ -233,6 +226,7 @@ export default function DashboardPage() {
 
   const stats = dashData?.stats;
   const completion = dashData?.completion || 0;
+  const pendingLikes = stats?.pendingLikes || 0; // ✅ SHORTCUT
 
   return (
     <div className="p-6 lg:p-8 max-w-6xl mx-auto">
@@ -308,9 +302,9 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* ✅ BANNIÈRE PREMIUM CORRIGÉE (utilise pendingLikesCount) */}
+      {/* ✅ BANNIÈRE PREMIUM CORRIGÉE (utilise pendingLikes) */}
       {!isPremium &&
-        (pendingLikesCount > 0 ||
+        (pendingLikes > 0 ||
           (stats?.superLikesReceived || 0) > 0) && (
           <div className="mb-6 relative overflow-hidden rounded-3xl bg-gradient-to-r from-yellow-400 via-orange-500 to-yellow-500 p-6 shadow-2xl">
             <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-32 translate-x-32" />
@@ -329,8 +323,8 @@ export default function DashboardPage() {
                   </span>
                 </div>
                 <h3 className="text-2xl font-black mb-2">
-                  {pendingLikesCount} personne
-                  {pendingLikesCount > 1 ? "s ont" : " a"} craqué sur toi !
+                  {pendingLikes} personne
+                  {pendingLikes > 1 ? "s ont" : " a"} craqué sur toi !
                 </h3>
                 <p className="text-white/90 text-sm md:text-base">
                   Découvre qui + Super Likes illimités + Boosts 3x/jour avec Premium 👑
@@ -489,7 +483,7 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* ✅ ACTIONS RAPIDES CORRIGÉES */}
+          {/* ✅ ACTIONS RAPIDES (utilise pendingLikes) */}
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
             <ActionCard
               href="/discover"
@@ -502,8 +496,8 @@ export default function DashboardPage() {
               icon={<Star className="w-6 h-6" />}
               label="Qui m'a liké"
               gradient="from-blue-500 to-cyan-500"
-              badge={pendingLikesCount}
-              locked={!isPremium && pendingLikesCount > 0}
+              badge={pendingLikes}
+              locked={!isPremium && pendingLikes > 0}
             />
             <ActionCard
               href="/matches"
