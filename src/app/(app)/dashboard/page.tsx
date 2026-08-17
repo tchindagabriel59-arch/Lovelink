@@ -81,11 +81,10 @@ const gradients = [
   "from-emerald-400 to-teal-500",
 ];
 
-// ✅ SKELETON LOADER - Ressemble au vrai dashboard
+// ✅ SKELETON LOADER
 function DashboardSkeleton() {
   return (
     <div className="p-6 lg:p-8 max-w-6xl mx-auto animate-pulse">
-      {/* Header skeleton */}
       <div className="mb-6 flex items-center gap-4">
         <div className="w-16 h-16 rounded-2xl bg-slate-200" />
         <div className="space-y-2">
@@ -93,15 +92,11 @@ function DashboardSkeleton() {
           <div className="h-4 w-40 bg-slate-100 rounded-full" />
         </div>
       </div>
-
-      {/* Stats skeleton */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         {[...Array(4)].map((_, i) => (
           <div key={i} className="rounded-2xl bg-slate-200 h-28" />
         ))}
       </div>
-
-      {/* Body skeleton */}
       <div className="grid lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-4">
           <div className="h-40 rounded-2xl bg-slate-200" />
@@ -121,7 +116,7 @@ function DashboardSkeleton() {
   );
 }
 
-// ✅ Avatar optimisé réutilisable
+// ✅ Avatar
 function Avatar({
   photoUrl,
   firstName,
@@ -164,14 +159,16 @@ export default function DashboardPage() {
   const isPremium = user?.isPremium || false;
   const [dashData, setDashData] = useState<DashboardStats | null>(null);
   const [recentMatches, setRecentMatches] = useState<MatchData[]>([]);
+  const [pendingLikesCount, setPendingLikesCount] = useState(0); // ✅ AJOUT
   const [loading, setLoading] = useState(true);
 
-  // ✅ fetchAllData stable avec useCallback
+  // ✅ fetchAllData avec appel /api/likes-received
   const fetchAllData = useCallback(async () => {
     try {
-      const [statsRes, matchesRes] = await Promise.all([
+      const [statsRes, matchesRes, likesRes] = await Promise.all([
         fetch("/api/dashboard-stats"),
         fetch("/api/matches"),
+        fetch("/api/likes-received"), // ✅ AJOUT
       ]);
 
       if (statsRes.ok) {
@@ -183,6 +180,12 @@ export default function DashboardPage() {
         const data = await matchesRes.json();
         setRecentMatches(data.matches?.slice(0, 4) || []);
       }
+
+      // ✅ AJOUT : Vrai nombre de likes EN ATTENTE
+      if (likesRes.ok) {
+        const data = await likesRes.json();
+        setPendingLikesCount(data.likes?.length || 0);
+      }
     } catch {
       // silently fail
     } finally {
@@ -192,8 +195,6 @@ export default function DashboardPage() {
 
   useEffect(() => {
     fetchAllData();
-    // ✅ Dashboard : polling à 60s au lieu de 30s
-    // Les stats du dashboard ne changent pas toutes les 30s
     const interval = setInterval(fetchAllData, 60000);
     return () => clearInterval(interval);
   }, [fetchAllData]);
@@ -228,7 +229,6 @@ export default function DashboardPage() {
     }
   }
 
-  // ✅ Skeleton au lieu de spinner simple
   if (loading) return <DashboardSkeleton />;
 
   const stats = dashData?.stats;
@@ -236,14 +236,10 @@ export default function DashboardPage() {
 
   return (
     <div className="p-6 lg:p-8 max-w-6xl mx-auto">
-
-      {/* ══════════════════════════════════ */}
       {/* HEADER */}
-      {/* ══════════════════════════════════ */}
       <div className="mb-6">
         <div className="flex items-center gap-4">
           <div className="relative">
-            {/* ✅ Next.js Image optimisée */}
             <Avatar
               photoUrl={user?.photoUrl || null}
               firstName={user?.firstName}
@@ -312,9 +308,9 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* BANNIÈRE PREMIUM (si likes reçus et non Premium) */}
+      {/* ✅ BANNIÈRE PREMIUM CORRIGÉE (utilise pendingLikesCount) */}
       {!isPremium &&
-        ((stats?.likesReceived || 0) > 0 ||
+        (pendingLikesCount > 0 ||
           (stats?.superLikesReceived || 0) > 0) && (
           <div className="mb-6 relative overflow-hidden rounded-3xl bg-gradient-to-r from-yellow-400 via-orange-500 to-yellow-500 p-6 shadow-2xl">
             <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-32 translate-x-32" />
@@ -333,8 +329,8 @@ export default function DashboardPage() {
                   </span>
                 </div>
                 <h3 className="text-2xl font-black mb-2">
-                  {stats?.likesReceived} personne
-                  {(stats?.likesReceived || 0) > 1 ? "s ont" : " a"} craqué sur toi !
+                  {pendingLikesCount} personne
+                  {pendingLikesCount > 1 ? "s ont" : " a"} craqué sur toi !
                 </h3>
                 <p className="text-white/90 text-sm md:text-base">
                   Découvre qui + Super Likes illimités + Boosts 3x/jour avec Premium 👑
@@ -372,9 +368,7 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* ══════════════════════════════════ */}
       {/* STATS PRINCIPALES */}
-      {/* ══════════════════════════════════ */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <StatCard
           icon={<Heart className="w-5 h-5" />}
@@ -428,14 +422,10 @@ export default function DashboardPage() {
         />
       </div>
 
-      {/* ══════════════════════════════════ */}
       {/* GRILLE PRINCIPALE */}
-      {/* ══════════════════════════════════ */}
       <div className="grid lg:grid-cols-3 gap-6">
-
         {/* COLONNE GAUCHE (2/3) */}
         <div className="lg:col-span-2 space-y-6">
-
           {/* COMPLÉTUDE PROFIL */}
           {completion < 100 && (
             <div className="bg-gradient-to-br from-rose-500 via-purple-500 to-pink-500 rounded-2xl p-6 text-white relative overflow-hidden">
@@ -499,7 +489,7 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* ACTIONS RAPIDES */}
+          {/* ✅ ACTIONS RAPIDES CORRIGÉES */}
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
             <ActionCard
               href="/discover"
@@ -512,8 +502,8 @@ export default function DashboardPage() {
               icon={<Star className="w-6 h-6" />}
               label="Qui m'a liké"
               gradient="from-blue-500 to-cyan-500"
-              badge={stats?.likesReceived}
-              locked={!isPremium && (stats?.likesReceived || 0) > 0}
+              badge={pendingLikesCount}
+              locked={!isPremium && pendingLikesCount > 0}
             />
             <ActionCard
               href="/matches"
@@ -583,7 +573,6 @@ export default function DashboardPage() {
                       className="group relative overflow-hidden rounded-xl aspect-square"
                     >
                       {match.user.photoUrl ? (
-                        // ✅ Next.js Image pour les matchs récents
                         <Image
                           src={match.user.photoUrl}
                           alt={match.user.firstName}
@@ -680,11 +669,8 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* ══════════════════════════════════ */}
         {/* COLONNE DROITE (1/3) */}
-        {/* ══════════════════════════════════ */}
         <div className="space-y-6">
-
           {/* NOTIFICATIONS */}
           <div className="bg-white rounded-2xl p-6 border border-slate-100">
             <div className="flex items-center justify-between mb-4">
@@ -711,7 +697,6 @@ export default function DashboardPage() {
                         : "hover:bg-slate-50"
                     }`}
                   >
-                    {/* ✅ Next.js Image pour les notifs */}
                     {notif.fromUser?.photoUrl ? (
                       <Image
                         src={notif.fromUser.photoUrl}
@@ -832,7 +817,6 @@ export default function DashboardPage() {
             </h3>
             <div className="text-center">
               <div className="relative inline-block">
-                {/* ✅ Next.js Image dans Mon profil */}
                 <Avatar
                   photoUrl={user?.photoUrl || null}
                   firstName={user?.firstName}
@@ -880,10 +864,7 @@ export default function DashboardPage() {
   );
 }
 
-// ══════════════════════════════════
 // COMPOSANTS RÉUTILISABLES
-// ══════════════════════════════════
-
 function StatCard({
   icon, value, label, sub, gradient, badge, alert,
 }: {
