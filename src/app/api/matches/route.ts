@@ -6,6 +6,7 @@ import { getCurrentUserId } from "@/lib/auth";
 import { logApiCall } from "@/lib/api-logger";
 
 export async function GET(req: NextRequest) {
+  // ✅ MONITORING
   const startTime = Date.now();
   const endpoint = "/api/matches";
   const method = "GET";
@@ -27,9 +28,11 @@ export async function GET(req: NextRequest) {
         userAgent,
         ipAddress,
       });
+
       return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
     }
 
+    // ⚡ ÉTAPE 1 : Récupérer matchs + blocages EN PARALLÈLE
     const [userMatches, myBlocks, blockedByOthers] = await Promise.all([
       db
         .select({
@@ -54,6 +57,17 @@ export async function GET(req: NextRequest) {
     ]);
 
     if (userMatches.length === 0) {
+      logApiCall({
+        endpoint,
+        method,
+        statusCode: 200,
+        durationMs: Date.now() - startTime,
+        userId,
+        errorMessage: "0 matchs trouvés",
+        userAgent,
+        ipAddress,
+      });
+
       return NextResponse.json(
         { matches: [] },
         {
@@ -64,17 +78,30 @@ export async function GET(req: NextRequest) {
       );
     }
 
+    // Blocages
     const blockedIds = new Set([
       ...myBlocks.map((b) => b.blockedUserId),
       ...blockedByOthers.map((b) => b.blockerUserId),
     ]);
 
+    // Filtrer les matchs valides (pas bloqués)
     const validMatches = userMatches.filter((m) => {
       const otherId = m.user1Id === userId ? m.user2Id : m.user1Id;
       return !blockedIds.has(otherId);
     });
 
     if (validMatches.length === 0) {
+      logApiCall({
+        endpoint,
+        method,
+        statusCode: 200,
+        durationMs: Date.now() - startTime,
+        userId,
+        errorMessage: "Tous les matchs filtrés (bloqués)",
+        userAgent,
+        ipAddress,
+      });
+
       return NextResponse.json(
         { matches: [] },
         {
@@ -90,7 +117,9 @@ export async function GET(req: NextRequest) {
     );
     const matchIds = validMatches.map((m) => m.matchId);
 
+    // ⚡ ÉTAPE 2 : 3 requêtes EN PARALLÈLE (OPTIMISÉES)
     const [otherUsers, lastMessagesData, unreadCounts] = await Promise.all([
+      // ⚡ Users : Sélection minimale (moins de données transférées)
       db
         .select({
           id: users.id,
@@ -107,19 +136,21 @@ export async function GET(req: NextRequest) {
         .from(users)
         .where(inArray(users.id, otherUserIds)),
 
-      // ✅ CORRIGÉ ICI
-      db.execute(sql`
-        SELECT DISTINCT ON (match_id) 
-          match_id as "matchId",
-          content,
-          sender_id as "senderId",
-          created_at as "createdAt",
-          is_read as "isRead"
-        FROM messages
-        WHERE match_id IN (${sql.join(matchIds.map(id => sql`${id}`), sql`, `)})
-        ORDER BY match_id, created_at DESC
-      `),
+      // ✅ CORRIGÉ : Utilise Drizzle natif (selectDistinctOn) au lieu de SQL brut
+      // Bug corrigé : "ANY(${matchIds})" ne fonctionne pas avec les tableaux JS
+      db
+        .selectDistinctOn([messages.matchId], {
+          matchId: messages.matchId,
+          content: messages.content,
+          senderId: messages.senderId,
+          createdAt: messages.createdAt,
+          isRead: messages.isRead,
+        })
+        .from(messages)
+        .where(inArray(messages.matchId, matchIds))
+        .orderBy(messages.matchId, desc(messages.createdAt)),
 
+      // ⚡ Unread counts (utilise le nouvel index)
       db
         .select({
           matchId: messages.matchId,
@@ -136,21 +167,15 @@ export async function GET(req: NextRequest) {
         .groupBy(messages.matchId),
     ]);
 
+    // Créer les Maps pour accès O(1)
     const userMap = new Map(otherUsers.map((u) => [u.id, u]));
 
+    // ✅ CORRIGÉ : Map des derniers messages (résultat Drizzle direct, plus besoin de .rows)
     const lastMessageMap = new Map<number, any>();
-    const rows = lastMessagesData.rows as Array<{
-      matchId: number;
-      content: string;
-      senderId: number;
-      createdAt: Date;
-      isRead: boolean;
-    }>;
-
-    for (const msg of rows) {
-      lastMessageMap.set(Number(msg.matchId), {
+    for (const msg of lastMessagesData) {
+      lastMessageMap.set(msg.matchId, {
         content: msg.content,
-        senderId: Number(msg.senderId),
+        senderId: msg.senderId,
         createdAt: msg.createdAt,
         isRead: msg.isRead,
       });
@@ -160,11 +185,14 @@ export async function GET(req: NextRequest) {
       unreadCounts.map((u) => [u.matchId, Number(u.count)])
     );
 
+    // Construire le résultat final
     const result = validMatches
       .map((m) => {
         const otherId = m.user1Id === userId ? m.user2Id : m.user1Id;
         const otherUser = userMap.get(otherId);
+
         if (!otherUser || otherUser.isBanned) return null;
+
         return {
           matchId: m.matchId,
           matchedAt: m.matchedAt,
@@ -177,6 +205,7 @@ export async function GET(req: NextRequest) {
 
     const totalUnread = Array.from(unreadMap.values()).reduce((a, b) => a + b, 0);
 
+    // ✅ LOG succès
     logApiCall({
       endpoint,
       method,
@@ -188,6 +217,7 @@ export async function GET(req: NextRequest) {
       ipAddress,
     });
 
+    // ⚡ Cache HTTP augmenté à 30s (matchs changent peu)
     return NextResponse.json(
       { matches: result },
       {
