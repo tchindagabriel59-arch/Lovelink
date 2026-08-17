@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { users, likes, matches, messages, notifications } from "@/db/schema";
-import { eq, and, or, gte, count, desc, ne } from "drizzle-orm";
+import { eq, and, or, gte, count, desc, ne, notInArray, inArray, sql } from "drizzle-orm";
 import { getCurrentUserId } from "@/lib/auth";
 
 export async function GET() {
@@ -30,6 +30,9 @@ export async function GET() {
       unreadMessagesResult,
       unreadNotifsResult,
       recentNotifsData,
+      // ✅ AJOUT : Récupérer les données pour calculer pendingLikes
+      userMatchesForExclusion,
+      userActionsForExclusion,
     ] = await Promise.all([
       // Infos du user pour calculer complétude
       db
@@ -130,21 +133,21 @@ export async function GET() {
         .from(messages)
         .where(eq(messages.senderId, userId)),
 
-     // Messages non lus dans les matchs de l'utilisateur
-db
-  .select({ c: count() })
-  .from(messages)
-  .innerJoin(matches, eq(messages.matchId, matches.id))
-  .where(
-    and(
-      or(
-        eq(matches.user1Id, userId),
-        eq(matches.user2Id, userId)
-      ),
-      ne(messages.senderId, userId),
-      eq(messages.isRead, false)
-    )
-  ),
+      // Messages non lus dans les matchs de l'utilisateur
+      db
+        .select({ c: count() })
+        .from(messages)
+        .innerJoin(matches, eq(messages.matchId, matches.id))
+        .where(
+          and(
+            or(
+              eq(matches.user1Id, userId),
+              eq(matches.user2Id, userId)
+            ),
+            ne(messages.senderId, userId),
+            eq(messages.isRead, false)
+          )
+        ),
 
       // Notifs non lues
       db
@@ -157,7 +160,7 @@ db
           )
         ),
 
-      // 5 dernières notifications avec info de l'expéditeur
+      // 5 dernières notifications
       db
         .select({
           id: notifications.id,
@@ -171,9 +174,50 @@ db
         .where(eq(notifications.userId, userId))
         .orderBy(desc(notifications.createdAt))
         .limit(5),
+
+      // ✅ AJOUT : IDs des matchs pour exclusion
+      db
+        .select({ user1Id: matches.user1Id, user2Id: matches.user2Id })
+        .from(matches)
+        .where(or(eq(matches.user1Id, userId), eq(matches.user2Id, userId))),
+
+      // ✅ AJOUT : IDs des personnes à qui j'ai répondu (like/pass)
+      db
+        .select({ toUserId: likes.toUserId })
+        .from(likes)
+        .where(eq(likes.fromUserId, userId)),
     ]);
 
     const user = currentUserData[0];
+
+    // ═══════════════════════════════════════
+    // ✅ NOUVEAU : CALCUL DES LIKES EN ATTENTE
+    // ═══════════════════════════════════════
+    const matchedUserIds = userMatchesForExclusion.map((m) =>
+      m.user1Id === userId ? m.user2Id : m.user1Id
+    );
+    const alreadyRespondedIds = userActionsForExclusion.map((a) => a.toUserId);
+    const excludeIds = [
+      ...new Set([...matchedUserIds, ...alreadyRespondedIds, userId]),
+    ];
+
+    // Compter les likes EN ATTENTE (même logique que /api/likes-received)
+    const pendingLikesResult = await db
+      .select({ c: count() })
+      .from(likes)
+      .innerJoin(users, eq(likes.fromUserId, users.id))
+      .where(
+        and(
+          eq(likes.toUserId, userId),
+          eq(likes.isLike, true),
+          eq(users.isBanned, false),
+          excludeIds.length > 0
+            ? notInArray(users.id, excludeIds)
+            : sql`1=1`
+        )
+      );
+
+    const pendingLikes = pendingLikesResult[0]?.c || 0;
 
     // ═══════════════════════════════════════
     // CALCUL DE LA COMPLÉTUDE DU PROFIL
@@ -181,33 +225,18 @@ db
     let completionScore = 0;
     const maxScore = 100;
 
-    // Photo principale (30 points - c'est le plus important)
     if (user?.photoUrl) completionScore += 30;
-
-    // Photos supplémentaires (5 points chacune, max 20)
     if (user?.photo1Url) completionScore += 5;
     if (user?.photo2Url) completionScore += 5;
     if (user?.photo3Url) completionScore += 5;
-
-    // Bio (15 points)
     if (user?.bio && user.bio.length >= 30) completionScore += 15;
     else if (user?.bio && user.bio.length > 0) completionScore += 7;
-
-    // Ville + Pays (5 points)
     if (user?.city && user?.country) completionScore += 5;
-
-    // Occupation (5 points)
     if (user?.occupation) completionScore += 5;
-
-    // Intérêts (5 points)
     if (user?.interests) completionScore += 5;
-
-    // Prompts (5 points chacun, max 15)
     if (user?.prompt1Answer) completionScore += 5;
     if (user?.prompt2Answer) completionScore += 5;
     if (user?.prompt3Answer) completionScore += 5;
-
-    // Localisation activée (5 points)
     if (user?.latitude && user?.longitude) completionScore += 5;
 
     const completion = Math.min(completionScore, maxScore);
@@ -253,7 +282,6 @@ db
       });
     }
 
-    // Suggestion d'action même si profil complet
     if (suggestions.length === 0) {
       suggestions.push({
         icon: "🚀",
@@ -264,7 +292,6 @@ db
 
     // ═══════════════════════════════════════
     // ENRICHIR LES NOTIFICATIONS
-    // avec les infos de l'expéditeur (en parallèle)
     // ═══════════════════════════════════════
     const notifSenderIds = recentNotifsData
       .map((n) => n.fromUserId)
@@ -276,6 +303,7 @@ db
     >();
 
     if (notifSenderIds.length > 0) {
+      // ✅ OPTIMISÉ : Utilise inArray au lieu de or(...map)
       const senders = await db
         .select({
           id: users.id,
@@ -283,9 +311,7 @@ db
           photoUrl: users.photoUrl,
         })
         .from(users)
-        .where(
-          or(...notifSenderIds.map((id) => eq(users.id, id)))
-        );
+        .where(inArray(users.id, notifSenderIds));
 
       senders.forEach((s) => senderMap.set(s.id, s));
     }
@@ -310,6 +336,7 @@ db
           likesReceived: likesReceivedResult[0]?.c || 0,
           likesReceivedThisWeek: likesReceivedThisWeekResult[0]?.c || 0,
           superLikesReceived: superLikesReceivedResult[0]?.c || 0,
+          pendingLikes, // ✅ NOUVEAU : Likes en attente de réponse
           matches: matchesResult[0]?.c || 0,
           matchesThisWeek: matchesThisWeekResult[0]?.c || 0,
           messagesSent: messagesSentResult[0]?.c || 0,
@@ -322,7 +349,6 @@ db
       },
       {
         headers: {
-          // Cache de 30 secondes pour éviter recharge inutile
           "Cache-Control": "private, max-age=30, stale-while-revalidate=60",
         },
       }
