@@ -74,8 +74,8 @@ interface DiscoverStats {
   likesToday: number;
   superLikesToday: number;
   pendingLikes: number;
-  swipesToday: number;
-  maxFreeSwipes: number;
+  likesGivenToday: number; // ✅ MODIFIÉ (renommé)
+  maxFreeLikes: number; // ✅ MODIFIÉ (renommé)
   isPremium: boolean;
   recentSuperLikers: {
     id: number;
@@ -185,8 +185,7 @@ export default function DiscoverPage() {
   const [showPremiumModal, setShowPremiumModal] = useState(false);
   const [premiumFeature, setPremiumFeature] = useState<string>("");
 
-  // ✅ NOUVEAU : États pour features Premium
-  const [showSwipeLimitModal, setShowSwipeLimitModal] = useState(false);
+  const [showLikeLimitModal, setShowLikeLimitModal] = useState(false);
   const [showLikesRevealModal, setShowLikesRevealModal] = useState(false);
   const [showSuperLikersModal, setShowSuperLikersModal] = useState(false);
 
@@ -277,13 +276,14 @@ export default function DiscoverPage() {
     async (isLike: boolean) => {
       if (currentIndex >= profiles.length || animating) return;
 
-      // ✅ NOUVEAU : Bloquer si non-Premium et 20 swipes atteints
+      // ✅ MODIFIÉ : Bloquer UNIQUEMENT si c'est un LIKE (pas un pass) et 20 likes atteints
       if (
+        isLike &&
         stats &&
         !stats.isPremium &&
-        stats.swipesToday >= stats.maxFreeSwipes
+        stats.likesGivenToday >= stats.maxFreeLikes
       ) {
-        setShowSwipeLimitModal(true);
+        setShowLikeLimitModal(true);
         return;
       }
 
@@ -305,6 +305,13 @@ export default function DiscoverPage() {
               photoUrl: profile.photoUrl,
             });
           }
+          // ✅ Refresh les stats après un LIKE
+          if (isLike) {
+            fetch("/api/discover-stats")
+              .then((r) => r.json())
+              .then((newStats) => setStats(newStats))
+              .catch(() => {});
+          }
         })
         .catch(() => {});
 
@@ -323,6 +330,16 @@ export default function DiscoverPage() {
     if (currentIndex >= profiles.length || animating) return;
     if (superLikeStatus && !superLikeStatus.canSuperLike) {
       setShowLimitModal(true);
+      return;
+    }
+
+    // ✅ MODIFIÉ : Aussi bloquer si limite likes atteinte
+    if (
+      stats &&
+      !stats.isPremium &&
+      stats.likesGivenToday >= stats.maxFreeLikes
+    ) {
+      setShowLikeLimitModal(true);
       return;
     }
 
@@ -362,6 +379,11 @@ export default function DiscoverPage() {
           .then((r) => r.json())
           .then(setSuperLikeStatus)
           .catch(() => {});
+        // ✅ Refresh stats
+        fetch("/api/discover-stats")
+          .then((r) => r.json())
+          .then((newStats) => setStats(newStats))
+          .catch(() => {});
       })
       .catch(() => {});
 
@@ -372,7 +394,7 @@ export default function DiscoverPage() {
         setAnimating(null);
       }, 20);
     }, 350);
-  }, [currentIndex, profiles, superLikeStatus, animating]);
+  }, [currentIndex, profiles, superLikeStatus, animating, stats]);
 
   const handleRewind = useCallback(async () => {
     if (currentIndex === 0) return;
@@ -442,6 +464,11 @@ export default function DiscoverPage() {
   const photos = currentProfile ? getAllPhotos(currentProfile) : [];
   const hasPhotos = photos.length > 0;
   const status = currentProfile ? getActivityStatus(currentProfile) : { text: "", color: "" };
+
+  // ✅ NOUVEAU : Calcul des likes restants
+  const likesRemaining = stats && !stats.isPremium
+    ? Math.max(0, stats.maxFreeLikes - stats.likesGivenToday)
+    : null;
 
   const nextPhoto = () => {
     if (currentPhotoIndex < photos.length - 1) {
@@ -604,6 +631,16 @@ export default function DiscoverPage() {
   return (
     <div className="fixed inset-0 bg-black lg:relative lg:min-h-screen lg:bg-gradient-to-br lg:from-slate-100 lg:to-rose-50 lg:flex lg:flex-col lg:items-center lg:justify-center lg:p-4">
 
+      {/* ✅ NOUVEAU : COMPTEUR LIKES RESTANTS (au-dessus de la carte) */}
+      {likesRemaining !== null && likesRemaining <= 5 && likesRemaining > 0 && (
+        <div className="fixed top-4 right-4 lg:top-2 lg:right-auto lg:left-1/2 lg:-translate-x-1/2 z-40 bg-gradient-to-r from-orange-500 to-red-500 rounded-full px-3 py-1.5 shadow-2xl animate-pulse">
+          <p className="text-white text-xs font-bold flex items-center gap-1.5">
+            <Heart className="w-3 h-3 fill-white" />
+            {likesRemaining} like{likesRemaining > 1 ? "s" : ""} restant{likesRemaining > 1 ? "s" : ""}
+          </p>
+        </div>
+      )}
+
       {/* WIDGET LIKES CACHÉS */}
       {stats && stats.pendingLikes > 0 && !currentUser?.isPremium && (
         <button
@@ -671,28 +708,28 @@ export default function DiscoverPage() {
         ))}
       </div>
 
-      {/* MODALE : LIMITE SWIPES */}
-      {showSwipeLimitModal && (
+      {/* ✅ MODIFIÉ : MODALE LIMITE LIKES (message adapté) */}
+      {showLikeLimitModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 p-4">
           <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl">
             <div className="text-center mb-6">
-              <div className="w-24 h-24 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full flex items-center justify-center mx-auto mb-4 shadow-xl animate-pulse">
-                <Zap className="w-12 h-12 text-white fill-white" />
+              <div className="w-24 h-24 bg-gradient-to-br from-rose-500 to-pink-500 rounded-full flex items-center justify-center mx-auto mb-4 shadow-xl animate-pulse">
+                <Heart className="w-12 h-12 text-white fill-white" />
               </div>
               <h2 className="text-3xl font-black text-slate-900 mb-2">
-                Tu es en feu ! 🔥
+                Tu as beaucoup de goût ! 💕
               </h2>
               <p className="text-slate-600 mb-4">
-                Tu as swippé <strong>{stats?.swipesToday || 0} profils</strong> aujourd&apos;hui !
+                Tu as utilisé tes <strong>{stats?.maxFreeLikes || 20} likes gratuits</strong> pour aujourd&apos;hui !
               </p>
-              <div className="bg-gradient-to-br from-yellow-50 to-orange-50 rounded-2xl p-4 border-2 border-yellow-200 mb-4">
-                <p className="text-sm font-bold text-slate-800 mb-2">
-                  ⭐ Passe Premium pour :
+              <div className="bg-gradient-to-br from-rose-50 to-pink-50 rounded-2xl p-4 border-2 border-rose-200 mb-4">
+                <p className="text-sm font-bold text-slate-800 mb-3">
+                  💎 Passe Premium pour continuer :
                 </p>
                 <ul className="space-y-2 text-sm text-slate-700 text-left">
                   <li className="flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0" />
-                    <span>Swipes ILLIMITÉS 🚀</span>
+                    <span>Likes ILLIMITÉS 💕</span>
                   </li>
                   <li className="flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0" />
@@ -708,18 +745,23 @@ export default function DiscoverPage() {
                   </li>
                 </ul>
               </div>
+              <p className="text-xs text-slate-500">
+                💡 Tu peux toujours passer des profils gratuitement !
+                <br />
+                Reset dans 24h ⏰
+              </p>
             </div>
             <div className="flex gap-3">
               <button
-                onClick={() => setShowSwipeLimitModal(false)}
+                onClick={() => setShowLikeLimitModal(false)}
                 className="flex-1 px-4 py-3 border border-slate-200 rounded-xl font-semibold text-slate-700 hover:bg-slate-50 transition"
               >
                 Plus tard
               </button>
               <Link
                 href="/premium"
-                onClick={() => setShowSwipeLimitModal(false)}
-                className="flex-1 px-4 py-3 bg-gradient-to-r from-yellow-500 to-orange-500 text-white rounded-xl font-black hover:shadow-lg transition flex items-center justify-center gap-2"
+                onClick={() => setShowLikeLimitModal(false)}
+                className="flex-1 px-4 py-3 bg-gradient-to-r from-rose-500 to-pink-500 text-white rounded-xl font-black hover:shadow-lg transition flex items-center justify-center gap-2"
               >
                 <Gem className="w-4 h-4" />
                 Débloquer
