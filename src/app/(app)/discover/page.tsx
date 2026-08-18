@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
   Heart,
@@ -20,6 +19,9 @@ import {
   BadgeCheck,
   ChevronUp,
   AlertTriangle,
+  Filter,
+  CheckCircle2,
+  Zap,
 } from "lucide-react";
 
 interface Profile {
@@ -52,6 +54,8 @@ interface Profile {
   prompt2Answer: string | null;
   prompt3Question: string | null;
   prompt3Answer: string | null;
+  compatibility: number; // ✅ NOUVEAU
+  commonInterests: string[]; // ✅ NOUVEAU
 }
 
 interface SuperLikeStatus {
@@ -65,6 +69,14 @@ interface SuperLikeStatus {
 interface CurrentUser {
   isPremium?: boolean;
 }
+
+interface DiscoverStats {
+  likesToday: number;
+  superLikesToday: number;
+  pendingLikes: number;
+}
+
+type FilterType = "all" | "verified" | "online" | "premium" | "new";
 
 function getAge(birthDate: string): number {
   const today = new Date();
@@ -110,6 +122,14 @@ const reportReasons = [
   { value: "other", label: "Autre" },
 ];
 
+const filters: { value: FilterType; label: string; icon: React.ReactNode }[] = [
+  { value: "all", label: "Tous", icon: <Sparkles className="w-3.5 h-3.5" /> },
+  { value: "verified", label: "Vérifiés", icon: <BadgeCheck className="w-3.5 h-3.5" /> },
+  { value: "online", label: "En ligne", icon: <div className="w-2 h-2 bg-green-500 rounded-full" /> },
+  { value: "premium", label: "Premium", icon: <Crown className="w-3.5 h-3.5" /> },
+  { value: "new", label: "Nouveaux", icon: <Zap className="w-3.5 h-3.5" /> },
+];
+
 function getAllPhotos(profile: Profile): string[] {
   return [
     profile.photoUrl,
@@ -120,7 +140,6 @@ function getAllPhotos(profile: Profile): string[] {
   ].filter((p): p is string => !!p && p.trim() !== "");
 }
 
-// ✅ SKELETON LOADER
 function DiscoverSkeleton() {
   return (
     <div className="fixed inset-0 bg-black lg:relative lg:min-h-screen lg:bg-gradient-to-br lg:from-slate-100 lg:to-rose-50 lg:flex lg:items-center lg:justify-center lg:p-4">
@@ -141,40 +160,37 @@ export default function DiscoverPage() {
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [canRewind, setCanRewind] = useState(false);
+  const [activeFilter, setActiveFilter] = useState<FilterType>("all"); // ✅ NOUVEAU
+  const [stats, setStats] = useState<DiscoverStats | null>(null); // ✅ NOUVEAU
   const [matchPopup, setMatchPopup] = useState<{
     firstName: string;
     photoUrl: string | null;
   } | null>(null);
-  const [animating, setAnimating] = useState<"left" | "right" | "up" | null>(
-    null
-  );
+  const [animating, setAnimating] = useState<"left" | "right" | "up" | null>(null);
   const [showReportModal, setShowReportModal] = useState(false);
   const [selectedReason, setSelectedReason] = useState("");
   const [reportDetails, setReportDetails] = useState("");
   const [sendingReport, setSendingReport] = useState(false);
-  const [superLikeStatus, setSuperLikeStatus] =
-    useState<SuperLikeStatus | null>(null);
+  const [superLikeStatus, setSuperLikeStatus] = useState<SuperLikeStatus | null>(null);
   const [showLimitModal, setShowLimitModal] = useState(false);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [showPremiumModal, setShowPremiumModal] = useState(false);
   const [premiumFeature, setPremiumFeature] = useState<string>("");
 
-  const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(
-    null
-  );
+  const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const cardRef = useRef<HTMLDivElement>(null);
-
-  // ✅ Cache des images déjà préchargées (évite re-preload)
   const preloadedImagesRef = useRef<Set<string>>(new Set());
 
+  // ✅ Chargement initial (avec stats)
   useEffect(() => {
     async function loadAll() {
       try {
-        const [profilesRes, superLikeRes, meRes] = await Promise.all([
-          fetch("/api/discover"),
+        const [profilesRes, superLikeRes, meRes, statsRes] = await Promise.all([
+          fetch(`/api/discover?filter=${activeFilter}`),
           fetch("/api/like"),
           fetch("/api/auth/me"),
+          fetch("/api/discover-stats"), // ✅ NOUVEAU
         ]);
 
         if (profilesRes.ok) {
@@ -189,6 +205,10 @@ export default function DiscoverPage() {
           const data = await meRes.json();
           setCurrentUser(data.user);
         }
+        if (statsRes.ok) {
+          const data = await statsRes.json();
+          setStats(data);
+        }
       } catch {
         // silently fail
       } finally {
@@ -196,13 +216,12 @@ export default function DiscoverPage() {
       }
     }
     loadAll();
-  }, []);
+  }, [activeFilter]); // ✅ Recharge quand filtre change
 
   useEffect(() => {
     setCurrentPhotoIndex(0);
   }, [currentIndex]);
 
-  // ✅ Preload ROUTES des 3 prochains profils
   useEffect(() => {
     for (let i = 1; i <= 3; i++) {
       const next = profiles[currentIndex + i];
@@ -212,50 +231,36 @@ export default function DiscoverPage() {
     }
   }, [currentIndex, profiles, router]);
 
-  // ✅ PRELOAD AGGRESSIF : 3 prochains profils × toutes leurs photos
   useEffect(() => {
     const imagesToPreload: string[] = [];
-
-    // Précharger les 3 prochains profils (photos principales prioritaires)
     for (let i = 1; i <= 3; i++) {
       const next = profiles[currentIndex + i];
       if (next?.photoUrl && !preloadedImagesRef.current.has(next.photoUrl)) {
         imagesToPreload.push(next.photoUrl);
       }
     }
-
-    // Précharger AUSSI les photos secondaires des 2 prochains
     for (let i = 1; i <= 2; i++) {
       const next = profiles[currentIndex + i];
       if (next) {
-        [
-          next.photo1Url,
-          next.photo2Url,
-          next.photo3Url,
-          next.photo4Url,
-        ].forEach((url) => {
+        [next.photo1Url, next.photo2Url, next.photo3Url, next.photo4Url].forEach((url) => {
           if (url && !preloadedImagesRef.current.has(url)) {
             imagesToPreload.push(url);
           }
         });
       }
     }
-
-    // Précharger avec délai (ne bloque pas la carte actuelle)
     const timeouts: NodeJS.Timeout[] = [];
     imagesToPreload.forEach((url, index) => {
       const timeout = setTimeout(() => {
         const img = new window.Image();
         img.src = url;
         preloadedImagesRef.current.add(url);
-      }, index * 80); // 80ms entre chaque preload
+      }, index * 80);
       timeouts.push(timeout);
     });
-
     return () => timeouts.forEach(clearTimeout);
   }, [currentIndex, profiles]);
 
-  // ✅ FIX BUG : Séquencer proprement
   const handleAction = useCallback(
     async (isLike: boolean) => {
       if (currentIndex >= profiles.length || animating) return;
@@ -413,9 +418,7 @@ export default function DiscoverPage() {
   const currentProfile = profiles[currentIndex];
   const photos = currentProfile ? getAllPhotos(currentProfile) : [];
   const hasPhotos = photos.length > 0;
-  const status = currentProfile
-    ? getActivityStatus(currentProfile)
-    : { text: "", color: "" };
+  const status = currentProfile ? getActivityStatus(currentProfile) : { text: "", color: "" };
 
   const nextPhoto = () => {
     if (currentPhotoIndex < photos.length - 1) {
@@ -501,26 +504,50 @@ export default function DiscoverPage() {
 
   if (!currentProfile || currentIndex >= profiles.length) {
     return (
-      <div className="fixed inset-0 bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center p-6">
+      <div className="fixed inset-0 bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex flex-col items-center justify-center p-6">
+        {/* ✅ FILTRES en haut même si vide */}
+        <div className="w-full max-w-md mb-6">
+          <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+            {filters.map((f) => (
+              <button
+                key={f.value}
+                onClick={() => {
+                  setActiveFilter(f.value);
+                  setCurrentIndex(0);
+                  setLoading(true);
+                }}
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition ${
+                  activeFilter === f.value
+                    ? "bg-white text-slate-900 shadow-lg"
+                    : "bg-white/10 text-white/70 hover:bg-white/20"
+                }`}
+              >
+                {f.icon}
+                {f.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div className="text-center max-w-md">
           <div className="w-24 h-24 bg-white/10 backdrop-blur rounded-full flex items-center justify-center mx-auto mb-6">
             <Sparkles className="w-12 h-12 text-rose-400" />
           </div>
           <h2 className="text-2xl font-bold text-white mb-2">
-            Plus de profils pour le moment
+            {activeFilter === "all"
+              ? "Plus de profils pour le moment"
+              : `Aucun profil ${filters.find((f) => f.value === activeFilter)?.label.toLowerCase()}`}
           </h2>
           <p className="text-white/70 mb-6">
-            Revenez plus tard pour découvrir de nouveaux profils !
+            {activeFilter === "all"
+              ? "Revenez plus tard pour découvrir de nouveaux profils !"
+              : "Essaie un autre filtre ou reviens plus tard !"}
           </p>
           <button
             onClick={() => {
+              setActiveFilter("all");
               setCurrentIndex(0);
               setLoading(true);
-              fetch("/api/discover")
-                .then((r) => r.json())
-                .then((data) => setProfiles(data.profiles || []))
-                .catch(() => {})
-                .finally(() => setLoading(false));
             }}
             className="px-6 py-3 bg-gradient-to-r from-rose-500 to-pink-500 text-white rounded-2xl font-bold shadow-xl hover:shadow-2xl transition"
           >
@@ -553,9 +580,45 @@ export default function DiscoverPage() {
   }
 
   return (
-    <div className="fixed inset-0 bg-black lg:relative lg:min-h-screen lg:bg-gradient-to-br lg:from-slate-100 lg:to-rose-50 lg:flex lg:items-center lg:justify-center lg:p-4">
+    <div className="fixed inset-0 bg-black lg:relative lg:min-h-screen lg:bg-gradient-to-br lg:from-slate-100 lg:to-rose-50 lg:flex lg:flex-col lg:items-center lg:justify-center lg:p-4">
 
-      {/* MODAL PREMIUM */}
+      {/* ✅ NOUVEAU : WIDGET LIKES DU JOUR */}
+      {stats && stats.pendingLikes > 0 && !currentUser?.isPremium && (
+        <Link
+          href="/likes-recus"
+          className="fixed top-16 lg:top-4 left-1/2 -translate-x-1/2 z-40 bg-gradient-to-r from-rose-500 to-pink-500 rounded-full px-4 py-2 shadow-2xl animate-pulse hover:scale-105 transition"
+        >
+          <p className="text-white text-xs font-bold flex items-center gap-2">
+            <Heart className="w-3.5 h-3.5 fill-white" />
+            {stats.pendingLikes} personne{stats.pendingLikes > 1 ? "s" : ""} t&apos;{stats.pendingLikes > 1 ? "ont" : "a"} liké !
+            <Lock className="w-3 h-3" />
+          </p>
+        </Link>
+      )}
+
+      {/* ✅ NOUVEAU : FILTRES RAPIDES (Desktop only) */}
+      <div className="hidden lg:flex gap-2 mb-4 max-w-[420px] w-full overflow-x-auto pb-2 scrollbar-hide">
+        {filters.map((f) => (
+          <button
+            key={f.value}
+            onClick={() => {
+              setActiveFilter(f.value);
+              setCurrentIndex(0);
+              setLoading(true);
+            }}
+            className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition ${
+              activeFilter === f.value
+                ? "bg-white text-slate-900 shadow-lg"
+                : "bg-slate-200 text-slate-600 hover:bg-slate-300"
+            }`}
+          >
+            {f.icon}
+            {f.label}
+          </button>
+        ))}
+      </div>
+
+      {/* MODALS (identiques à avant) */}
       {showPremiumModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4">
           <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl">
@@ -596,7 +659,6 @@ export default function DiscoverPage() {
         </div>
       )}
 
-      {/* MODAL LIMITE SUPER LIKE */}
       {showLimitModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4">
           <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl">
@@ -609,7 +671,7 @@ export default function DiscoverPage() {
               </h2>
               <p className="text-slate-600">
                 {superLikeStatus?.isPremium ? (
-                  <>Tu as utilisé tes <strong>{superLikeStatus.limit} Super Likes</strong> aujourd'hui.</>
+                  <>Tu as utilisé tes <strong>{superLikeStatus.limit} Super Likes</strong> aujourd&apos;hui.</>
                 ) : (
                   <>Passe Premium pour avoir 5 Super Likes/jour !</>
                 )}
@@ -637,7 +699,6 @@ export default function DiscoverPage() {
         </div>
       )}
 
-      {/* MODAL SIGNALEMENT */}
       {showReportModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4">
           <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl max-h-[90vh] overflow-y-auto">
@@ -650,7 +711,6 @@ export default function DiscoverPage() {
                 <p className="text-sm text-slate-500">{currentProfile.firstName}</p>
               </div>
             </div>
-
             <div className="space-y-2 mb-4">
               {reportReasons.map((reason) => (
                 <label
@@ -673,7 +733,6 @@ export default function DiscoverPage() {
                 </label>
               ))}
             </div>
-
             <textarea
               value={reportDetails}
               onChange={(e) => setReportDetails(e.target.value)}
@@ -681,7 +740,6 @@ export default function DiscoverPage() {
               rows={3}
               className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm resize-none mb-4"
             />
-
             <div className="flex gap-3">
               <button
                 onClick={() => setShowReportModal(false)}
@@ -701,18 +759,17 @@ export default function DiscoverPage() {
         </div>
       )}
 
-      {/* MATCH POPUP */}
       {matchPopup && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90">
           <div className="bg-white rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl mx-4">
             <div className="relative w-32 h-32 mx-auto mb-4">
               {matchPopup.photoUrl ? (
-  <img
-    src={matchPopup.photoUrl}
-    alt={matchPopup.firstName}
-    className="w-32 h-32 rounded-full object-cover border-4 border-rose-500"
-  />
-) : (
+                <img
+                  src={matchPopup.photoUrl}
+                  alt={matchPopup.firstName}
+                  className="w-32 h-32 rounded-full object-cover border-4 border-rose-500"
+                />
+              ) : (
                 <div className={`w-32 h-32 rounded-full bg-gradient-to-br ${gradient} flex items-center justify-center text-white text-4xl font-bold border-4 border-rose-500`}>
                   {matchPopup.firstName.charAt(0)}
                 </div>
@@ -721,7 +778,7 @@ export default function DiscoverPage() {
                 <Heart className="w-6 h-6 text-white fill-white" />
               </div>
             </div>
-            <h2 className="text-3xl font-bold gradient-text mb-2">C'est un match ! 🎉</h2>
+            <h2 className="text-3xl font-bold gradient-text mb-2">C&apos;est un match ! 🎉</h2>
             <p className="text-slate-600 mb-6">
               Vous et <strong>{matchPopup.firstName}</strong> vous êtes mutuellement likés !
             </p>
@@ -747,9 +804,7 @@ export default function DiscoverPage() {
         </div>
       )}
 
-      {/* ═══════════════════════════════════════ */}
-      {/* CARTE PROFIL - key={currentIndex} pour forcer remount */}
-      {/* ═══════════════════════════════════════ */}
+      {/* CARTE PROFIL */}
       <div
         key={currentIndex}
         ref={cardRef}
@@ -769,28 +824,20 @@ export default function DiscoverPage() {
         }}
         className="relative w-full h-full lg:w-[420px] lg:h-[750px] lg:rounded-3xl overflow-hidden bg-black shadow-2xl"
       >
-        {/* PHOTO PLEIN ÉCRAN avec placeholder gradient */}
-        <div
-          onClick={handlePhotoTap}
-          className="absolute inset-0 select-none cursor-pointer"
-        >
+        <div onClick={handlePhotoTap} className="absolute inset-0 select-none cursor-pointer">
           {hasPhotos ? (
-  <>
-    {/* Placeholder gradient pendant chargement */}
-    <div className={`absolute inset-0 bg-gradient-to-br ${gradient} animate-pulse`} />
-
-    {/* ✅ IMG NATIF au lieu de Next.js Image = BYPASS Vercel Optimization */}
-    {/* Les photos ImgBB sont déjà optimisées, pas besoin de re-optimiser */}
-    <img
-      src={photos[currentPhotoIndex]}
-      alt={currentProfile.firstName}
-      className="absolute inset-0 w-full h-full object-cover z-[1]"
-      draggable={false}
-      loading="eager"
-      decoding="async"
-    />
-  </>
-) : (
+            <>
+              <div className={`absolute inset-0 bg-gradient-to-br ${gradient} animate-pulse`} />
+              <img
+                src={photos[currentPhotoIndex]}
+                alt={currentProfile.firstName}
+                className="absolute inset-0 w-full h-full object-cover z-[1]"
+                draggable={false}
+                loading="eager"
+                decoding="async"
+              />
+            </>
+          ) : (
             <div className={`w-full h-full bg-gradient-to-br ${gradient} flex items-center justify-center`}>
               <span className="text-9xl font-bold text-white/80">
                 {currentProfile.firstName.charAt(0)}
@@ -799,7 +846,6 @@ export default function DiscoverPage() {
           )}
         </div>
 
-        {/* SEGMENTS PHOTOS */}
         {photos.length > 1 && (
           <div className="absolute top-3 left-3 right-3 flex gap-1 z-20 pointer-events-none">
             {photos.map((_, i) => (
@@ -813,7 +859,6 @@ export default function DiscoverPage() {
           </div>
         )}
 
-        {/* BOUTONS FLAG + BAN */}
         <div className="absolute top-7 left-3 flex flex-col gap-2 z-20">
           <button
             onClick={(e) => {
@@ -835,7 +880,6 @@ export default function DiscoverPage() {
           </button>
         </div>
 
-        {/* BADGE PREMIUM */}
         {currentProfile.isPremium && (
           <div className="absolute top-7 right-3 z-20">
             <div className="flex items-center gap-1.5 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-full px-3 py-1.5 shadow-lg">
@@ -845,12 +889,11 @@ export default function DiscoverPage() {
           </div>
         )}
 
-        {/* BADGES LIKÉ / SUPER LIKÉ */}
         {currentProfile.hasSuperLikedMe && (
           <div className="absolute top-20 left-1/2 -translate-x-1/2 z-20 animate-pulse">
             <div className="bg-gradient-to-r from-blue-500 to-cyan-500 text-white px-4 py-2 rounded-full shadow-2xl flex items-center gap-2 border-2 border-white">
               <Star className="w-4 h-4 fill-white" />
-              <span className="text-sm font-bold">T'A SUPER LIKÉ !</span>
+              <span className="text-sm font-bold">T&apos;A SUPER LIKÉ !</span>
             </div>
           </div>
         )}
@@ -858,12 +901,11 @@ export default function DiscoverPage() {
           <div className="absolute top-20 left-1/2 -translate-x-1/2 z-20">
             <div className="bg-gradient-to-r from-rose-500 to-pink-500 text-white px-4 py-2 rounded-full shadow-xl flex items-center gap-2 border-2 border-white">
               <Heart className="w-4 h-4 fill-white" />
-              <span className="text-sm font-bold">T'A LIKÉ !</span>
+              <span className="text-sm font-bold">T&apos;A LIKÉ !</span>
             </div>
           </div>
         )}
 
-        {/* INDICATEURS SWIPE */}
         {dragOffset.x > 50 && !animating && (
           <div className="absolute top-1/3 left-8 z-30 rotate-[-20deg] pointer-events-none">
             <div className="border-4 border-green-500 text-green-500 px-6 py-2 rounded-2xl text-4xl font-black">
@@ -886,8 +928,7 @@ export default function DiscoverPage() {
           </div>
         )}
 
-        {/* GRADIENT DU BAS */}
-        <div className="absolute bottom-0 left-0 right-0 h-72 bg-gradient-to-t from-black via-black/70 to-transparent pointer-events-none z-10" />
+        <div className="absolute bottom-0 left-0 right-0 h-80 bg-gradient-to-t from-black via-black/70 to-transparent pointer-events-none z-10" />
 
         {/* INFOS UTILISATEUR */}
         <div className="absolute bottom-48 lg:bottom-28 left-4 right-4 text-white z-20">
@@ -901,7 +942,7 @@ export default function DiscoverPage() {
               e.stopPropagation();
               goToProfile();
             }}
-            className="text-left hover:opacity-90 transition"
+            className="text-left hover:opacity-90 transition w-full"
           >
             <div className="flex items-center gap-2 flex-wrap">
               <h2 className="text-4xl font-black drop-shadow-2xl flex items-center gap-2">
@@ -921,6 +962,41 @@ export default function DiscoverPage() {
                 à {currentProfile.distance === 0 ? "moins de 1" : currentProfile.distance} kilomètre
                 {currentProfile.distance > 1 ? "s" : ""}
               </p>
+            )}
+
+            {/* ✅ NOUVEAU : MATCH PREDICTION */}
+            {currentProfile.compatibility > 60 && (
+              <div className="mt-2 inline-flex items-center gap-1.5 bg-gradient-to-r from-rose-500 to-pink-500 rounded-full px-3 py-1 text-xs font-black text-white shadow-lg">
+                <Heart className="w-3 h-3 fill-white" />
+                {currentProfile.compatibility}% compatibilité
+              </div>
+            )}
+
+            {/* ✅ NOUVEAU : INTÉRÊTS COMMUNS SURLIGNÉS */}
+            {currentProfile.interests && (
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {currentProfile.interests
+                  .split(",")
+                  .slice(0, 4)
+                  .map((interest, i) => {
+                    const trimmed = interest.trim();
+                    const isCommon = currentProfile.commonInterests?.some(
+                      (ci) => ci.toLowerCase() === trimmed.toLowerCase()
+                    );
+                    return (
+                      <span
+                        key={i}
+                        className={`text-[10px] px-2 py-1 rounded-full font-bold ${
+                          isCommon
+                            ? "bg-gradient-to-r from-rose-500 to-pink-500 text-white ring-2 ring-white/50 shadow-lg"
+                            : "bg-white/20 text-white backdrop-blur"
+                        }`}
+                      >
+                        {trimmed} {isCommon && "✨"}
+                      </span>
+                    );
+                  })}
+              </div>
             )}
 
             <div className="flex items-center gap-1 mt-2 text-white/70 text-xs">
