@@ -19,7 +19,6 @@ import {
   BadgeCheck,
   ChevronUp,
   AlertTriangle,
-  Filter,
   CheckCircle2,
   Zap,
   Eye,
@@ -55,8 +54,8 @@ interface Profile {
   prompt2Answer: string | null;
   prompt3Question: string | null;
   prompt3Answer: string | null;
-  compatibility: number; // ✅ NOUVEAU
-  commonInterests: string[]; // ✅ NOUVEAU
+  compatibility: number;
+  commonInterests: string[];
 }
 
 interface SuperLikeStatus {
@@ -169,8 +168,8 @@ export default function DiscoverPage() {
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [canRewind, setCanRewind] = useState(false);
-  const [activeFilter, setActiveFilter] = useState<FilterType>("all"); // ✅ NOUVEAU
-  const [stats, setStats] = useState<DiscoverStats | null>(null); // ✅ NOUVEAU
+  const [activeFilter, setActiveFilter] = useState<FilterType>("all");
+  const [stats, setStats] = useState<DiscoverStats | null>(null);
   const [matchPopup, setMatchPopup] = useState<{
     firstName: string;
     photoUrl: string | null;
@@ -185,17 +184,17 @@ export default function DiscoverPage() {
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [showPremiumModal, setShowPremiumModal] = useState(false);
   const [premiumFeature, setPremiumFeature] = useState<string>("");
+
   // ✅ NOUVEAU : États pour features Premium
-const [showSwipeLimitModal, setShowSwipeLimitModal] = useState(false);
-const [showLikesRevealModal, setShowLikesRevealModal] = useState(false);
-const [showSuperLikersModal, setShowSuperLikersModal] = useState(false);
+  const [showSwipeLimitModal, setShowSwipeLimitModal] = useState(false);
+  const [showLikesRevealModal, setShowLikesRevealModal] = useState(false);
+  const [showSuperLikersModal, setShowSuperLikersModal] = useState(false);
 
   const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const cardRef = useRef<HTMLDivElement>(null);
   const preloadedImagesRef = useRef<Set<string>>(new Set());
 
-  // ✅ Chargement initial (avec stats)
   useEffect(() => {
     async function loadAll() {
       try {
@@ -203,7 +202,7 @@ const [showSuperLikersModal, setShowSuperLikersModal] = useState(false);
           fetch(`/api/discover?filter=${activeFilter}`),
           fetch("/api/like"),
           fetch("/api/auth/me"),
-          fetch("/api/discover-stats"), // ✅ NOUVEAU
+          fetch("/api/discover-stats"),
         ]);
 
         if (profilesRes.ok) {
@@ -229,7 +228,7 @@ const [showSuperLikersModal, setShowSuperLikersModal] = useState(false);
       }
     }
     loadAll();
-  }, [activeFilter]); // ✅ Recharge quand filtre change
+  }, [activeFilter]);
 
   useEffect(() => {
     setCurrentPhotoIndex(0);
@@ -275,20 +274,20 @@ const [showSuperLikersModal, setShowSuperLikersModal] = useState(false);
   }, [currentIndex, profiles]);
 
   const handleAction = useCallback(
-  async (isLike: boolean) => {
-    if (currentIndex >= profiles.length || animating) return;
+    async (isLike: boolean) => {
+      if (currentIndex >= profiles.length || animating) return;
 
-    // ✅ NOUVEAU : Bloquer si non-Premium et 20 swipes atteints
-    if (
-      stats &&
-      !stats.isPremium &&
-      stats.swipesToday >= stats.maxFreeSwipes
-    ) {
-      setShowSwipeLimitModal(true);
-      return;
-    }
+      // ✅ NOUVEAU : Bloquer si non-Premium et 20 swipes atteints
+      if (
+        stats &&
+        !stats.isPremium &&
+        stats.swipesToday >= stats.maxFreeSwipes
+      ) {
+        setShowSwipeLimitModal(true);
+        return;
+      }
 
-    const profile = profiles[currentIndex];
+      const profile = profiles[currentIndex];
 
       setAnimating(isLike ? "right" : "left");
       setCanRewind(true);
@@ -317,7 +316,7 @@ const [showSuperLikersModal, setShowSuperLikersModal] = useState(false);
         }, 20);
       }, 350);
     },
-    [currentIndex, profiles, animating]
+    [currentIndex, profiles, animating, stats]
   );
 
   const handleSuperLike = useCallback(async () => {
@@ -529,7 +528,6 @@ const [showSuperLikersModal, setShowSuperLikersModal] = useState(false);
   if (!currentProfile || currentIndex >= profiles.length) {
     return (
       <div className="fixed inset-0 bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex flex-col items-center justify-center p-6">
-        {/* ✅ FILTRES en haut même si vide */}
         <div className="w-full max-w-md mb-6">
           <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
             {filters.map((f) => (
@@ -606,7 +604,7 @@ const [showSuperLikersModal, setShowSuperLikersModal] = useState(false);
   return (
     <div className="fixed inset-0 bg-black lg:relative lg:min-h-screen lg:bg-gradient-to-br lg:from-slate-100 lg:to-rose-50 lg:flex lg:flex-col lg:items-center lg:justify-center lg:p-4">
 
-            {/* ✅ NOUVEAU : WIDGET LIKES EN DIRECT (avec preview floutée) */}
+      {/* WIDGET LIKES CACHÉS */}
       {stats && stats.pendingLikes > 0 && !currentUser?.isPremium && (
         <button
           onClick={() => setShowLikesRevealModal(true)}
@@ -620,14 +618,14 @@ const [showSuperLikersModal, setShowSuperLikersModal] = useState(false);
         </button>
       )}
 
-      {/* ✅ NOUVEAU : WIDGET SUPER LIKERS (bottom-left) */}
-      {stats && stats.recentSuperLikers.length > 0 && !currentUser?.isPremium && (
+      {/* WIDGET SUPER LIKERS */}
+      {stats && stats.recentSuperLikers && stats.recentSuperLikers.length > 0 && !currentUser?.isPremium && (
         <button
           onClick={() => setShowSuperLikersModal(true)}
           className="fixed bottom-40 lg:bottom-20 left-4 z-40 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-2xl p-3 shadow-2xl hover:scale-105 transition flex items-center gap-2"
         >
           <div className="flex -space-x-2">
-            {stats.recentSuperLikers.slice(0, 3).map((sl, i) => (
+            {stats.recentSuperLikers.slice(0, 3).map((sl) => (
               <div key={sl.id} className="w-8 h-8 rounded-full border-2 border-white overflow-hidden bg-slate-200">
                 {sl.photoUrl ? (
                   <img
@@ -650,19 +648,8 @@ const [showSuperLikersModal, setShowSuperLikersModal] = useState(false);
           </div>
         </button>
       )}
-        <Link
-          href="/likes-recus"
-          className="fixed top-16 lg:top-4 left-1/2 -translate-x-1/2 z-40 bg-gradient-to-r from-rose-500 to-pink-500 rounded-full px-4 py-2 shadow-2xl animate-pulse hover:scale-105 transition"
-        >
-          <p className="text-white text-xs font-bold flex items-center gap-2">
-            <Heart className="w-3.5 h-3.5 fill-white" />
-            {stats.pendingLikes} personne{stats.pendingLikes > 1 ? "s" : ""} t&apos;{stats.pendingLikes > 1 ? "ont" : "a"} liké !
-            <Lock className="w-3 h-3" />
-          </p>
-        </Link>
-      )}
 
-      {/* ✅ NOUVEAU : FILTRES RAPIDES (Desktop only) */}
+      {/* FILTRES RAPIDES (Desktop) */}
       <div className="hidden lg:flex gap-2 mb-4 max-w-[420px] w-full overflow-x-auto pb-2 scrollbar-hide">
         {filters.map((f) => (
           <button
@@ -684,147 +671,7 @@ const [showSuperLikersModal, setShowSuperLikersModal] = useState(false);
         ))}
       </div>
 
-      {/* MODALS (identiques à avant) */}
-      {showPremiumModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4">
-          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl">
-            <div className="text-center mb-6">
-              <div className="w-20 h-20 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full flex items-center justify-center mx-auto mb-4 shadow-xl">
-                {premiumFeature === "rewind" ? (
-                  <RotateCcw className="w-10 h-10 text-white" />
-                ) : (
-                  <MessageCircle className="w-10 h-10 text-white" />
-                )}
-              </div>
-              <h2 className="text-2xl font-black text-slate-900 mb-2">
-                Fonctionnalité Premium 👑
-              </h2>
-              <p className="text-slate-600">
-                {premiumFeature === "rewind"
-                  ? "Revenir au profil précédent est réservé aux membres Premium."
-                  : "Envoyer un message direct sans matcher est une fonctionnalité Premium."}
-              </p>
-            </div>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowPremiumModal(false)}
-                className="flex-1 px-4 py-3 border border-slate-200 rounded-xl font-semibold text-slate-700 hover:bg-slate-50 transition"
-              >
-                Fermer
-              </button>
-              <Link
-                href="/premium"
-                onClick={() => setShowPremiumModal(false)}
-                className="flex-1 px-4 py-3 bg-gradient-to-r from-yellow-500 to-orange-500 text-white rounded-xl font-bold hover:shadow-lg transition flex items-center justify-center gap-2"
-              >
-                <Gem className="w-4 h-4" />
-                Premium
-              </Link>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showLimitModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4">
-          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl">
-            <div className="text-center mb-6">
-              <div className="w-20 h-20 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full flex items-center justify-center mx-auto mb-4 shadow-xl">
-                <Lock className="w-10 h-10 text-white" />
-              </div>
-              <h2 className="text-2xl font-black text-slate-900 mb-2">
-                Plus de Super Likes ! ⭐
-              </h2>
-              <p className="text-slate-600">
-                {superLikeStatus?.isPremium ? (
-                  <>Tu as utilisé tes <strong>{superLikeStatus.limit} Super Likes</strong> aujourd&apos;hui.</>
-                ) : (
-                  <>Passe Premium pour avoir 5 Super Likes/jour !</>
-                )}
-              </p>
-            </div>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowLimitModal(false)}
-                className="flex-1 px-4 py-3 border border-slate-200 rounded-xl font-semibold text-slate-700 hover:bg-slate-50"
-              >
-                Fermer
-              </button>
-              {!superLikeStatus?.isPremium && (
-                <Link
-                  href="/premium"
-                  onClick={() => setShowLimitModal(false)}
-                  className="flex-1 px-4 py-3 bg-gradient-to-r from-yellow-500 to-orange-500 text-white rounded-xl font-bold flex items-center justify-center gap-2"
-                >
-                  <Gem className="w-4 h-4" />
-                  Premium
-                </Link>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showReportModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4">
-          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
-                <AlertTriangle className="w-6 h-6 text-red-600" />
-              </div>
-              <div>
-                <h2 className="text-xl font-bold text-slate-900">Signaler</h2>
-                <p className="text-sm text-slate-500">{currentProfile.firstName}</p>
-              </div>
-            </div>
-            <div className="space-y-2 mb-4">
-              {reportReasons.map((reason) => (
-                <label
-                  key={reason.value}
-                  className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition ${
-                    selectedReason === reason.value
-                      ? "border-red-400 bg-red-50"
-                      : "border-slate-200 hover:bg-slate-50"
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="reason"
-                    value={reason.value}
-                    checked={selectedReason === reason.value}
-                    onChange={(e) => setSelectedReason(e.target.value)}
-                    className="accent-red-500"
-                  />
-                  <span className="text-sm font-medium text-slate-700">{reason.label}</span>
-                </label>
-              ))}
-            </div>
-            <textarea
-              value={reportDetails}
-              onChange={(e) => setReportDetails(e.target.value)}
-              placeholder="Détails (optionnel)..."
-              rows={3}
-              className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm resize-none mb-4"
-            />
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowReportModal(false)}
-                className="flex-1 px-4 py-3 border border-slate-200 rounded-xl font-semibold text-slate-700"
-              >
-                Annuler
-              </button>
-              <button
-                onClick={handleReport}
-                disabled={sendingReport || !selectedReason}
-                className="flex-1 px-4 py-3 bg-red-500 text-white rounded-xl font-semibold disabled:opacity-50"
-              >
-                {sendingReport ? "Envoi..." : "Signaler"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      {/* ✅ NOUVELLE MODALE : LIMITE SWIPES ATTEINTE */}
+      {/* MODALE : LIMITE SWIPES */}
       {showSwipeLimitModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 p-4">
           <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl">
@@ -882,7 +729,7 @@ const [showSuperLikersModal, setShowSuperLikersModal] = useState(false);
         </div>
       )}
 
-      {/* ✅ NOUVELLE MODALE : REVEAL LIKES CACHÉS */}
+      {/* MODALE : REVEAL LIKES CACHÉS */}
       {showLikesRevealModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 p-4">
           <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl">
@@ -897,7 +744,6 @@ const [showSuperLikersModal, setShowSuperLikersModal] = useState(false);
                 Découvre qui te trouve irrésistible !
               </p>
 
-              {/* Preview floutée des likers */}
               <div className="grid grid-cols-3 gap-2 mb-4">
                 {[1, 2, 3].map((i) => (
                   <div
@@ -951,7 +797,7 @@ const [showSuperLikersModal, setShowSuperLikersModal] = useState(false);
         </div>
       )}
 
-      {/* ✅ NOUVELLE MODALE : SUPER LIKERS */}
+      {/* MODALE : SUPER LIKERS */}
       {showSuperLikersModal && stats && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 p-4">
           <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl">
@@ -966,7 +812,6 @@ const [showSuperLikersModal, setShowSuperLikersModal] = useState(false);
                 Un Super Like = coup de foudre ! Ne rate pas cette chance !
               </p>
 
-              {/* Preview floutée super likers */}
               <div className="flex justify-center gap-3 mb-4">
                 {stats.recentSuperLikers.slice(0, 3).map((sl) => (
                   <div key={sl.id} className="relative">
@@ -1019,6 +864,154 @@ const [showSuperLikersModal, setShowSuperLikersModal] = useState(false);
           </div>
         </div>
       )}
+
+      {/* MODAL PREMIUM */}
+      {showPremiumModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl">
+            <div className="text-center mb-6">
+              <div className="w-20 h-20 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full flex items-center justify-center mx-auto mb-4 shadow-xl">
+                {premiumFeature === "rewind" ? (
+                  <RotateCcw className="w-10 h-10 text-white" />
+                ) : (
+                  <MessageCircle className="w-10 h-10 text-white" />
+                )}
+              </div>
+              <h2 className="text-2xl font-black text-slate-900 mb-2">
+                Fonctionnalité Premium 👑
+              </h2>
+              <p className="text-slate-600">
+                {premiumFeature === "rewind"
+                  ? "Revenir au profil précédent est réservé aux membres Premium."
+                  : "Envoyer un message direct sans matcher est une fonctionnalité Premium."}
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowPremiumModal(false)}
+                className="flex-1 px-4 py-3 border border-slate-200 rounded-xl font-semibold text-slate-700 hover:bg-slate-50 transition"
+              >
+                Fermer
+              </button>
+              <Link
+                href="/premium"
+                onClick={() => setShowPremiumModal(false)}
+                className="flex-1 px-4 py-3 bg-gradient-to-r from-yellow-500 to-orange-500 text-white rounded-xl font-bold hover:shadow-lg transition flex items-center justify-center gap-2"
+              >
+                <Gem className="w-4 h-4" />
+                Premium
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL LIMITE SUPER LIKE */}
+      {showLimitModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl">
+            <div className="text-center mb-6">
+              <div className="w-20 h-20 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full flex items-center justify-center mx-auto mb-4 shadow-xl">
+                <Lock className="w-10 h-10 text-white" />
+              </div>
+              <h2 className="text-2xl font-black text-slate-900 mb-2">
+                Plus de Super Likes ! ⭐
+              </h2>
+              <p className="text-slate-600">
+                {superLikeStatus?.isPremium ? (
+                  <>Tu as utilisé tes <strong>{superLikeStatus.limit} Super Likes</strong> aujourd&apos;hui.</>
+                ) : (
+                  <>Passe Premium pour avoir 5 Super Likes/jour !</>
+                )}
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowLimitModal(false)}
+                className="flex-1 px-4 py-3 border border-slate-200 rounded-xl font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Fermer
+              </button>
+              {!superLikeStatus?.isPremium && (
+                <Link
+                  href="/premium"
+                  onClick={() => setShowLimitModal(false)}
+                  className="flex-1 px-4 py-3 bg-gradient-to-r from-yellow-500 to-orange-500 text-white rounded-xl font-bold flex items-center justify-center gap-2"
+                >
+                  <Gem className="w-4 h-4" />
+                  Premium
+                </Link>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL SIGNALEMENT */}
+      {showReportModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
+                <AlertTriangle className="w-6 h-6 text-red-600" />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-slate-900">Signaler</h2>
+                <p className="text-sm text-slate-500">{currentProfile.firstName}</p>
+              </div>
+            </div>
+
+            <div className="space-y-2 mb-4">
+              {reportReasons.map((reason) => (
+                <label
+                  key={reason.value}
+                  className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition ${
+                    selectedReason === reason.value
+                      ? "border-red-400 bg-red-50"
+                      : "border-slate-200 hover:bg-slate-50"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="reason"
+                    value={reason.value}
+                    checked={selectedReason === reason.value}
+                    onChange={(e) => setSelectedReason(e.target.value)}
+                    className="accent-red-500"
+                  />
+                  <span className="text-sm font-medium text-slate-700">{reason.label}</span>
+                </label>
+              ))}
+            </div>
+
+            <textarea
+              value={reportDetails}
+              onChange={(e) => setReportDetails(e.target.value)}
+              placeholder="Détails (optionnel)..."
+              rows={3}
+              className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm resize-none mb-4"
+            />
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowReportModal(false)}
+                className="flex-1 px-4 py-3 border border-slate-200 rounded-xl font-semibold text-slate-700"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={handleReport}
+                disabled={sendingReport || !selectedReason}
+                className="flex-1 px-4 py-3 bg-red-500 text-white rounded-xl font-semibold disabled:opacity-50"
+              >
+                {sendingReport ? "Envoi..." : "Signaler"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MATCH POPUP */}
       {matchPopup && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90">
           <div className="bg-white rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl mx-4">
@@ -1190,7 +1183,6 @@ const [showSuperLikersModal, setShowSuperLikersModal] = useState(false);
 
         <div className="absolute bottom-0 left-0 right-0 h-80 bg-gradient-to-t from-black via-black/70 to-transparent pointer-events-none z-10" />
 
-        {/* INFOS UTILISATEUR */}
         <div className="absolute bottom-48 lg:bottom-28 left-4 right-4 text-white z-20">
           <div className="flex items-center gap-2 mb-3">
             <div className={`w-2.5 h-2.5 rounded-full ${status.color} animate-pulse`} />
@@ -1224,7 +1216,6 @@ const [showSuperLikersModal, setShowSuperLikersModal] = useState(false);
               </p>
             )}
 
-            {/* ✅ NOUVEAU : MATCH PREDICTION */}
             {currentProfile.compatibility > 60 && (
               <div className="mt-2 inline-flex items-center gap-1.5 bg-gradient-to-r from-rose-500 to-pink-500 rounded-full px-3 py-1 text-xs font-black text-white shadow-lg">
                 <Heart className="w-3 h-3 fill-white" />
@@ -1232,7 +1223,6 @@ const [showSuperLikersModal, setShowSuperLikersModal] = useState(false);
               </div>
             )}
 
-            {/* ✅ NOUVEAU : INTÉRÊTS COMMUNS SURLIGNÉS */}
             {currentProfile.interests && (
               <div className="flex flex-wrap gap-1.5 mt-2">
                 {currentProfile.interests
@@ -1266,7 +1256,6 @@ const [showSuperLikersModal, setShowSuperLikersModal] = useState(false);
           </button>
         </div>
 
-        {/* 5 BOUTONS D'ACTION */}
         <div className="absolute bottom-24 lg:bottom-4 left-0 right-0 flex items-center justify-center gap-3 z-30 px-4">
           <button
             onClick={(e) => {
