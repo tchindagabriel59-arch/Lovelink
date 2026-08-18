@@ -25,8 +25,56 @@ function calculateDistance(
   return R * c;
 }
 
+// ✅ NOUVEAU : Calcul compatibilité basé sur intérêts communs
+function calculateCompatibility(
+  myInterests: string | null,
+  theirInterests: string | null
+): number {
+  if (!myInterests || !theirInterests) return 50;
+
+  const mine = myInterests
+    .toLowerCase()
+    .split(",")
+    .map((i) => i.trim())
+    .filter(Boolean);
+  const theirs = theirInterests
+    .toLowerCase()
+    .split(",")
+    .map((i) => i.trim())
+    .filter(Boolean);
+
+  if (mine.length === 0 || theirs.length === 0) return 50;
+
+  const commonCount = mine.filter((i) => theirs.includes(i)).length;
+  const totalUnique = new Set([...mine, ...theirs]).size;
+
+  // Score : 50% base + jusqu'à 50% selon intérêts communs
+  const score = 50 + Math.round((commonCount / totalUnique) * 50);
+  return Math.min(score, 99); // Max 99% (jamais 100)
+}
+
+// ✅ NOUVEAU : Récupérer intérêts communs
+function getCommonInterests(
+  myInterests: string | null,
+  theirInterests: string | null
+): string[] {
+  if (!myInterests || !theirInterests) return [];
+
+  const mine = myInterests
+    .toLowerCase()
+    .split(",")
+    .map((i) => i.trim())
+    .filter(Boolean);
+  const theirs = theirInterests
+    .toLowerCase()
+    .split(",")
+    .map((i) => i.trim())
+    .filter(Boolean);
+
+  return mine.filter((i) => theirs.includes(i));
+}
+
 export async function GET(req: NextRequest) {
-  // ✅ MONITORING : Capture le temps de départ
   const startTime = Date.now();
   const endpoint = "/api/discover";
   const method = "GET";
@@ -39,7 +87,6 @@ export async function GET(req: NextRequest) {
   try {
     const userId = await getCurrentUserId();
     if (!userId) {
-      // ✅ LOG : Erreur 401 - non autorisé
       logApiCall({
         endpoint,
         method,
@@ -49,14 +96,11 @@ export async function GET(req: NextRequest) {
         userAgent,
         ipAddress,
       });
-
       return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
     }
 
-    // 🔒 BLOQUER SI PAS DE PHOTO
     const photoCheck = await requirePhoto(userId);
     if (photoCheck) {
-      // ✅ LOG : Bloqué car pas de photo
       logApiCall({
         endpoint,
         method,
@@ -67,11 +111,13 @@ export async function GET(req: NextRequest) {
         userAgent,
         ipAddress,
       });
-
       return photoCheck;
     }
 
-    // ⚡ OPTIMISATION CRITIQUE : Lancer les 6 requêtes EN PARALLÈLE
+    // ✅ AJOUT : Récupérer le filtre depuis l'URL
+    const url = new URL(req.url);
+    const filter = url.searchParams.get("filter") || "all"; // all, verified, online, premium, new
+
     const [
       [currentUser],
       alreadyActed,
@@ -89,6 +135,7 @@ export async function GET(req: NextRequest) {
           prefMaxDistance: users.prefMaxDistance,
           latitude: users.latitude,
           longitude: users.longitude,
+          interests: users.interests, // ✅ AJOUT : Mes intérêts
         })
         .from(users)
         .where(eq(users.id, userId))
@@ -123,12 +170,7 @@ export async function GET(req: NextRequest) {
       db
         .select({ fromUserId: likes.fromUserId })
         .from(likes)
-        .where(
-          and(
-            eq(likes.toUserId, userId),
-            eq(likes.isLike, true)
-          )
-        ),
+        .where(and(eq(likes.toUserId, userId), eq(likes.isLike, true))),
     ]);
 
     const prefGender = currentUser?.prefGender || "all";
@@ -138,13 +180,13 @@ export async function GET(req: NextRequest) {
     const prefMaxDistance = currentUser?.prefMaxDistance || 999999;
     const userLat = currentUser?.latitude;
     const userLon = currentUser?.longitude;
+    const myInterests = currentUser?.interests || null; // ✅ AJOUT
 
     const excludeIds = alreadyActed.map((r) => r.toUserId);
     excludeIds.push(userId);
 
     const iBlocked = myBlocks.map((b) => b.blockedUserId);
     const blockedMe = blockedByOthers.map((b) => b.blockerUserId);
-
     excludeIds.push(...iBlocked, ...blockedMe);
 
     const superLikerIds = superLikersReceived.map((s) => s.fromUserId);
@@ -155,12 +197,16 @@ export async function GET(req: NextRequest) {
       now.getFullYear() - prefAgeMin,
       now.getMonth(),
       now.getDate()
-    ).toISOString().split("T")[0];
+    )
+      .toISOString()
+      .split("T")[0];
     const minBirthDate = new Date(
       now.getFullYear() - prefAgeMax - 1,
       now.getMonth(),
       now.getDate()
-    ).toISOString().split("T")[0];
+    )
+      .toISOString()
+      .split("T")[0];
 
     const conditions = [
       notInArray(users.id, excludeIds),
@@ -170,11 +216,16 @@ export async function GET(req: NextRequest) {
       gte(users.birthDate, minBirthDate),
       isNotNull(users.photoUrl),
       ne(users.photoUrl, ""),
+      // ✅ FIX BUG : Vérifier que l'URL commence par http (pas cassée)
+      sql`${users.photoUrl} LIKE 'http%'`,
     ];
 
     if (prefGender !== "all") {
       conditions.push(
-        eq(users.gender, prefGender as "male" | "female" | "non_binary" | "other")
+        eq(
+          users.gender,
+          prefGender as "male" | "female" | "non_binary" | "other"
+        )
       );
     }
 
@@ -185,6 +236,18 @@ export async function GET(req: NextRequest) {
           prefLookingFor as "relationship" | "friendship" | "casual" | "marriage"
         )
       );
+    }
+
+    // ✅ AJOUT : Filtres rapides
+    if (filter === "verified") {
+      conditions.push(eq(users.isVerified, true));
+    } else if (filter === "online") {
+      conditions.push(eq(users.isOnline, true));
+    } else if (filter === "premium") {
+      conditions.push(eq(users.isPremium, true));
+    } else if (filter === "new") {
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      conditions.push(gte(users.createdAt, sevenDaysAgo));
     }
 
     const allProfiles = await db
@@ -236,11 +299,18 @@ export async function GET(req: NextRequest) {
           calculateDistance(userLat, userLon, p.latitude, p.longitude)
         );
       }
+
+      // ✅ AJOUT : Calcul compatibilité + intérêts communs
+      const compatibility = calculateCompatibility(myInterests, p.interests);
+      const commonInterests = getCommonInterests(myInterests, p.interests);
+
       return {
         ...p,
         distance,
         hasLikedMe: likerIds.includes(p.id),
         hasSuperLikedMe: superLikerIds.includes(p.id),
+        compatibility, // ✅ NOUVEAU
+        commonInterests, // ✅ NOUVEAU
       };
     });
 
@@ -250,7 +320,7 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // Tri : Boostés d'abord, puis Super Likes, puis Likes, puis reste
+    // Tri : Boostés > SuperLikes > Likes > Compatibilité élevée > reste
     const nowDate = new Date();
     profilesWithDistance.sort((a, b) => {
       const aBoost = a.boostEndAt ? new Date(a.boostEndAt) > nowDate : false;
@@ -263,24 +333,24 @@ export async function GET(req: NextRequest) {
 
       if (a.hasLikedMe && !b.hasLikedMe) return -1;
       if (!a.hasLikedMe && b.hasLikedMe) return 1;
-      return 0;
+
+      // ✅ AJOUT : Tri par compatibilité en dernier
+      return b.compatibility - a.compatibility;
     });
 
     const profiles = profilesWithDistance.slice(0, 20);
 
-    // ✅ LOG : Succès 200 - profils récupérés
     logApiCall({
       endpoint,
       method,
       statusCode: 200,
       durationMs: Date.now() - startTime,
       userId,
-      errorMessage: `${profiles.length} profils retournés`,
+      errorMessage: `${profiles.length} profils retournés (filter: ${filter})`,
       userAgent,
       ipAddress,
     });
 
-    // ⚡ Cache navigateur de 15 secondes
     return NextResponse.json(
       { profiles },
       {
@@ -293,7 +363,6 @@ export async function GET(req: NextRequest) {
     console.error("Discover error:", error);
     const errorMessage = error instanceof Error ? error.message : String(error);
 
-    // ✅ LOG : Erreur 500 - erreur serveur
     logApiCall({
       endpoint,
       method,
