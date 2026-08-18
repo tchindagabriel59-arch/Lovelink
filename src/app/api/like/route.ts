@@ -18,7 +18,6 @@ const SUPER_LIKE_LIMITS = {
 // GET : Récupérer le statut des Super Likes
 // ═══════════════════════════════════════
 export async function GET(req: NextRequest) {
-  // ✅ MONITORING
   const startTime = Date.now();
   const endpoint = "/api/like";
   const method = "GET";
@@ -40,7 +39,6 @@ export async function GET(req: NextRequest) {
         userAgent,
         ipAddress,
       });
-
       return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
     }
 
@@ -71,8 +69,8 @@ export async function GET(req: NextRequest) {
     const limit = isPremium ? SUPER_LIKE_LIMITS.premium : SUPER_LIKE_LIMITS.free;
     const used = todaySuperLikes.length;
     const remaining = Math.max(0, limit - used);
+    const canSuperLike = remaining > 0; // ✅ AJOUT
 
-    // ✅ LOG : Succès 200
     logApiCall({
       endpoint,
       method,
@@ -84,11 +82,13 @@ export async function GET(req: NextRequest) {
       ipAddress,
     });
 
+    // ✅ FIX BUG : Renommer les champs pour matcher le frontend
     return NextResponse.json({
-      superLikesUsed: used,
-      superLikesLimit: limit,
-      superLikesRemaining: remaining,
       isPremium,
+      used,           // ✅ Renommé (était superLikesUsed)
+      limit,          // ✅ Renommé (était superLikesLimit)
+      remaining,      // ✅ Renommé (était superLikesRemaining)
+      canSuperLike,   // ✅ AJOUT : Champ manquant
     });
   } catch (error) {
     console.error("Erreur GET like:", error);
@@ -112,7 +112,6 @@ export async function GET(req: NextRequest) {
 // POST : Créer un like / super like / dislike
 // ═══════════════════════════════════════
 export async function POST(req: NextRequest) {
-  // ✅ MONITORING
   const startTime = Date.now();
   const endpoint = "/api/like";
   const method = "POST";
@@ -134,11 +133,9 @@ export async function POST(req: NextRequest) {
         userAgent,
         ipAddress,
       });
-
       return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
     }
 
-    // 🔒 BLOQUER SI PAS DE PHOTO
     const photoCheck = await requirePhoto(userId);
     if (photoCheck) {
       logApiCall({
@@ -151,7 +148,6 @@ export async function POST(req: NextRequest) {
         userAgent,
         ipAddress,
       });
-
       return photoCheck;
     }
 
@@ -168,7 +164,6 @@ export async function POST(req: NextRequest) {
         userAgent,
         ipAddress,
       });
-
       return NextResponse.json({ error: "Données manquantes" }, { status: 400 });
     }
 
@@ -225,7 +220,6 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Vérifier si déjà liké
     const existingLike = await db
       .select()
       .from(likes)
@@ -248,11 +242,9 @@ export async function POST(req: NextRequest) {
         userAgent,
         ipAddress,
       });
-
       return NextResponse.json({ error: "Déjà liké" }, { status: 400 });
     }
 
-    // Récupérer infos de l'auteur du like
     const fromUser = await db
       .select()
       .from(users)
@@ -261,7 +253,6 @@ export async function POST(req: NextRequest) {
 
     const fromUserData = fromUser[0];
 
-    // Insérer le like
     await db.insert(likes).values({
       fromUserId: userId,
       toUserId,
@@ -273,7 +264,6 @@ export async function POST(req: NextRequest) {
     let matchId: number | null = null;
 
     if (isLike) {
-      // Vérifier si like mutuel (match)
       const mutualLike = await db
         .select()
         .from(likes)
@@ -287,7 +277,6 @@ export async function POST(req: NextRequest) {
         .limit(1);
 
       if (mutualLike.length > 0) {
-        // Vérifier si match déjà existant
         const existingMatch = await db
           .select()
           .from(matches)
@@ -300,7 +289,6 @@ export async function POST(req: NextRequest) {
           .limit(1);
 
         if (existingMatch.length === 0) {
-          // Créer le match
           const newMatch = await db
             .insert(matches)
             .values({
@@ -312,7 +300,6 @@ export async function POST(req: NextRequest) {
           matchCreated = true;
           matchId = newMatch[0]?.id ?? null;
 
-          // Récupérer infos du destinataire
           const toUser = await db
             .select()
             .from(users)
@@ -321,7 +308,6 @@ export async function POST(req: NextRequest) {
 
           const toUserData = toUser[0];
 
-          // Notification in-app pour les 2
           await createNotification({
             userId: toUserId,
             type: "match",
@@ -336,7 +322,6 @@ export async function POST(req: NextRequest) {
             content: `🎉 Vous avez un nouveau match avec ${toUserData?.firstName ?? "quelqu'un"} !`,
           });
 
-          // 🔔 Push notification MATCH aux 2 utilisateurs
           await sendPushToUser(
             toUserId,
             PushTemplates.match(fromUserData?.firstName ?? "Quelqu'un")
@@ -347,7 +332,6 @@ export async function POST(req: NextRequest) {
             PushTemplates.match(toUserData?.firstName ?? "Quelqu'un")
           );
 
-          // 📧 EMAIL MATCH
           if (toUserData?.email && fromUserData?.firstName) {
             sendMatchEmail(
               toUserData.email,
@@ -357,7 +341,6 @@ export async function POST(req: NextRequest) {
           }
         }
       } else {
-        // Pas de match → notif like simple ou super like
         if (isSuperLike) {
           await createNotification({
             userId: toUserId,
@@ -386,7 +369,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // ✅ LOG : Succès 200 - action réalisée
+    // ✅ FIX BUG : Renommer matchCreated → isMatch pour matcher le frontend
     const actionLabel = matchCreated
       ? `💕 MATCH créé avec user ${toUserId}!`
       : isLike
@@ -409,6 +392,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       matchCreated,
+      isMatch: matchCreated, // ✅ AJOUT : Champ que le frontend attend
       matchId,
     });
   } catch (error) {
