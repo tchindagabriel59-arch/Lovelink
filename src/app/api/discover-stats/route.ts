@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { likes, matches, users } from "@/db/schema";
-import { eq, and, or, gte, count, notInArray, sql, inArray, desc } from "drizzle-orm";
+import { eq, and, or, gte, count, notInArray, sql, desc } from "drizzle-orm";
 import { getCurrentUserId } from "@/lib/auth";
 
 export async function GET() {
@@ -19,9 +19,9 @@ export async function GET() {
       superLikesToday,
       matchesForExclusion,
       actionsForExclusion,
-      swipesTodayResult,        // ✅ NOUVEAU : Nombre de swipes aujourd'hui
-      superLikersData,          // ✅ NOUVEAU : Liste des super likers récents
-      currentUserData,          // ✅ NOUVEAU : Info Premium
+      likesGivenTodayResult, // ✅ MODIFIÉ : Ne compte QUE les LIKES (pas les pass)
+      superLikersData,
+      currentUserData,
     ] = await Promise.all([
       db
         .select({ c: count() })
@@ -56,18 +56,18 @@ export async function GET() {
         .from(likes)
         .where(eq(likes.fromUserId, userId)),
 
-      // ✅ NOUVEAU : Compter mes swipes aujourd'hui
+      // ✅ MODIFIÉ : Compter UNIQUEMENT les LIKES donnés (pas les pass)
       db
         .select({ c: count() })
         .from(likes)
         .where(
           and(
             eq(likes.fromUserId, userId),
+            eq(likes.isLike, true), // ← IMPORTANT : Uniquement les likes
             gte(likes.createdAt, oneDayAgo)
           )
         ),
 
-      // ✅ NOUVEAU : Récupérer les 3 derniers super likers avec photos
       db
         .select({
           id: users.id,
@@ -88,7 +88,6 @@ export async function GET() {
         .orderBy(desc(likes.createdAt))
         .limit(3),
 
-      // ✅ NOUVEAU : Vérifier si l'utilisateur est Premium
       db
         .select({ isPremium: users.isPremium })
         .from(users)
@@ -96,7 +95,7 @@ export async function GET() {
         .limit(1),
     ]);
 
-    // Calculer pending likes (comme avant)
+    // Calculer pending likes
     const matchedUserIds = matchesForExclusion.map((m) =>
       m.user1Id === userId ? m.user2Id : m.user1Id
     );
@@ -118,7 +117,6 @@ export async function GET() {
         )
       );
 
-    // Filtrer les super likers non déjà traités
     const filteredSuperLikers = superLikersData.filter(
       (sl) => !excludeIds.includes(sl.id)
     );
@@ -128,11 +126,10 @@ export async function GET() {
         likesToday: likesToday[0]?.c || 0,
         superLikesToday: superLikesToday[0]?.c || 0,
         pendingLikes: pendingLikesResult[0]?.c || 0,
-        // ✅ NOUVEAU : Info sur les swipes du jour
-        swipesToday: swipesTodayResult[0]?.c || 0,
-        maxFreeSwipes: 20, // Limite pour non-Premium
+        // ✅ MODIFIÉ : Renommé pour clarté (likesGivenToday au lieu de swipesToday)
+        likesGivenToday: likesGivenTodayResult[0]?.c || 0,
+        maxFreeLikes: 20, // Limite likes gratuits par jour
         isPremium: currentUserData[0]?.isPremium || false,
-        // ✅ NOUVEAU : Super likers récents (avec photos)
         recentSuperLikers: filteredSuperLikers.map((sl) => ({
           id: sl.id,
           firstName: sl.firstName,
