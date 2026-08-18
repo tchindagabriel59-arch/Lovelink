@@ -22,6 +22,7 @@ import {
   Filter,
   CheckCircle2,
   Zap,
+  Eye,
 } from "lucide-react";
 
 interface Profile {
@@ -74,6 +75,14 @@ interface DiscoverStats {
   likesToday: number;
   superLikesToday: number;
   pendingLikes: number;
+  swipesToday: number;
+  maxFreeSwipes: number;
+  isPremium: boolean;
+  recentSuperLikers: {
+    id: number;
+    firstName: string;
+    photoUrl: string | null;
+  }[];
 }
 
 type FilterType = "all" | "verified" | "online" | "premium" | "new";
@@ -176,6 +185,10 @@ export default function DiscoverPage() {
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [showPremiumModal, setShowPremiumModal] = useState(false);
   const [premiumFeature, setPremiumFeature] = useState<string>("");
+  // ✅ NOUVEAU : États pour features Premium
+const [showSwipeLimitModal, setShowSwipeLimitModal] = useState(false);
+const [showLikesRevealModal, setShowLikesRevealModal] = useState(false);
+const [showSuperLikersModal, setShowSuperLikersModal] = useState(false);
 
   const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
@@ -262,9 +275,20 @@ export default function DiscoverPage() {
   }, [currentIndex, profiles]);
 
   const handleAction = useCallback(
-    async (isLike: boolean) => {
-      if (currentIndex >= profiles.length || animating) return;
-      const profile = profiles[currentIndex];
+  async (isLike: boolean) => {
+    if (currentIndex >= profiles.length || animating) return;
+
+    // ✅ NOUVEAU : Bloquer si non-Premium et 20 swipes atteints
+    if (
+      stats &&
+      !stats.isPremium &&
+      stats.swipesToday >= stats.maxFreeSwipes
+    ) {
+      setShowSwipeLimitModal(true);
+      return;
+    }
+
+    const profile = profiles[currentIndex];
 
       setAnimating(isLike ? "right" : "left");
       setCanRewind(true);
@@ -582,8 +606,50 @@ export default function DiscoverPage() {
   return (
     <div className="fixed inset-0 bg-black lg:relative lg:min-h-screen lg:bg-gradient-to-br lg:from-slate-100 lg:to-rose-50 lg:flex lg:flex-col lg:items-center lg:justify-center lg:p-4">
 
-      {/* ✅ NOUVEAU : WIDGET LIKES DU JOUR */}
+            {/* ✅ NOUVEAU : WIDGET LIKES EN DIRECT (avec preview floutée) */}
       {stats && stats.pendingLikes > 0 && !currentUser?.isPremium && (
+        <button
+          onClick={() => setShowLikesRevealModal(true)}
+          className="fixed top-16 lg:top-4 left-1/2 -translate-x-1/2 z-40 bg-gradient-to-r from-rose-500 to-pink-500 rounded-full px-4 py-2 shadow-2xl animate-pulse hover:scale-105 transition"
+        >
+          <p className="text-white text-xs font-bold flex items-center gap-2">
+            <Heart className="w-3.5 h-3.5 fill-white" />
+            {stats.pendingLikes} nouveau{stats.pendingLikes > 1 ? "x" : ""} like{stats.pendingLikes > 1 ? "s" : ""} caché{stats.pendingLikes > 1 ? "s" : ""}
+            <Lock className="w-3 h-3" />
+          </p>
+        </button>
+      )}
+
+      {/* ✅ NOUVEAU : WIDGET SUPER LIKERS (bottom-left) */}
+      {stats && stats.recentSuperLikers.length > 0 && !currentUser?.isPremium && (
+        <button
+          onClick={() => setShowSuperLikersModal(true)}
+          className="fixed bottom-40 lg:bottom-20 left-4 z-40 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-2xl p-3 shadow-2xl hover:scale-105 transition flex items-center gap-2"
+        >
+          <div className="flex -space-x-2">
+            {stats.recentSuperLikers.slice(0, 3).map((sl, i) => (
+              <div key={sl.id} className="w-8 h-8 rounded-full border-2 border-white overflow-hidden bg-slate-200">
+                {sl.photoUrl ? (
+                  <img
+                    src={sl.photoUrl}
+                    alt=""
+                    className="w-full h-full object-cover blur-sm"
+                  />
+                ) : (
+                  <div className="w-full h-full bg-gradient-to-br from-slate-300 to-slate-400" />
+                )}
+              </div>
+            ))}
+          </div>
+          <div className="text-white text-left">
+            <p className="text-[10px] font-bold flex items-center gap-1">
+              <Star className="w-3 h-3 fill-white" />
+              SUPER LIKÉ
+            </p>
+            <p className="text-xs font-black">Voir qui →</p>
+          </div>
+        </button>
+      )}
         <Link
           href="/likes-recus"
           className="fixed top-16 lg:top-4 left-1/2 -translate-x-1/2 z-40 bg-gradient-to-r from-rose-500 to-pink-500 rounded-full px-4 py-2 shadow-2xl animate-pulse hover:scale-105 transition"
@@ -758,7 +824,201 @@ export default function DiscoverPage() {
           </div>
         </div>
       )}
+      {/* ✅ NOUVELLE MODALE : LIMITE SWIPES ATTEINTE */}
+      {showSwipeLimitModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 p-4">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl">
+            <div className="text-center mb-6">
+              <div className="w-24 h-24 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full flex items-center justify-center mx-auto mb-4 shadow-xl animate-pulse">
+                <Zap className="w-12 h-12 text-white fill-white" />
+              </div>
+              <h2 className="text-3xl font-black text-slate-900 mb-2">
+                Tu es en feu ! 🔥
+              </h2>
+              <p className="text-slate-600 mb-4">
+                Tu as swippé <strong>{stats?.swipesToday || 0} profils</strong> aujourd&apos;hui !
+              </p>
+              <div className="bg-gradient-to-br from-yellow-50 to-orange-50 rounded-2xl p-4 border-2 border-yellow-200 mb-4">
+                <p className="text-sm font-bold text-slate-800 mb-2">
+                  ⭐ Passe Premium pour :
+                </p>
+                <ul className="space-y-2 text-sm text-slate-700 text-left">
+                  <li className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0" />
+                    <span>Swipes ILLIMITÉS 🚀</span>
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0" />
+                    <span>Voir qui t&apos;a liké 👀</span>
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0" />
+                    <span>5 Super Likes par jour ⭐</span>
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0" />
+                    <span>Boosts 3x par jour 🚀</span>
+                  </li>
+                </ul>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowSwipeLimitModal(false)}
+                className="flex-1 px-4 py-3 border border-slate-200 rounded-xl font-semibold text-slate-700 hover:bg-slate-50 transition"
+              >
+                Plus tard
+              </button>
+              <Link
+                href="/premium"
+                onClick={() => setShowSwipeLimitModal(false)}
+                className="flex-1 px-4 py-3 bg-gradient-to-r from-yellow-500 to-orange-500 text-white rounded-xl font-black hover:shadow-lg transition flex items-center justify-center gap-2"
+              >
+                <Gem className="w-4 h-4" />
+                Débloquer
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
 
+      {/* ✅ NOUVELLE MODALE : REVEAL LIKES CACHÉS */}
+      {showLikesRevealModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 p-4">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl">
+            <div className="text-center mb-6">
+              <div className="w-24 h-24 bg-gradient-to-br from-rose-500 to-pink-500 rounded-full flex items-center justify-center mx-auto mb-4 shadow-xl">
+                <Heart className="w-12 h-12 text-white fill-white" />
+              </div>
+              <h2 className="text-3xl font-black text-slate-900 mb-2">
+                {stats?.pendingLikes} {stats && stats.pendingLikes > 1 ? "personnes ont" : "personne a"} craqué sur toi ! 💕
+              </h2>
+              <p className="text-slate-600 mb-4">
+                Découvre qui te trouve irrésistible !
+              </p>
+
+              {/* Preview floutée des likers */}
+              <div className="grid grid-cols-3 gap-2 mb-4">
+                {[1, 2, 3].map((i) => (
+                  <div
+                    key={i}
+                    className="aspect-square rounded-xl bg-gradient-to-br from-rose-200 to-pink-300 relative overflow-hidden"
+                  >
+                    <div className="absolute inset-0 bg-white/30 backdrop-blur-2xl flex items-center justify-center">
+                      <Lock className="w-8 h-8 text-white/80" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="bg-gradient-to-br from-rose-50 to-pink-50 rounded-2xl p-4 border-2 border-rose-200">
+                <p className="text-sm font-bold text-slate-800 mb-2">
+                  ✨ Avec Premium tu vas :
+                </p>
+                <ul className="space-y-2 text-sm text-slate-700 text-left">
+                  <li className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0" />
+                    <span>Voir toutes les personnes qui t&apos;aiment 👀</span>
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0" />
+                    <span>Matcher directement (1 clic) ⚡</span>
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0" />
+                    <span>Gagner du temps 🕐</span>
+                  </li>
+                </ul>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowLikesRevealModal(false)}
+                className="flex-1 px-4 py-3 border border-slate-200 rounded-xl font-semibold text-slate-700 hover:bg-slate-50 transition"
+              >
+                Plus tard
+              </button>
+              <Link
+                href="/premium"
+                onClick={() => setShowLikesRevealModal(false)}
+                className="flex-1 px-4 py-3 bg-gradient-to-r from-rose-500 to-pink-500 text-white rounded-xl font-black hover:shadow-lg transition flex items-center justify-center gap-2"
+              >
+                <Eye className="w-4 h-4" />
+                Voir qui !
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ✅ NOUVELLE MODALE : SUPER LIKERS */}
+      {showSuperLikersModal && stats && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 p-4">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl">
+            <div className="text-center mb-6">
+              <div className="w-24 h-24 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-full flex items-center justify-center mx-auto mb-4 shadow-xl animate-pulse">
+                <Star className="w-12 h-12 text-white fill-white" />
+              </div>
+              <h2 className="text-3xl font-black text-slate-900 mb-2">
+                {stats.recentSuperLikers.length} personne{stats.recentSuperLikers.length > 1 ? "s" : ""} t&apos;{stats.recentSuperLikers.length > 1 ? "ont" : "a"} Super Liké ! ⭐
+              </h2>
+              <p className="text-slate-600 mb-4">
+                Un Super Like = coup de foudre ! Ne rate pas cette chance !
+              </p>
+
+              {/* Preview floutée super likers */}
+              <div className="flex justify-center gap-3 mb-4">
+                {stats.recentSuperLikers.slice(0, 3).map((sl) => (
+                  <div key={sl.id} className="relative">
+                    <div className="w-24 h-24 rounded-2xl overflow-hidden border-4 border-blue-500 shadow-xl">
+                      {sl.photoUrl ? (
+                        <img
+                          src={sl.photoUrl}
+                          alt=""
+                          className="w-full h-full object-cover blur-md"
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-gradient-to-br from-blue-300 to-cyan-400" />
+                      )}
+                    </div>
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <Lock className="w-8 h-8 text-white drop-shadow-2xl" />
+                    </div>
+                    <p className="text-xs font-bold text-slate-700 mt-2">
+                      {sl.firstName.charAt(0)}***
+                    </p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="bg-gradient-to-br from-blue-50 to-cyan-50 rounded-2xl p-4 border-2 border-blue-200">
+                <p className="text-sm font-black text-blue-900 mb-2">
+                  ⭐ Un Super Like = 3x plus de chances de match !
+                </p>
+                <p className="text-xs text-slate-700">
+                  Passe Premium pour voir qui te trouve exceptionnel(le) !
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowSuperLikersModal(false)}
+                className="flex-1 px-4 py-3 border border-slate-200 rounded-xl font-semibold text-slate-700 hover:bg-slate-50 transition"
+              >
+                Plus tard
+              </button>
+              <Link
+                href="/premium"
+                onClick={() => setShowSuperLikersModal(false)}
+                className="flex-1 px-4 py-3 bg-gradient-to-r from-blue-500 to-cyan-500 text-white rounded-xl font-black hover:shadow-lg transition flex items-center justify-center gap-2"
+              >
+                <Eye className="w-4 h-4" />
+                Débloquer
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
       {matchPopup && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90">
           <div className="bg-white rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl mx-4">
