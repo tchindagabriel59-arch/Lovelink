@@ -281,4 +281,169 @@ function photoReminderEmailTemplate(firstName: string, days: number): string {
     </div>
     ${baseFooter}
   `;
+  // ============================================
+// 🎯 EMAILS RELANCE PROFIL INCOMPLET
+// ============================================
+
+export async function sendIncompleteProfileEmail3d(
+  email: string,
+  firstName: string
+) {
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head><meta charset="UTF-8" /></head>
+    <body style="margin:0;padding:0;font-family:Arial,sans-serif;background:#f9f9f9;">
+      <div style="max-width:600px;margin:20px auto;background:white;border-radius:16px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.1);">
+        <div style="background:linear-gradient(135deg,#f43f5e 0%,#ec4899 100%);padding:40px 20px;text-align:center;">
+          <h1 style="color:white;margin:0;font-size:28px;">📸 ${firstName}, ton profil t'attend !</h1>
+        </div>
+        <div style="padding:30px 20px;">
+          <p style="font-size:16px;color:#333;line-height:1.6;">
+            Salut <strong>${firstName}</strong>,
+          </p>
+          <p style="font-size:16px;color:#333;line-height:1.6;">
+            On a remarqué que <strong>ton profil n'est pas encore complet</strong>. 
+            Sans photo, tu ne peux pas apparaître dans les recherches et personne ne peut te découvrir 😢
+          </p>
+          <div style="background:#fef3f2;border-left:4px solid #f43f5e;padding:16px;margin:20px 0;border-radius:8px;">
+            <p style="margin:0;font-size:14px;color:#7f1d1d;">
+              ⏱️ <strong>30 secondes suffisent</strong> pour compléter ton profil et commencer à recevoir des likes !
+            </p>
+          </div>
+          <div style="text-align:center;margin:30px 0;">
+            <a href="https://lovelink237.com/profile" style="display:inline-block;padding:16px 40px;background:linear-gradient(135deg,#f43f5e 0%,#ec4899 100%);color:white;text-decoration:none;border-radius:12px;font-weight:bold;font-size:16px;box-shadow:0 4px 12px rgba(244,63,94,0.3);">
+              Compléter mon profil →
+            </a>
+          </div>
+          <p style="font-size:14px;color:#666;text-align:center;">
+            À très vite ! 💕<br/>L'équipe LoveLink
+          </p>
+        </div>
+        <div style="background:#f9f9f9;padding:20px;text-align:center;font-size:12px;color:#999;">
+          © 2026 LoveLink - Site de rencontres africain
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  return await sendEmail({
+    to: email,
+    subject: `📸 ${firstName}, ton profil t'attend !`,
+    html,
+  });
+}
+
+export async function sendIncompleteProfileEmail7d(
+  email: string,
+  firstName: string
+) {
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head><meta charset="UTF-8" /></head>
+    <body style="margin:0;padding:0;font-family:Arial,sans-serif;background:#f9f9f9;">
+      <div style="max-width:600px;margin:20px auto;background:white;border-radius:16px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.1);">
+        <div style="background:linear-gradient(135deg,#fbbf24 0%,#f59e0b 100%);padding:40px 20px;text-align:center;">
+          <div style="font-size:60px;margin-bottom:10px;">🎁</div>
+          <h1 style="color:white;margin:0;font-size:32px;">7 JOURS PREMIUM OFFERTS !</h1>
+        </div>
+        <div style="padding:30px 20px;">
+          <p style="font-size:18px;color:#333;line-height:1.6;">
+            Salut <strong>${firstName}</strong>,
+          </p>
+          <p style="font-size:16px;color:#333;line-height:1.6;">
+            On veut vraiment t'aider à trouver l'amour ! 💕<br/>
+            C'est pourquoi on t'offre <strong style="color:#f59e0b;">7 JOURS PREMIUM GRATUITS</strong> si tu complètes ton profil aujourd'hui.
+          </p>
+          <div style="background:linear-gradient(135deg,#fef3c7 0%,#fed7aa 100%);padding:20px;margin:20px 0;border-radius:12px;border:2px dashed #f59e0b;">
+            <h3 style="margin:0 0 12px;color:#78350f;">💎 Ce que Premium t'offre :</h3>
+            <ul style="margin:0;padding-left:20px;color:#78350f;line-height:1.8;">
+              <li>Likes ILLIMITÉS 💕</li>
+              <li>Voir qui t'a liké 👀</li>
+              <li>5 Super Likes / jour ⭐</li>
+              <li>Boosts 3x / jour 🚀</li>
+              <li>Mode Incognito 🕵️</li>
+            </ul>
+          </div>
+          <div style="text-align:center;margin:30px 0;">
+            <a href="https://lovelink237.com/profile" style="display:inline-block;padding:18px 45px;background:linear-gradient(135deg,#fbbf24 0%,#f59e0b 100%);color:white;text-decoration:none;border-radius:12px;font-weight:bold;font-size:18px;box-shadow:0 6px 20px rgba(245,158,11,0.4);">
+              🎁 Débloquer mon cadeau
+            </a>
+          </div>
+          <p style="font-size:13px;color:#666;text-align:center;">
+            ⏰ Offre valable si tu complètes ton profil dans les 48h
+          </p>
+        </div>
+        <div style="background:#f9f9f9;padding:20px;text-align:center;font-size:12px;color:#999;">
+          © 2026 LoveLink 💕
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  return await sendEmail({
+    to: email,
+    subject: `🎁 ${firstName}, 7 jours Premium OFFERTS !`,
+    html,
+  });
+}
+
+export async function sendIncompleteProfileEmail14d(
+  email: string,
+  firstName: string
+) {
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head><meta charset="UTF-8" /></head>
+    <body style="margin:0;padding:0;font-family:Arial,sans-serif;background:#f9f9f9;">
+      <div style="max-width:600px;margin:20px auto;background:white;border-radius:16px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.1);">
+        <div style="background:linear-gradient(135deg,#7c2d12 0%,#991b1b 100%);padding:40px 20px;text-align:center;">
+          <div style="font-size:60px;margin-bottom:10px;">💔</div>
+          <h1 style="color:white;margin:0;font-size:28px;">Dernière chance ${firstName}...</h1>
+        </div>
+        <div style="padding:30px 20px;">
+          <p style="font-size:16px;color:#333;line-height:1.6;">
+            Salut <strong>${firstName}</strong>,
+          </p>
+          <p style="font-size:16px;color:#333;line-height:1.6;">
+            Cela fait maintenant <strong>14 jours</strong> que tu t'es inscrit(e) sur LoveLink, 
+            mais ton profil est toujours incomplet.
+          </p>
+          <div style="background:#fef2f2;border-left:4px solid #dc2626;padding:16px;margin:20px 0;border-radius:8px;">
+            <p style="margin:0;font-size:15px;color:#7f1d1d;font-weight:bold;">
+              ⚠️ Sans action de ta part dans les 7 prochains jours, ton compte sera supprimé.
+            </p>
+          </div>
+          <p style="font-size:16px;color:#333;line-height:1.6;">
+            Ne rate pas cette occasion de trouver l'amour ! Des centaines de personnes attendent de te découvrir 💕
+          </p>
+          <div style="background:#fef3c7;padding:16px;margin:20px 0;border-radius:8px;text-align:center;">
+            <p style="margin:0;font-size:14px;color:#78350f;">
+              🎁 <strong>Toujours 7 JOURS PREMIUM offerts</strong> si tu complètes maintenant !
+            </p>
+          </div>
+          <div style="text-align:center;margin:30px 0;">
+            <a href="https://lovelink237.com/profile" style="display:inline-block;padding:18px 45px;background:linear-gradient(135deg,#f43f5e 0%,#ec4899 100%);color:white;text-decoration:none;border-radius:12px;font-weight:bold;font-size:16px;box-shadow:0 6px 20px rgba(244,63,94,0.4);">
+              💪 Sauver mon compte
+            </a>
+          </div>
+        </div>
+        <div style="background:#f9f9f9;padding:20px;text-align:center;font-size:12px;color:#999;">
+          © 2026 LoveLink 💕
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  return await sendEmail({
+    to: email,
+    subject: `💔 ${firstName}, dernière chance pour ton compte...`,
+    html,
+  });
+}
 }
