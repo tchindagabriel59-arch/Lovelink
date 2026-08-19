@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useUser } from "../layout";
 import PushNotifButton from "../../components/PushNotifButton";
+import RewardBanner from "../../components/RewardBanner";
 import {
   User,
   MapPin,
@@ -302,6 +303,7 @@ export default function ProfilePage() {
 
   return (
     <div className="p-6 lg:p-8 max-w-5xl mx-auto">
+      <RewardBanner />
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-slate-900">
           Mon <span className="gradient-text">Profil</span>
