@@ -22,6 +22,11 @@ import {
   CheckCircle2,
   Zap,
   Eye,
+  Users,
+  Settings,
+  BookOpen,
+  RefreshCw,
+  Globe,
 } from "lucide-react";
 
 interface Profile {
@@ -56,6 +61,7 @@ interface Profile {
   prompt3Answer: string | null;
   compatibility: number;
   commonInterests: string[];
+  isRecycled?: boolean; // ✅ NOUVEAU
 }
 
 interface SuperLikeStatus {
@@ -74,8 +80,8 @@ interface DiscoverStats {
   likesToday: number;
   superLikesToday: number;
   pendingLikes: number;
-  likesGivenToday: number; // ✅ MODIFIÉ (renommé)
-  maxFreeLikes: number; // ✅ MODIFIÉ (renommé)
+  likesGivenToday: number;
+  maxFreeLikes: number;
   isPremium: boolean;
   recentSuperLikers: {
     id: number;
@@ -170,6 +176,7 @@ export default function DiscoverPage() {
   const [canRewind, setCanRewind] = useState(false);
   const [activeFilter, setActiveFilter] = useState<FilterType>("all");
   const [stats, setStats] = useState<DiscoverStats | null>(null);
+  const [expandedSearch, setExpandedSearch] = useState(false); // ✅ NOUVEAU
   const [matchPopup, setMatchPopup] = useState<{
     firstName: string;
     photoUrl: string | null;
@@ -207,6 +214,7 @@ export default function DiscoverPage() {
         if (profilesRes.ok) {
           const data = await profilesRes.json();
           setProfiles(data.profiles || []);
+          setExpandedSearch(data.expandedSearch || false); // ✅ NOUVEAU
         }
         if (superLikeRes.ok) {
           const data = await superLikeRes.json();
@@ -276,7 +284,6 @@ export default function DiscoverPage() {
     async (isLike: boolean) => {
       if (currentIndex >= profiles.length || animating) return;
 
-      // ✅ MODIFIÉ : Bloquer UNIQUEMENT si c'est un LIKE (pas un pass) et 20 likes atteints
       if (
         isLike &&
         stats &&
@@ -305,7 +312,6 @@ export default function DiscoverPage() {
               photoUrl: profile.photoUrl,
             });
           }
-          // ✅ Refresh les stats après un LIKE
           if (isLike) {
             fetch("/api/discover-stats")
               .then((r) => r.json())
@@ -333,7 +339,6 @@ export default function DiscoverPage() {
       return;
     }
 
-    // ✅ MODIFIÉ : Aussi bloquer si limite likes atteinte
     if (
       stats &&
       !stats.isPremium &&
@@ -379,7 +384,6 @@ export default function DiscoverPage() {
           .then((r) => r.json())
           .then(setSuperLikeStatus)
           .catch(() => {});
-        // ✅ Refresh stats
         fetch("/api/discover-stats")
           .then((r) => r.json())
           .then((newStats) => setStats(newStats))
@@ -465,7 +469,6 @@ export default function DiscoverPage() {
   const hasPhotos = photos.length > 0;
   const status = currentProfile ? getActivityStatus(currentProfile) : { text: "", color: "" };
 
-  // ✅ NOUVEAU : Calcul des likes restants
   const likesRemaining = stats && !stats.isPremium
     ? Math.max(0, stats.maxFreeLikes - stats.likesGivenToday)
     : null;
@@ -552,56 +555,173 @@ export default function DiscoverPage() {
 
   if (loading) return <DiscoverSkeleton />;
 
+  // ✅ NOUVEAU : Écran "Aucun profil" REPENSÉ
   if (!currentProfile || currentIndex >= profiles.length) {
     return (
-      <div className="fixed inset-0 bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex flex-col items-center justify-center p-6">
-        <div className="w-full max-w-md mb-6">
-          <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-            {filters.map((f) => (
-              <button
-                key={f.value}
-                onClick={() => {
-                  setActiveFilter(f.value);
-                  setCurrentIndex(0);
-                  setLoading(true);
-                }}
-                className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition ${
-                  activeFilter === f.value
-                    ? "bg-white text-slate-900 shadow-lg"
-                    : "bg-white/10 text-white/70 hover:bg-white/20"
-                }`}
-              >
-                {f.icon}
-                {f.label}
-              </button>
-            ))}
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-4 pb-24">
+        <div className="max-w-md mx-auto pt-4">
+          {/* Filtres */}
+          <div className="mb-6">
+            <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+              {filters.map((f) => (
+                <button
+                  key={f.value}
+                  onClick={() => {
+                    setActiveFilter(f.value);
+                    setCurrentIndex(0);
+                    setLoading(true);
+                  }}
+                  className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition ${
+                    activeFilter === f.value
+                      ? "bg-white text-slate-900 shadow-lg"
+                      : "bg-white/10 text-white/70 hover:bg-white/20"
+                  }`}
+                >
+                  {f.icon}
+                  {f.label}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
 
-        <div className="text-center max-w-md">
-          <div className="w-24 h-24 bg-white/10 backdrop-blur rounded-full flex items-center justify-center mx-auto mb-6">
-            <Sparkles className="w-12 h-12 text-rose-400" />
+          {/* Icône + Titre */}
+          <div className="text-center mb-8">
+            <div className="w-24 h-24 bg-gradient-to-br from-rose-500 to-pink-500 rounded-full flex items-center justify-center mx-auto mb-4 shadow-2xl">
+              <Sparkles className="w-12 h-12 text-white" />
+            </div>
+            <h2 className="text-2xl font-black text-white mb-2">
+              {activeFilter === "all"
+                ? "Tu as tout vu pour aujourd'hui !"
+                : `Aucun profil ${filters.find((f) => f.value === activeFilter)?.label.toLowerCase()}`}
+            </h2>
+            <p className="text-white/70 text-sm">
+              {activeFilter === "all"
+                ? "Ne t'inquiète pas, voici comment trouver plus de profils :"
+                : "Essaie ces options pour découvrir plus de monde :"}
+            </p>
           </div>
-          <h2 className="text-2xl font-bold text-white mb-2">
-            {activeFilter === "all"
-              ? "Plus de profils pour le moment"
-              : `Aucun profil ${filters.find((f) => f.value === activeFilter)?.label.toLowerCase()}`}
-          </h2>
-          <p className="text-white/70 mb-6">
-            {activeFilter === "all"
-              ? "Revenez plus tard pour découvrir de nouveaux profils !"
-              : "Essaie un autre filtre ou reviens plus tard !"}
-          </p>
-          <button
-            onClick={() => {
-              setActiveFilter("all");
-              setCurrentIndex(0);
-              setLoading(true);
-            }}
-            className="px-6 py-3 bg-gradient-to-r from-rose-500 to-pink-500 text-white rounded-2xl font-bold shadow-xl hover:shadow-2xl transition"
-          >
-            Rafraîchir
-          </button>
+
+          {/* Actions - Cards */}
+          <div className="space-y-3">
+            {/* Action 1 : Élargir préférences */}
+            <Link
+              href="/preferences"
+              className="block bg-white/10 backdrop-blur hover:bg-white/20 rounded-2xl p-4 transition group"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-xl flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition">
+                  <Settings className="w-6 h-6 text-white" />
+                </div>
+                <div className="flex-1 text-left">
+                  <h3 className="text-white font-bold text-sm mb-0.5">
+                    🌍 Élargir mes préférences
+                  </h3>
+                  <p className="text-white/60 text-xs">
+                    Âge, distance, orientation...
+                  </p>
+                </div>
+                <ChevronUp className="w-5 h-5 text-white/40 rotate-90" />
+              </div>
+            </Link>
+
+            {/* Action 2 : Parrainer */}
+            <Link
+              href="/parrainage"
+              className="block bg-gradient-to-r from-rose-500/20 to-pink-500/20 backdrop-blur hover:from-rose-500/30 hover:to-pink-500/30 border border-rose-400/30 rounded-2xl p-4 transition group"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-gradient-to-br from-rose-500 to-pink-500 rounded-xl flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition">
+                  <Users className="w-6 h-6 text-white" />
+                </div>
+                <div className="flex-1 text-left">
+                  <h3 className="text-white font-bold text-sm mb-0.5">
+                    🎁 Invite tes amis (+7j Premium)
+                  </h3>
+                  <p className="text-white/60 text-xs">
+                    Fais grandir la communauté !
+                  </p>
+                </div>
+                <ChevronUp className="w-5 h-5 text-white/40 rotate-90" />
+              </div>
+            </Link>
+
+            {/* Action 3 : Rafraîchir */}
+            <button
+              onClick={() => {
+                setCurrentIndex(0);
+                setLoading(true);
+              }}
+              className="w-full bg-white/10 backdrop-blur hover:bg-white/20 rounded-2xl p-4 transition group"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-gradient-to-br from-emerald-500 to-teal-500 rounded-xl flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition">
+                  <RefreshCw className="w-6 h-6 text-white" />
+                </div>
+                <div className="flex-1 text-left">
+                  <h3 className="text-white font-bold text-sm mb-0.5">
+                    🔄 Rafraîchir
+                  </h3>
+                  <p className="text-white/60 text-xs">
+                    De nouveaux profils peuvent être arrivés
+                  </p>
+                </div>
+                <ChevronUp className="w-5 h-5 text-white/40 rotate-90" />
+              </div>
+            </button>
+
+            {/* Action 4 : Guide */}
+            <Link
+              href="/guide"
+              className="block bg-white/10 backdrop-blur hover:bg-white/20 rounded-2xl p-4 transition group"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-gradient-to-br from-amber-500 to-orange-500 rounded-xl flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition">
+                  <BookOpen className="w-6 h-6 text-white" />
+                </div>
+                <div className="flex-1 text-left">
+                  <h3 className="text-white font-bold text-sm mb-0.5">
+                    📖 Guide LoveLink
+                  </h3>
+                  <p className="text-white/60 text-xs">
+                    Astuces pour augmenter tes matchs
+                  </p>
+                </div>
+                <ChevronUp className="w-5 h-5 text-white/40 rotate-90" />
+              </div>
+            </Link>
+
+            {/* Action 5 : Premium (si non premium) */}
+            {!currentUser?.isPremium && (
+              <Link
+                href="/premium"
+                className="block bg-gradient-to-r from-yellow-500/20 to-orange-500/20 backdrop-blur hover:from-yellow-500/30 hover:to-orange-500/30 border border-yellow-400/30 rounded-2xl p-4 transition group"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 bg-gradient-to-br from-yellow-500 to-orange-500 rounded-xl flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition">
+                    <Crown className="w-6 h-6 text-white" />
+                  </div>
+                  <div className="flex-1 text-left">
+                    <h3 className="text-white font-bold text-sm mb-0.5">
+                      👑 Passe Premium
+                    </h3>
+                    <p className="text-white/60 text-xs">
+                      Boost + likes illimités + qui t'a liké
+                    </p>
+                  </div>
+                  <ChevronUp className="w-5 h-5 text-white/40 rotate-90" />
+                </div>
+              </Link>
+            )}
+          </div>
+
+          {/* Message final */}
+          <div className="mt-6 text-center">
+            <p className="text-white/50 text-xs">
+              💡 De nouveaux profils s'inscrivent chaque jour !
+              <br />
+              Reviens dans quelques heures ⏰
+            </p>
+          </div>
         </div>
       </div>
     );
@@ -631,7 +751,17 @@ export default function DiscoverPage() {
   return (
     <div className="fixed inset-0 bg-black lg:relative lg:min-h-screen lg:bg-gradient-to-br lg:from-slate-100 lg:to-rose-50 lg:flex lg:flex-col lg:items-center lg:justify-center lg:p-4">
 
-      {/* ✅ NOUVEAU : COMPTEUR LIKES RESTANTS (au-dessus de la carte) */}
+      {/* ✅ NOUVEAU : BADGE RECHERCHE ÉLARGIE */}
+      {expandedSearch && (
+        <div className="fixed top-4 left-4 lg:top-2 lg:left-1/2 lg:-translate-x-1/2 z-40 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full px-3 py-1.5 shadow-2xl">
+          <p className="text-white text-xs font-bold flex items-center gap-1.5">
+            <Globe className="w-3 h-3" />
+            Recherche élargie
+          </p>
+        </div>
+      )}
+
+      {/* COMPTEUR LIKES RESTANTS */}
       {likesRemaining !== null && likesRemaining <= 5 && likesRemaining > 0 && (
         <div className="fixed top-4 right-4 lg:top-2 lg:right-auto lg:left-1/2 lg:-translate-x-1/2 z-40 bg-gradient-to-r from-orange-500 to-red-500 rounded-full px-3 py-1.5 shadow-2xl animate-pulse">
           <p className="text-white text-xs font-bold flex items-center gap-1.5">
@@ -708,7 +838,7 @@ export default function DiscoverPage() {
         ))}
       </div>
 
-      {/* ✅ MODIFIÉ : MODALE LIMITE LIKES (message adapté) */}
+      {/* MODALE LIMITE LIKES */}
       {showLikeLimitModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 p-4">
           <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl">
@@ -1175,14 +1305,22 @@ export default function DiscoverPage() {
           </button>
         </div>
 
-        {currentProfile.isPremium && (
-          <div className="absolute top-7 right-3 z-20">
+        {/* ✅ Badges en haut à droite */}
+        <div className="absolute top-7 right-3 z-20 flex flex-col gap-2 items-end">
+          {currentProfile.isPremium && (
             <div className="flex items-center gap-1.5 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-full px-3 py-1.5 shadow-lg">
               <Crown className="w-3.5 h-3.5 text-white fill-white" />
               <span className="text-[10px] font-black text-white tracking-widest">PREMIUM</span>
             </div>
-          </div>
-        )}
+          )}
+          {/* ✅ NOUVEAU : Badge Redécouvre (discret) */}
+          {currentProfile.isRecycled && (
+            <div className="flex items-center gap-1 bg-black/50 backdrop-blur-md rounded-full px-2 py-1 shadow-lg">
+              <RefreshCw className="w-3 h-3 text-white/80" />
+              <span className="text-[9px] font-bold text-white/90 tracking-wider">REDÉCOUVRE</span>
+            </div>
+          )}
+        </div>
 
         {currentProfile.hasSuperLikedMe && (
           <div className="absolute top-20 left-1/2 -translate-x-1/2 z-20 animate-pulse">
