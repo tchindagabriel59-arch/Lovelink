@@ -148,4 +148,27 @@ export const PushTemplates = {
     tag: "new_profiles",
     url: "/discover",
   }),
+    incompleteProfile3d: () => ({
+    title: "📸 Ton profil t'attend !",
+    body: "Ajoute une photo pour commencer à matcher 💕",
+    icon: "/icon",
+    tag: "incomplete_profile",
+    url: "/profile",
+  }),
+
+  incompleteProfile7d: () => ({
+    title: "🎁 7 jours Premium OFFERTS !",
+    body: "Complète ton profil aujourd'hui et débloque Premium gratuit !",
+    icon: "/icon",
+    tag: "incomplete_profile",
+    url: "/profile",
+  }),
+
+  incompleteProfile14d: () => ({
+    title: "💔 On va bientôt te supprimer...",
+    body: "Dernière chance ! Complète ton profil ou perds ton compte 😢",
+    icon: "/icon",
+    tag: "incomplete_profile",
+    url: "/profile",
+  }),
 };
