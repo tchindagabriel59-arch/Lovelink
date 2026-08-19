@@ -281,7 +281,8 @@ function photoReminderEmailTemplate(firstName: string, days: number): string {
     </div>
     ${baseFooter}
   `;
-  // ============================================
+}
+// ============================================
 // 🎯 EMAILS RELANCE PROFIL INCOMPLET
 // ============================================
 
@@ -445,5 +446,4 @@ export async function sendIncompleteProfileEmail14d(
     subject: `💔 ${firstName}, dernière chance pour ton compte...`,
     html,
   });
-}
 }
