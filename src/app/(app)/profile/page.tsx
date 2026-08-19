@@ -58,6 +58,7 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [uploadingField, setUploadingField] = useState<string | null>(null);
+  const [formInitialized, setFormInitialized] = useState(false); // ✅ FIX
 
   const profilePhotoRef = useRef<HTMLInputElement>(null);
   const coverPhotoRef = useRef<HTMLInputElement>(null);
@@ -87,9 +88,9 @@ export default function ProfilePage() {
     prompt3Answer: "",
   });
 
-  // 🔄 Recharger les données du formulaire quand user change
+  // 🔄 ✅ FIX : Initialiser le form UNE SEULE FOIS quand user arrive
   useEffect(() => {
-    if (user) {
+    if (user && !formInitialized) {
       setForm({
         bio: user.bio || "",
         city: user.city || "",
@@ -110,8 +111,9 @@ export default function ProfilePage() {
         prompt3Question: (user as any)?.prompt3Question || "",
         prompt3Answer: (user as any)?.prompt3Answer || "",
       });
+      setFormInitialized(true); // ✅ Marque comme initialisé
     }
-  }, [user]);
+  }, [user, formInitialized]);
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
@@ -135,6 +137,7 @@ export default function ProfilePage() {
     ? form.interests.split(",").map((s) => s.trim()).filter(Boolean)
     : [];
 
+  // ✅ FIX : Upload avec sauvegarde et refresh propre
   const handlePhotoUpload = async (
     e: React.ChangeEvent<HTMLInputElement>,
     fieldName: string
@@ -154,6 +157,7 @@ export default function ProfilePage() {
 
     setUploadingField(fieldName);
     try {
+      // 1. Upload la photo
       const response = await fetch(
         `/api/upload?filename=${encodeURIComponent(file.name)}`,
         {
@@ -167,16 +171,23 @@ export default function ProfilePage() {
       const blob = await response.json();
       const newUrl = blob.url;
 
+      // 2. Met à jour le form local
       const updatedForm = { ...form, [fieldName]: newUrl };
       setForm(updatedForm);
 
-      await fetch("/api/profile", {
+      // 3. Sauvegarde en DB
+      const saveResponse = await fetch("/api/profile", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updatedForm),
       });
 
-      refreshUser();
+      if (!saveResponse.ok) {
+        throw new Error("Erreur sauvegarde");
+      }
+
+      // 4. ✅ FIX : Ne PAS appeler refreshUser (évite le bug de disparition)
+      // Le form local est déjà à jour, la DB aussi, tout est bon
     } catch (error) {
       alert("❌ Erreur lors de l'envoi de la photo");
     } finally {
@@ -193,7 +204,7 @@ export default function ProfilePage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(updatedForm),
     });
-    refreshUser();
+    // ✅ FIX : Ne pas appeler refreshUser ici non plus
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -207,7 +218,8 @@ export default function ProfilePage() {
       });
       if (res.ok) {
         setSaved(true);
-        refreshUser();
+        // ✅ FIX : Refresh user seulement après le clic sur "Enregistrer"
+        await refreshUser();
       }
     } catch {
       // silently fail
@@ -554,7 +566,7 @@ export default function ProfilePage() {
               </select>
             </div>
 
-            {/* PROMPTS style Hinge */}
+            {/* PROMPTS */}
             <div className="bg-white rounded-2xl p-6 border border-slate-100">
               <h3 className="text-lg font-semibold mb-2 flex items-center gap-2">
                 <MessageSquareQuote className="w-5 h-5 text-purple-500" />
@@ -638,7 +650,6 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            {/* 🔔 NOTIFICATIONS PUSH */}
             <PushNotifButton />
 
             {/* Intérêts */}
