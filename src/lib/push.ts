@@ -141,4 +141,11 @@ export const PushTemplates = {
     tag: "boost",
     url: "/boost",
   }),
+    newProfiles: (count: number) => ({
+    title: "🔥 De nouveaux profils !",
+    body: `${count} personne${count > 1 ? "s viennent" : " vient"} de rejoindre LoveLink. Découvre-${count > 1 ? "les" : "la"} !`,
+    icon: "/icon",
+    tag: "new_profiles",
+    url: "/discover",
+  }),
 };
