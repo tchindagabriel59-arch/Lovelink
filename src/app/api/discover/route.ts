@@ -351,37 +351,241 @@ export async function GET(req: NextRequest) {
         .limit(50);
     };
 
-    // ✅ NOUVEAU : Recherche avec élargissement progressif
-    let allProfiles = await searchProfiles(
-      prefAgeMin,
-      prefAgeMax,
-      prefMaxDistance
-    );
+        // ✅ NOUVEAU : Chercher séparément NOUVEAUX et RECYCLÉS
+    
+    // 1. Chercher les profils JAMAIS vus (nouveaux)
+    const newExcludeIds = Array.from(new Set([
+      userId,
+      ...likedIds,
+      ...last10Ids,
+      ...iBlocked,
+      ...blockedMe,
+      ...recentActionIds, // Exclure les actions récentes (< 7j)
+      ...recyclableIds,   // Exclure aussi les recyclables (on les cherche séparément)
+    ]));
+
+    const searchNewProfiles = async (
+      ageMin: number,
+      ageMax: number
+    ) => {
+      const now = new Date();
+      const maxBirthDate = new Date(
+        now.getFullYear() - ageMin,
+        now.getMonth(),
+        now.getDate()
+      )
+        .toISOString()
+        .split("T")[0];
+      const minBirthDate = new Date(
+        now.getFullYear() - ageMax - 1,
+        now.getMonth(),
+        now.getDate()
+      )
+        .toISOString()
+        .split("T")[0];
+
+      const conditions = [
+        newExcludeIds.length > 0 ? notInArray(users.id, newExcludeIds) : sql`1=1`,
+        eq(users.isBanned, false),
+        eq(users.isIncognito, false),
+        lte(users.birthDate, maxBirthDate),
+        gte(users.birthDate, minBirthDate),
+        isNotNull(users.photoUrl),
+        ne(users.photoUrl, ""),
+        sql`${users.photoUrl} LIKE 'http%'`,
+      ];
+
+      if (prefGender !== "all") {
+        conditions.push(
+          eq(
+            users.gender,
+            prefGender as "male" | "female" | "non_binary" | "other"
+          )
+        );
+      }
+
+      if (prefLookingFor !== "all") {
+        conditions.push(
+          eq(
+            users.lookingFor,
+            prefLookingFor as "relationship" | "friendship" | "casual" | "marriage"
+          )
+        );
+      }
+
+      if (filter === "verified") {
+        conditions.push(eq(users.isVerified, true));
+      } else if (filter === "online") {
+        conditions.push(eq(users.isOnline, true));
+      } else if (filter === "premium") {
+        conditions.push(eq(users.isPremium, true));
+      } else if (filter === "new") {
+        const sevenDaysAgoDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+        conditions.push(gte(users.createdAt, sevenDaysAgoDate));
+      }
+
+      return await db
+        .select({
+          id: users.id,
+          firstName: users.firstName,
+          lastName: users.lastName,
+          birthDate: users.birthDate,
+          gender: users.gender,
+          bio: users.bio,
+          city: users.city,
+          country: users.country,
+          photoUrl: users.photoUrl,
+          coverPhotoUrl: users.coverPhotoUrl,
+          photo1Url: users.photo1Url,
+          photo2Url: users.photo2Url,
+          photo3Url: users.photo3Url,
+          photo4Url: users.photo4Url,
+          interests: users.interests,
+          occupation: users.occupation,
+          isOnline: users.isOnline,
+          lastSeen: users.lastSeen,
+          isPremium: users.isPremium,
+          isVerified: users.isVerified,
+          latitude: users.latitude,
+          longitude: users.longitude,
+          prompt1Question: users.prompt1Question,
+          prompt1Answer: users.prompt1Answer,
+          prompt2Question: users.prompt2Question,
+          prompt2Answer: users.prompt2Answer,
+          prompt3Question: users.prompt3Question,
+          prompt3Answer: users.prompt3Answer,
+          boostEndAt: users.boostEndAt,
+        })
+        .from(users)
+        .where(and(...conditions))
+        .orderBy(sql`RANDOM()`)
+        .limit(40);
+    };
+
+    // 2. Chercher les profils RECYCLABLES (passés il y a > 7j)
+    const searchRecycledProfiles = async () => {
+      if (recyclableIds.length === 0) return [];
+
+      const now = new Date();
+      const maxBirthDate = new Date(
+        now.getFullYear() - prefAgeMin,
+        now.getMonth(),
+        now.getDate()
+      )
+        .toISOString()
+        .split("T")[0];
+      const minBirthDate = new Date(
+        now.getFullYear() - prefAgeMax - 1,
+        now.getMonth(),
+        now.getDate()
+      )
+        .toISOString()
+        .split("T")[0];
+
+      const conditions = [
+        inArray(users.id, recyclableIds),
+        eq(users.isBanned, false),
+        eq(users.isIncognito, false),
+        lte(users.birthDate, maxBirthDate),
+        gte(users.birthDate, minBirthDate),
+        isNotNull(users.photoUrl),
+        ne(users.photoUrl, ""),
+        sql`${users.photoUrl} LIKE 'http%'`,
+      ];
+
+      if (prefGender !== "all") {
+        conditions.push(
+          eq(
+            users.gender,
+            prefGender as "male" | "female" | "non_binary" | "other"
+          )
+        );
+      }
+
+      return await db
+        .select({
+          id: users.id,
+          firstName: users.firstName,
+          lastName: users.lastName,
+          birthDate: users.birthDate,
+          gender: users.gender,
+          bio: users.bio,
+          city: users.city,
+          country: users.country,
+          photoUrl: users.photoUrl,
+          coverPhotoUrl: users.coverPhotoUrl,
+          photo1Url: users.photo1Url,
+          photo2Url: users.photo2Url,
+          photo3Url: users.photo3Url,
+          photo4Url: users.photo4Url,
+          interests: users.interests,
+          occupation: users.occupation,
+          isOnline: users.isOnline,
+          lastSeen: users.lastSeen,
+          isPremium: users.isPremium,
+          isVerified: users.isVerified,
+          latitude: users.latitude,
+          longitude: users.longitude,
+          prompt1Question: users.prompt1Question,
+          prompt1Answer: users.prompt1Answer,
+          prompt2Question: users.prompt2Question,
+          prompt2Answer: users.prompt2Answer,
+          prompt3Question: users.prompt3Question,
+          prompt3Answer: users.prompt3Answer,
+          boostEndAt: users.boostEndAt,
+        })
+        .from(users)
+        .where(and(...conditions))
+        .orderBy(sql`RANDOM()`)
+        .limit(10);
+    };
+
+    // 3. Recherche avec élargissement progressif (nouveaux)
+    let newProfiles = await searchNewProfiles(prefAgeMin, prefAgeMax);
     let expandedSearch = false;
 
-    // Si moins de 10 profils, élargir l'âge de +/- 5 ans
-    if (allProfiles.length < 10) {
+    if (newProfiles.length < 10) {
       const expandedAgeMin = Math.max(18, prefAgeMin - 5);
       const expandedAgeMax = Math.min(99, prefAgeMax + 5);
-      allProfiles = await searchProfiles(
-        expandedAgeMin,
-        expandedAgeMax,
-        prefMaxDistance
-      );
+      newProfiles = await searchNewProfiles(expandedAgeMin, expandedAgeMax);
       expandedSearch = true;
     }
 
-    // Si toujours moins de 5 profils, élargir encore (+/- 10 ans)
-    if (allProfiles.length < 5) {
+    if (newProfiles.length < 5) {
       const expandedAgeMin = Math.max(18, prefAgeMin - 10);
       const expandedAgeMax = Math.min(99, prefAgeMax + 10);
-      allProfiles = await searchProfiles(
-        expandedAgeMin,
-        expandedAgeMax,
-        999999 // Distance illimitée
-      );
+      newProfiles = await searchNewProfiles(expandedAgeMin, expandedAgeMax);
       expandedSearch = true;
     }
+
+    // 4. Chercher les recyclés
+    const recycledProfiles = await searchRecycledProfiles();
+
+    // 5. ✅ NOUVEAU : MÉLANGER (INTERLEAVING)
+    // Insérer 1 recyclé tous les 4 nouveaux profils
+    const interleaved: typeof newProfiles = [];
+    let recycledIndex = 0;
+    
+    for (let i = 0; i < newProfiles.length; i++) {
+      interleaved.push(newProfiles[i]);
+      
+      // Tous les 4 nouveaux, insérer 1 recyclé (si disponible)
+      if ((i + 1) % 4 === 0 && recycledIndex < recycledProfiles.length) {
+        interleaved.push(recycledProfiles[recycledIndex]);
+        recycledIndex++;
+      }
+    }
+
+    // Si il reste des recyclés et pas assez de nouveaux, les ajouter à la fin
+    while (recycledIndex < recycledProfiles.length && interleaved.length < 30) {
+      interleaved.push(recycledProfiles[recycledIndex]);
+      recycledIndex++;
+    }
+
+    const allProfiles = interleaved;
+
+    // Créer un Set des IDs recyclés pour le marquage
+    const recycledIdsSet = new Set(recycledProfiles.map(p => p.id));
 
     let profilesWithDistance = allProfiles.map((p) => {
       let distance: number | null = null;
@@ -398,7 +602,7 @@ export async function GET(req: NextRequest) {
 
       const compatibility = calculateCompatibility(myInterests, p.interests);
       const commonInterests = getCommonInterests(myInterests, p.interests);
-      const isRecycled = recyclableIds.includes(p.id); // ✅ NOUVEAU
+      const isRecycled = recycledIdsSet.has(p.id); // ✅ NOUVEAU
 
       return {
         ...p,
@@ -417,9 +621,24 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // Tri : Boostés > SuperLikes > Likes > Non-recyclés > Compatibilité
+        // Tri léger : Juste prioriser Boostés/SuperLikes en haut, GARDER le mélange
     const nowDate = new Date();
-    profilesWithDistance.sort((a, b) => {
+    
+    // Séparer les prioritaires (boostés + super likers)
+    const priority: typeof profilesWithDistance = [];
+    const normal: typeof profilesWithDistance = [];
+    
+    profilesWithDistance.forEach((p) => {
+      const isBoost = p.boostEndAt ? new Date(p.boostEndAt) > nowDate : false;
+      if (isBoost || p.hasSuperLikedMe) {
+        priority.push(p);
+      } else {
+        normal.push(p);
+      }
+    });
+    
+    // Mettre les prioritaires en premier, garder l'ordre mélangé pour le reste
+    profilesWithDistance = [...priority, ...normal];
       const aBoost = a.boostEndAt ? new Date(a.boostEndAt) > nowDate : false;
       const bBoost = b.boostEndAt ? new Date(b.boostEndAt) > nowDate : false;
       if (aBoost && !bBoost) return -1;
