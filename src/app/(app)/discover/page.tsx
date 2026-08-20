@@ -61,7 +61,7 @@ interface Profile {
   prompt3Answer: string | null;
   compatibility: number;
   commonInterests: string[];
-  isRecycled?: boolean; // ✅ NOUVEAU
+  isRecycled?: boolean;
 }
 
 interface SuperLikeStatus {
@@ -176,7 +176,7 @@ export default function DiscoverPage() {
   const [canRewind, setCanRewind] = useState(false);
   const [activeFilter, setActiveFilter] = useState<FilterType>("all");
   const [stats, setStats] = useState<DiscoverStats | null>(null);
-  const [expandedSearch, setExpandedSearch] = useState(false); // ✅ NOUVEAU
+  const [expandedSearch, setExpandedSearch] = useState(false);
   const [matchPopup, setMatchPopup] = useState<{
     firstName: string;
     photoUrl: string | null;
@@ -214,7 +214,7 @@ export default function DiscoverPage() {
         if (profilesRes.ok) {
           const data = await profilesRes.json();
           setProfiles(data.profiles || []);
-          setExpandedSearch(data.expandedSearch || false); // ✅ NOUVEAU
+          setExpandedSearch(data.expandedSearch || false);
         }
         if (superLikeRes.ok) {
           const data = await superLikeRes.json();
@@ -400,21 +400,42 @@ export default function DiscoverPage() {
     }, 350);
   }, [currentIndex, profiles, superLikeStatus, animating, stats]);
 
+  // ✅ FIX REWIND: Gestion propre pour Premium et erreurs API
   const handleRewind = useCallback(async () => {
-    if (currentIndex === 0) return;
+    if (animating) return;
+
     if (!currentUser?.isPremium) {
       setPremiumFeature("rewind");
       setShowPremiumModal(true);
       return;
     }
+
+    // Sécurité UI : S'ils viennent de charger la page et n'ont rien fait
+    if (currentIndex === 0 && !canRewind) {
+      alert("Tu n'as aucune action à annuler dans cette session !");
+      return;
+    }
+
     try {
       const res = await fetch("/api/like/rewind", { method: "POST" });
-      if (res.ok) {
-        setCurrentIndex((i) => Math.max(0, i - 1));
-        setCanRewind(false);
+      const data = await res.json().catch(() => null);
+      
+      if (!res.ok) {
+        alert(data?.error || "Aucune action à annuler");
+        return;
       }
-    } catch {}
-  }, [currentIndex, currentUser]);
+
+      if (currentIndex > 0) {
+        setCurrentIndex((i) => Math.max(0, i - 1));
+      }
+      
+      setCanRewind(false);
+      setDragOffset({ x: 0, y: 0 });
+      setAnimating(null);
+    } catch {
+      alert("Erreur lors du retour en arrière");
+    }
+  }, [currentIndex, currentUser, canRewind, animating]);
 
   const handleDirectMessage = () => {
     if (!currentUser?.isPremium) {
@@ -555,7 +576,6 @@ export default function DiscoverPage() {
 
   if (loading) return <DiscoverSkeleton />;
 
-  // ✅ NOUVEAU : Écran "Aucun profil" REPENSÉ
   if (!currentProfile || currentIndex >= profiles.length) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-4 pb-24">
@@ -1437,13 +1457,22 @@ export default function DiscoverPage() {
         </div>
 
         <div className="absolute bottom-24 lg:bottom-4 left-0 right-0 flex items-center justify-center gap-3 z-30 px-4">
+          
+          {/* ✅ BOUTON REWIND CORRIGÉ */}
           <button
             onClick={(e) => {
               e.stopPropagation();
               handleRewind();
             }}
-            disabled={!canRewind || !!animating}
-            className="relative w-11 h-11 bg-white rounded-full shadow-lg flex items-center justify-center text-amber-500 hover:scale-110 active:scale-95 transition disabled:opacity-40"
+            disabled={!!animating}
+            className={`relative w-11 h-11 bg-white rounded-full shadow-lg flex items-center justify-center text-amber-500 hover:scale-110 active:scale-95 transition disabled:opacity-40 ${
+              currentUser?.isPremium && (canRewind || currentIndex > 0)
+                ? "opacity-100"
+                : currentUser?.isPremium
+                ? "opacity-50"
+                : "opacity-100"
+            }`}
+            title="Profil précédent"
           >
             <RotateCcw className="w-5 h-5" strokeWidth={2.5} />
             {!currentUser?.isPremium && (
