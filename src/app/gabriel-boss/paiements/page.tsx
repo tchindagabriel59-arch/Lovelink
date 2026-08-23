@@ -12,13 +12,14 @@ interface PendingPayment {
     plan: string;
     billingPeriod: string;
     paymentMethod: string;
+    clientPhone?: string | null;
     createdAt: string;
   };
   user: {
     id: number;
     firstName: string;
     photoUrl: string | null;
-    phone: string | null;
+    email: string | null;
   } | null;
 }
 
@@ -43,7 +44,6 @@ export default function AdminPaymentsPage() {
 
   useEffect(() => {
     fetchPayments();
-    // Rafraîchir toutes les 30s
     const interval = setInterval(fetchPayments, 30000);
     return () => clearInterval(interval);
   }, []);
@@ -102,7 +102,7 @@ export default function AdminPaymentsPage() {
         <div className="bg-[#1e293b] border border-[#334155] rounded-3xl p-12 text-center shadow-xl">
           <ShieldAlert className="w-16 h-16 text-emerald-500 mx-auto mb-4 opacity-50" />
           <h3 className="text-xl font-bold text-slate-200 mb-2">Aucun paiement en attente</h3>
-          <p className="text-slate-500">Tous les services ont été validés ! Allez prendre un café ☕</p>
+          <p className="text-slate-500">Tous les services ont été validés !</p>
         </div>
       ) : (
         <div className="grid gap-4">
@@ -125,8 +125,8 @@ export default function AdminPaymentsPage() {
                     )}
                   </div>
                   <div>
-                    <h3 className="font-bold text-lg text-slate-100">{user?.firstName || "Utilisateur supprimé"}</h3>
-                    <p className="text-sm text-slate-400">ID: {user?.id} • Tel: {user?.phone || "Non renseigné"}</p>
+                    <h3 className="font-bold text-lg text-slate-100">{user?.firstName || "Utilisateur"}</h3>
+                    <p className="text-sm text-slate-400">ID: {user?.id} • Email: {user?.email || "—"}</p>
                     <p className="text-xs text-slate-500 mt-0.5">
                       Demande créée le {new Date(payment.createdAt).toLocaleString("fr-FR")}
                     </p>
