@@ -27,7 +27,7 @@ import {
   BookOpen,
   RefreshCw,
   Globe,
-  Rocket
+  Rocket,
 } from "lucide-react";
 
 interface Profile {
@@ -231,7 +231,7 @@ export default function DiscoverPage() {
         }
       } catch {
         // silently fail
-      } finally {
+      } font-bold {
         setLoading(false);
       }
     }
@@ -401,7 +401,6 @@ export default function DiscoverPage() {
     }, 350);
   }, [currentIndex, profiles, superLikeStatus, animating, stats]);
 
-  // ✅ FIX REWIND: Gestion propre pour Premium et erreurs API
   const handleRewind = useCallback(async () => {
     if (animating) return;
 
@@ -411,7 +410,6 @@ export default function DiscoverPage() {
       return;
     }
 
-    // Sécurité UI : S'ils viennent de charger la page et n'ont rien fait
     if (currentIndex === 0 && !canRewind) {
       alert("Tu n'as aucune action à annuler dans cette session !");
       return;
@@ -581,7 +579,6 @@ export default function DiscoverPage() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-4 pb-24">
         <div className="max-w-md mx-auto pt-4">
-          {/* Filtres */}
           <div className="mb-6">
             <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
               {filters.map((f) => (
@@ -605,7 +602,6 @@ export default function DiscoverPage() {
             </div>
           </div>
 
-          {/* Icône + Titre */}
           <div className="text-center mb-8">
             <div className="w-24 h-24 bg-gradient-to-br from-rose-500 to-pink-500 rounded-full flex items-center justify-center mx-auto mb-4 shadow-2xl">
               <Sparkles className="w-12 h-12 text-white" />
@@ -622,9 +618,7 @@ export default function DiscoverPage() {
             </p>
           </div>
 
-          {/* Actions - Cards */}
           <div className="space-y-3">
-            {/* Action 1 : Élargir préférences */}
             <Link
               href="/preferences"
               className="block bg-white/10 backdrop-blur hover:bg-white/20 rounded-2xl p-4 transition group"
@@ -645,7 +639,6 @@ export default function DiscoverPage() {
               </div>
             </Link>
 
-            {/* Action 2 : Parrainer */}
             <Link
               href="/parrainage"
               className="block bg-gradient-to-r from-rose-500/20 to-pink-500/20 backdrop-blur hover:from-rose-500/30 hover:to-pink-500/30 border border-rose-400/30 rounded-2xl p-4 transition group"
@@ -666,7 +659,6 @@ export default function DiscoverPage() {
               </div>
             </Link>
 
-            {/* Action 3 : Rafraîchir */}
             <button
               onClick={() => {
                 setCurrentIndex(0);
@@ -690,7 +682,6 @@ export default function DiscoverPage() {
               </div>
             </button>
 
-            {/* Action 4 : Guide */}
             <Link
               href="/guide"
               className="block bg-white/10 backdrop-blur hover:bg-white/20 rounded-2xl p-4 transition group"
@@ -711,7 +702,6 @@ export default function DiscoverPage() {
               </div>
             </Link>
 
-            {/* Action 5 : Premium (si non premium) */}
             {!currentUser?.isPremium && (
               <Link
                 href="/premium"
@@ -735,7 +725,6 @@ export default function DiscoverPage() {
             )}
           </div>
 
-          {/* Message final */}
           <div className="mt-6 text-center">
             <p className="text-white/50 text-xs">
               💡 De nouveaux profils s'inscrivent chaque jour !
@@ -772,7 +761,6 @@ export default function DiscoverPage() {
   return (
     <div className="fixed inset-0 bg-black lg:relative lg:min-h-screen lg:bg-gradient-to-br lg:from-slate-100 lg:to-rose-50 lg:flex lg:flex-col lg:items-center lg:justify-center lg:p-4">
 
-      {/* ✅ NOUVEAU : BADGE RECHERCHE ÉLARGIE */}
       {expandedSearch && (
         <div className="fixed top-4 left-4 lg:top-2 lg:left-1/2 lg:-translate-x-1/2 z-40 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full px-3 py-1.5 shadow-2xl">
           <p className="text-white text-xs font-bold flex items-center gap-1.5">
@@ -782,7 +770,6 @@ export default function DiscoverPage() {
         </div>
       )}
 
-      {/* COMPTEUR LIKES RESTANTS */}
       {likesRemaining !== null && likesRemaining <= 5 && likesRemaining > 0 && (
         <div className="fixed top-4 right-4 lg:top-2 lg:right-auto lg:left-1/2 lg:-translate-x-1/2 z-40 bg-gradient-to-r from-orange-500 to-red-500 rounded-full px-3 py-1.5 shadow-2xl animate-pulse">
           <p className="text-white text-xs font-bold flex items-center gap-1.5">
@@ -792,7 +779,6 @@ export default function DiscoverPage() {
         </div>
       )}
 
-      {/* WIDGET LIKES CACHÉS */}
       {stats && stats.pendingLikes > 0 && !currentUser?.isPremium && (
         <button
           onClick={() => setShowLikesRevealModal(true)}
@@ -806,7 +792,6 @@ export default function DiscoverPage() {
         </button>
       )}
 
-      {/* WIDGET SUPER LIKERS */}
       {stats && stats.recentSuperLikers && stats.recentSuperLikers.length > 0 && !currentUser?.isPremium && (
         <button
           onClick={() => setShowSuperLikersModal(true)}
@@ -837,7 +822,6 @@ export default function DiscoverPage() {
         </button>
       )}
 
-      {/* FILTRES RAPIDES (Desktop) */}
       <div className="hidden lg:flex gap-2 mb-4 max-w-[420px] w-full overflow-x-auto pb-2 scrollbar-hide">
         {filters.map((f) => (
           <button
@@ -859,7 +843,6 @@ export default function DiscoverPage() {
         ))}
       </div>
 
-      {/* MODALE LIMITE LIKES */}
       {showLikeLimitModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 p-4">
           <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl">
@@ -922,7 +905,6 @@ export default function DiscoverPage() {
         </div>
       )}
 
-      {/* MODALE : REVEAL LIKES CACHÉS */}
       {showLikesRevealModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 p-4">
           <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl">
@@ -990,7 +972,6 @@ export default function DiscoverPage() {
         </div>
       )}
 
-      {/* MODALE : SUPER LIKERS */}
       {showSuperLikersModal && stats && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 p-4">
           <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl">
@@ -1058,7 +1039,6 @@ export default function DiscoverPage() {
         </div>
       )}
 
-      {/* MODAL PREMIUM */}
       {showPremiumModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4">
           <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl">
@@ -1069,33 +1049,6 @@ export default function DiscoverPage() {
                 ) : (
                   <MessageCircle className="w-10 h-10 text-white" />
                 )}
-                          {/* ... bouton Message ... */}
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              handleDirectMessage();
-            }}
-            disabled={!!animating}
-            className="relative w-11 h-11 bg-white rounded-full shadow-lg flex items-center justify-center text-purple-500 hover:scale-110 active:scale-95 transition disabled:opacity-50"
-          >
-            <MessageCircle className="w-5 h-5" strokeWidth={2.5} />
-            {!currentUser?.isPremium && (
-              <Lock className="w-3 h-3 absolute -top-0.5 -right-0.5 text-white bg-orange-500 rounded-full p-0.5" />
-            )}
-          </button>
-
-          {/* ✅ NOUVEAU BOUTON BOOST ICI ✅ */}
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              router.push('/boost');
-            }}
-            disabled={!!animating}
-            className="relative w-11 h-11 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-full shadow-lg shadow-purple-500/30 flex items-center justify-center text-white hover:scale-110 active:scale-95 transition disabled:opacity-50"
-            title="Booster mon profil"
-          >
-            <Rocket className="w-5 h-5" strokeWidth={2.5} />
-          </button>
               </div>
               <h2 className="text-2xl font-black text-slate-900 mb-2">
                 Fonctionnalité Premium 👑
@@ -1126,7 +1079,6 @@ export default function DiscoverPage() {
         </div>
       )}
 
-      {/* MODAL LIMITE SUPER LIKE */}
       {showLimitModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4">
           <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl">
@@ -1167,7 +1119,6 @@ export default function DiscoverPage() {
         </div>
       )}
 
-      {/* MODAL SIGNALEMENT */}
       {showReportModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4">
           <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl max-h-[90vh] overflow-y-auto">
@@ -1231,7 +1182,6 @@ export default function DiscoverPage() {
         </div>
       )}
 
-      {/* MATCH POPUP */}
       {matchPopup && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90">
           <div className="bg-white rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl mx-4">
@@ -1353,7 +1303,6 @@ export default function DiscoverPage() {
           </button>
         </div>
 
-        {/* ✅ Badges en haut à droite */}
         <div className="absolute top-7 right-3 z-20 flex flex-col gap-2 items-end">
           {currentProfile.isPremium && (
             <div className="flex items-center gap-1.5 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-full px-3 py-1.5 shadow-lg">
@@ -1361,7 +1310,6 @@ export default function DiscoverPage() {
               <span className="text-[10px] font-black text-white tracking-widest">PREMIUM</span>
             </div>
           )}
-          {/* ✅ NOUVEAU : Badge Redécouvre (discret) */}
           {currentProfile.isRecycled && (
             <div className="flex items-center gap-1 bg-black/50 backdrop-blur-md rounded-full px-2 py-1 shadow-lg">
               <RefreshCw className="w-3 h-3 text-white/80" />
@@ -1484,16 +1432,17 @@ export default function DiscoverPage() {
           </button>
         </div>
 
-        <div className="absolute bottom-24 lg:bottom-4 left-0 right-0 flex items-center justify-center gap-3 z-30 px-4">
+        {/* 🚀 BARRE D'ACTIONS : 6 BOUTONS COMPACTS ET ADAPTÉS SUR MOBILE */}
+        <div className="absolute bottom-24 lg:bottom-4 left-0 right-0 flex items-center justify-center gap-1.5 sm:gap-2 z-30 px-2">
           
-          {/* ✅ BOUTON REWIND CORRIGÉ */}
+          {/* 1. REWIND */}
           <button
             onClick={(e) => {
               e.stopPropagation();
               handleRewind();
             }}
             disabled={!!animating}
-            className={`relative w-11 h-11 bg-white rounded-full shadow-lg flex items-center justify-center text-amber-500 hover:scale-110 active:scale-95 transition disabled:opacity-40 ${
+            className={`relative w-10 h-10 sm:w-11 sm:h-11 bg-white rounded-full shadow-lg flex items-center justify-center text-amber-500 hover:scale-110 active:scale-95 transition disabled:opacity-40 flex-shrink-0 ${
               currentUser?.isPremium && (canRewind || currentIndex > 0)
                 ? "opacity-100"
                 : currentUser?.isPremium
@@ -1508,52 +1457,70 @@ export default function DiscoverPage() {
             )}
           </button>
 
+          {/* 2. PASS (❌) */}
           <button
             onClick={(e) => {
               e.stopPropagation();
               handleAction(false);
             }}
             disabled={!!animating}
-            className="w-14 h-14 bg-white rounded-full shadow-xl flex items-center justify-center text-red-500 hover:scale-110 active:scale-95 transition disabled:opacity-50"
+            className="w-12 h-12 sm:w-14 sm:h-14 bg-white rounded-full shadow-xl flex items-center justify-center text-red-500 hover:scale-110 active:scale-95 transition disabled:opacity-50 flex-shrink-0"
           >
-            <X className="w-8 h-8" strokeWidth={3} />
+            <X className="w-7 h-7 sm:w-8 sm:h-8" strokeWidth={3} />
           </button>
 
+          {/* 3. SUPER LIKE (⭐) */}
           <button
             onClick={(e) => {
               e.stopPropagation();
               handleSuperLike();
             }}
             disabled={!!animating}
-            className="relative w-12 h-12 bg-white rounded-full shadow-lg flex items-center justify-center text-blue-500 hover:scale-110 active:scale-95 transition disabled:opacity-50"
+            className="relative w-11 h-11 sm:w-12 sm:h-12 bg-white rounded-full shadow-lg flex items-center justify-center text-blue-500 hover:scale-110 active:scale-95 transition disabled:opacity-50 flex-shrink-0"
           >
-            <Star className="w-6 h-6 fill-blue-500" strokeWidth={2} />
+            <Star className="w-5 h-5 sm:w-6 sm:h-6 fill-blue-500" strokeWidth={2} />
           </button>
 
+          {/* 4. LIKE (❤️) */}
           <button
             onClick={(e) => {
               e.stopPropagation();
               handleAction(true);
             }}
             disabled={!!animating}
-            className="w-14 h-14 bg-white rounded-full shadow-xl flex items-center justify-center text-green-500 hover:scale-110 active:scale-95 transition disabled:opacity-50"
+            className="w-12 h-12 sm:w-14 sm:h-14 bg-white rounded-full shadow-xl flex items-center justify-center text-green-500 hover:scale-110 active:scale-95 transition disabled:opacity-50 flex-shrink-0"
           >
-            <Heart className="w-8 h-8 fill-green-500" strokeWidth={2} />
+            <Heart className="w-7 h-7 sm:w-8 sm:h-8 fill-green-500" strokeWidth={2} />
           </button>
 
+          {/* 5. MESSAGE DIRECT (💬) */}
           <button
             onClick={(e) => {
               e.stopPropagation();
               handleDirectMessage();
             }}
             disabled={!!animating}
-            className="relative w-11 h-11 bg-white rounded-full shadow-lg flex items-center justify-center text-purple-500 hover:scale-110 active:scale-95 transition disabled:opacity-50"
+            className="relative w-10 h-10 sm:w-11 sm:h-11 bg-white rounded-full shadow-lg flex items-center justify-center text-purple-500 hover:scale-110 active:scale-95 transition disabled:opacity-50 flex-shrink-0"
           >
             <MessageCircle className="w-5 h-5" strokeWidth={2.5} />
             {!currentUser?.isPremium && (
               <Lock className="w-3 h-3 absolute -top-0.5 -right-0.5 text-white bg-orange-500 rounded-full p-0.5" />
             )}
           </button>
+
+          {/* 6. 🚀 NOUVEAU BOUTON BOOST (FUSÉE) */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              router.push("/boost");
+            }}
+            disabled={!!animating}
+            className="relative w-10 h-10 sm:w-11 sm:h-11 bg-gradient-to-tr from-purple-600 via-pink-500 to-amber-500 rounded-full shadow-lg flex items-center justify-center text-white hover:scale-110 active:scale-95 transition disabled:opacity-50 flex-shrink-0"
+            title="Booster mon profil 🚀"
+          >
+            <Rocket className="w-5 h-5 fill-white text-white animate-pulse" strokeWidth={2.5} />
+          </button>
+
         </div>
       </div>
     </div>
