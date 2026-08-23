@@ -48,7 +48,7 @@ export default function AdminPaymentsPage() {
     return () => clearInterval(interval);
   }, []);
 
-  const handleValidate = async (paymentId: number) => {
+    const handleValidate = async (paymentId: number) => {
     if (!confirm("Voulez-vous vraiment valider ce paiement et activer le service pour l'utilisateur ?")) return;
     
     setValidatingId(paymentId);
@@ -59,11 +59,13 @@ export default function AdminPaymentsPage() {
         body: JSON.stringify({ paymentId }),
       });
 
+      const data = await res.json();
+
       if (res.ok) {
         alert("✅ Paiement validé avec succès ! Le service a été activé.");
         setPayments((prev) => prev.filter((p) => p.payment.id !== paymentId));
       } else {
-        alert("❌ Erreur lors de la validation.");
+        alert(`❌ Erreur : ${data.error || "Impossible de valider."}`);
       }
     } catch (err) {
       alert("❌ Erreur réseau.");
@@ -71,7 +73,6 @@ export default function AdminPaymentsPage() {
       setValidatingId(null);
     }
   };
-
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[50vh]">
