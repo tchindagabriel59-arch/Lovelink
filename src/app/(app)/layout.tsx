@@ -90,13 +90,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     unreadMessages: 0,
   });
 
-  // Compteurs "vus" pour badges intelligents (localStorage)
   const [seenMatchesCount, setSeenMatchesCount] = useState<number>(0);
   const [seenLikesCount, setSeenLikesCount] = useState<number>(0);
 
   const hasFetchedRef = useRef(false);
 
-  // Charger les valeurs "vues" depuis localStorage au démarrage
   useEffect(() => {
     if (typeof window !== "undefined") {
       const savedMatches = localStorage.getItem("seenMatchesCount");
@@ -159,7 +157,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     if (user) fetchCounts();
   }, [pathname, user, fetchCounts]);
 
-  // Marquer les matchs comme "vus" quand on ouvre la page
   useEffect(() => {
     if (pathname === "/matches" && counts.matches > 0) {
       setSeenMatchesCount(counts.matches);
@@ -169,7 +166,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     }
   }, [pathname, counts.matches]);
 
-  // Marquer les likes comme "vus" quand on ouvre la page
   useEffect(() => {
     if (pathname === "/likes-recus" && counts.likesReceived > 0) {
       setSeenLikesCount(counts.likesReceived);
@@ -198,7 +194,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     router.push("/");
   };
 
-  // Calcul des badges intelligents (NOUVEAUX matchs/likes non vus)
   const newMatchesBadge = Math.max(0, counts.matches - seenMatchesCount);
   const newLikesBadge = Math.max(0, counts.likesReceived - seenLikesCount);
 
@@ -272,7 +267,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     },
   ];
 
-  // Bottom nav mobile : Accueil, Découvrir, Likes, Matchs, Messages
   const mobileNavItems = navItems.slice(0, 5);
 
   if (loading) {
@@ -305,17 +299,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               <span className="text-2xl font-bold gradient-text">LoveLink</span>
             </Link>
 
-            {/* Cloche dropdown existante + accès page complète */}
-            <div className="flex items-center gap-1">
-              <Notifications />
-              <Link
-                href="/notifications"
-                className="p-2 rounded-full text-slate-500 hover:bg-rose-50 hover:text-rose-500 transition"
-                title="Toutes les notifications"
-              >
-                <Bell className="w-5 h-5" />
-              </Link>
-            </div>
+            {/* Une seule cloche de notifications */}
+            <Notifications />
           </div>
 
           <nav className="flex-1 px-4 space-y-1 overflow-y-auto">
@@ -445,22 +430,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               )}
             </Link>
 
-            <div className="flex items-center gap-1">
-              {/* Dropdown rapide (composant existant) */}
+            <div className="flex items-center gap-2">
+              {/* Une seule cloche unique de notifications */}
               <Notifications />
-
-              {/* Page complète style Farata */}
-              <Link
-                href="/notifications"
-                className={`p-2 rounded-full transition ${
-                  pathname === "/notifications"
-                    ? "text-rose-500 bg-rose-50"
-                    : "text-slate-600 hover:bg-rose-50 hover:text-rose-500"
-                }`}
-                title="Notifications"
-              >
-                <Bell className="w-5 h-5" />
-              </Link>
 
               <button
                 onClick={() => setMenuOpen(!menuOpen)}
