@@ -30,7 +30,7 @@ export async function sendPushToUser(
   payload: PushPayload
 ): Promise<{ success: boolean; sent: number; failed: number }> {
   try {
-    // Récupérer tous les abonnements de cet user (peut avoir plusieurs appareils)
+    // Récupérer tous les abonnements de cet user
     const subs = await db
       .select()
       .from(pushSubscriptions)
@@ -44,7 +44,7 @@ export async function sendPushToUser(
     let failed = 0;
 
     // Envoyer à tous les appareils en parallèle
-    const results = await Promise.allSettled(
+    await Promise.allSettled(
       subs.map(async (sub) => {
         try {
           await webpush.sendNotification(
@@ -136,25 +136,21 @@ export const PushTemplates = {
 
   boost: () => ({
     title: "🚀 Boost activé !",
-    boost: () => ({
-  title: "🚀 Boost activé !",
-  body: "Ton profil est mis en avant. Profite de ta visibilité max !",
-  icon: "/icon",
-  tag: "boost",
-  url: "/discover",
-}),,
+    body: "Ton profil est mis en avant ! Profite de ta visibilité max !",
     icon: "/icon",
     tag: "boost",
-    url: "/boost",
+    url: "/discover",
   }),
-    newProfiles: (count: number) => ({
+
+  newProfiles: (count: number) => ({
     title: "🔥 De nouveaux profils !",
     body: `${count} personne${count > 1 ? "s viennent" : " vient"} de rejoindre LoveLink. Découvre-${count > 1 ? "les" : "la"} !`,
     icon: "/icon",
     tag: "new_profiles",
     url: "/discover",
   }),
-    incompleteProfile3d: () => ({
+
+  incompleteProfile3d: () => ({
     title: "📸 Ton profil t'attend !",
     body: "Ajoute une photo pour commencer à matcher 💕",
     icon: "/icon",
