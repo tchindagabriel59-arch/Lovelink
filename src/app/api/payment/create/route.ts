@@ -19,35 +19,47 @@ export async function POST(req: NextRequest) {
     if (!userId) return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
 
     const body = await req.json();
-    const { plan, period, gateway = "auto", country = "CM", returnPath = "/discover" } = body as {
+    const { plan, period, gateway = "auto", returnPath = "/discover" } = body as {
       plan: PremiumPlan;
       period: BillingPeriod;
       gateway?: "notchpay" | "paydunya" | "auto";
-      country?: string;
       returnPath?: string;
     };
 
     const amount = getPremiumPrice(plan, period);
     const description = getPaymentDesignation(plan, period);
 
+    // 1. Récupération de l'utilisateur et de son pays
     const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
     if (!user) return NextResponse.json({ error: "Utilisateur introuvable" }, { status: 404 });
+
+    // 2. Détection intelligente du pays (Cameroun vs Reste du monde)
+    const userCountry = (user.country || "").toUpperCase();
+    const userPhone = user.phone || "";
+    
+    // Est au Cameroun si pays = "CM" ou "CAMEROUN" ou téléphone commence par +237 / 237
+    const isCameroon =
+      userCountry === "CM" ||
+      userCountry.includes("CAMER") ||
+      userPhone.startsWith("+237") ||
+      userPhone.startsWith("237");
 
     const merchantTransactionId = generateMerchantTransactionId(userId);
     const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://lovelink237.com";
 
-    // 🔀 DÉCISION DU GATEWAY : Si Cameroun (CM) ou forcé NotchPay -> Mode Manuel CM Temporaire
-    const useNotchPay = gateway === "notchpay" || (gateway === "auto" && country === "CM");
-
     let paymentUrl = "";
     let paymentToken = "";
+    let currency = "XOF";
+    let paymentMethod = "paydunya";
 
-    if (useNotchPay) {
-      // 🇨🇲 MODE MANUEL CAMEROUN TEMPORAIRE (Attente validation NotchPay Live)
+    if (gateway === "notchpay" || (gateway === "auto" && isCameroon)) {
+      // 🇨🇲 CAMEROUN : Mode Manuel MTN / Orange
       paymentUrl = `${baseUrl}/premium/manual-cm?plan=${plan}&period=${period}&amount=${amount}&userId=${userId}`;
-      paymentToken = `MANUAL-${merchantTransactionId}`;
+      paymentToken = `MANUAL-${merchantTransactionId}`.substring(0, 30);
+      currency = "XAF";
+      paymentMethod = "manual_cm";
     } else {
-      // 🌍 ROUTE PAYDUNYA (Zone UEMOA : Sénégal, CI, Bénin, etc.)
+      // 🌍 AUTRES PAYS : PayDunya (Wave, Orange Money SN/CI, MTN CI, etc.)
       const urls = getPaymentUrls(merchantTransactionId);
       urls.return_url = `${baseUrl}${returnPath}?tx=${merchantTransactionId}&status=success`;
       urls.cancel_url = `${baseUrl}${returnPath}?tx=${merchantTransactionId}&status=failed`;
@@ -61,31 +73,36 @@ export async function POST(req: NextRequest) {
 
       paymentUrl = invoiceData.invoice_url || invoiceData.response_text;
       paymentToken = invoiceData.token || "";
+      currency = "XOF";
+      paymentMethod = "paydunya";
     }
 
     if (!paymentUrl || !paymentUrl.startsWith("http")) {
       throw new Error("L'URL de paiement générée est invalide");
     }
 
-    // Sauvegarde de l'intention de paiement en BDD
+    // 3. Sauvegarde BDD Sécurisée avec TOUS les champs requis par le schéma Drizzle
     await db.insert(payments).values({
       userId,
       merchantTransactionId,
       paymentToken,
       paymentUrl,
       amount,
+      currency,
       plan,
       billingPeriod: period,
+      paymentMethod,
       status: "pending",
-      clientEmail: user.email,
-      clientFirstName: user.firstName,
+      clientEmail: user.email || `user_${userId}@lovelink.com`,
+      clientFirstName: user.firstName || "Utilisateur",
       clientLastName: user.lastName || "",
-    });
+      clientPhone: user.phone || "",
+    } as any);
 
     return NextResponse.json({
       success: true,
       paymentUrl: paymentUrl,
-      gatewayUsed: useNotchPay ? "manual_cm" : "paydunya",
+      gatewayUsed: paymentMethod,
     });
   } catch (error) {
     console.error("Payment create error:", error);
