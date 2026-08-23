@@ -231,7 +231,7 @@ export default function DiscoverPage() {
         }
       } catch {
         // silently fail
-      } font-bold {
+      } finally {
         setLoading(false);
       }
     }
@@ -1432,10 +1432,9 @@ export default function DiscoverPage() {
           </button>
         </div>
 
-        {/* 🚀 BARRE D'ACTIONS : 6 BOUTONS COMPACTS ET ADAPTÉS SUR MOBILE */}
+        {/* BARRE D'ACTIONS : 6 BOUTONS COMPACTS */}
         <div className="absolute bottom-24 lg:bottom-4 left-0 right-0 flex items-center justify-center gap-1.5 sm:gap-2 z-30 px-2">
           
-          {/* 1. REWIND */}
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -1457,7 +1456,6 @@ export default function DiscoverPage() {
             )}
           </button>
 
-          {/* 2. PASS (❌) */}
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -1469,7 +1467,6 @@ export default function DiscoverPage() {
             <X className="w-7 h-7 sm:w-8 sm:h-8" strokeWidth={3} />
           </button>
 
-          {/* 3. SUPER LIKE (⭐) */}
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -1481,7 +1478,6 @@ export default function DiscoverPage() {
             <Star className="w-5 h-5 sm:w-6 sm:h-6 fill-blue-500" strokeWidth={2} />
           </button>
 
-          {/* 4. LIKE (❤️) */}
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -1493,7 +1489,6 @@ export default function DiscoverPage() {
             <Heart className="w-7 h-7 sm:w-8 sm:h-8 fill-green-500" strokeWidth={2} />
           </button>
 
-          {/* 5. MESSAGE DIRECT (💬) */}
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -1508,7 +1503,6 @@ export default function DiscoverPage() {
             )}
           </button>
 
-          {/* 6. 🚀 NOUVEAU BOUTON BOOST (FUSÉE) */}
           <button
             onClick={(e) => {
               e.stopPropagation();
