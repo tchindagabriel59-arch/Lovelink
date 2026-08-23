@@ -11,7 +11,7 @@ export async function GET() {
     if (!adminId) return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
 
     const [admin] = await db.select().from(users).where(eq(users.id, adminId)).limit(1);
-    if (!admin?.isAdmin) return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
+    if (!(admin as any)?.isAdmin) return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
 
     const pendingPayments = await db
       .select({
@@ -21,7 +21,7 @@ export async function GET() {
           firstName: users.firstName,
           lastName: users.lastName,
           photoUrl: users.photoUrl,
-          phone: users.phone,
+          email: users.email,
         },
       })
       .from(payments)
@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
     if (!adminId) return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
 
     const [admin] = await db.select().from(users).where(eq(users.id, adminId)).limit(1);
-    if (!admin?.isAdmin) return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
+    if (!(admin as any)?.isAdmin) return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
 
     const { paymentId } = await req.json();
     if (!paymentId) return NextResponse.json({ error: "ID de paiement manquant" }, { status: 400 });
@@ -53,6 +53,8 @@ export async function POST(req: NextRequest) {
 
     const [user] = await db.select().from(users).where(eq(users.id, payment.userId)).limit(1);
     if (!user) return NextResponse.json({ error: "Utilisateur introuvable" }, { status: 404 });
+
+    const u = user as any;
 
     // Mettre à jour le statut du paiement
     await db.update(payments)
@@ -67,21 +69,21 @@ export async function POST(req: NextRequest) {
       if (payment.billingPeriod === "3d") hoursToAdd = 72;
       if (payment.billingPeriod === "7d") hoursToAdd = 168;
 
-      const currentExpiry = user.boostExpiresAt ? new Date(user.boostExpiresAt) : now;
+      const currentExpiry = u.boostExpiresAt ? new Date(u.boostExpiresAt) : now;
       const baseDate = currentExpiry > now ? currentExpiry : now;
       const newExpiry = new Date(baseDate.getTime() + hoursToAdd * 60 * 60 * 1000);
 
-      await db.update(users).set({ isBoosted: true, boostExpiresAt: newExpiry } as any).where(eq(users.id, user.id));
+      await db.update(users).set({ isBoosted: true, boostExpiresAt: newExpiry } as any).where(eq(users.id, u.id));
     } else {
       // Premium ou Gold
       let monthsToAdd = 1;
       if (payment.billingPeriod === "yearly") monthsToAdd = 12;
 
-      const currentExpiry = user.premiumExpiresAt ? new Date(user.premiumExpiresAt) : now;
+      const currentExpiry = u.premiumExpiresAt ? new Date(u.premiumExpiresAt) : now;
       const baseDate = currentExpiry > now ? currentExpiry : now;
       const newExpiry = new Date(baseDate.setMonth(baseDate.getMonth() + monthsToAdd));
 
-      await db.update(users).set({ isPremium: true, premiumPlan: payment.plan, premiumExpiresAt: newExpiry } as any).where(eq(users.id, user.id));
+      await db.update(users).set({ isPremium: true, premiumPlan: payment.plan, premiumExpiresAt: newExpiry } as any).where(eq(users.id, u.id));
     }
 
     return NextResponse.json({ success: true });
