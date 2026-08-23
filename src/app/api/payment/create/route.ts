@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
     const description = getPaymentDesignation(plan, period);
 
     const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
-    if (!user) return NextResponse.json({ error: "User introuvable" }, { status: 404 });
+    if (!user) return NextResponse.json({ error: "Utilisateur introuvable" }, { status: 404 });
 
     const merchantTransactionId = generateMerchantTransactionId(userId);
     const urls = getPaymentUrls(merchantTransactionId);
@@ -55,11 +55,18 @@ export async function POST(req: NextRequest) {
       },
     });
 
+    // ✅ FIX CORRECTION PAYDUNYA URL : Prend response_text si invoice_url est vide
+    const paymentUrl = invoiceData.invoice_url || invoiceData.response_text;
+
+    if (!paymentUrl || !paymentUrl.startsWith("http")) {
+      throw new Error("L'URL de paiement générée par PayDunya est invalide");
+    }
+
     await db.insert(payments).values({
       userId,
       merchantTransactionId,
       paymentToken: invoiceData.token || "",
-      paymentUrl: invoiceData.invoice_url,
+      paymentUrl: paymentUrl,
       amount,
       plan,
       billingPeriod: period,
@@ -71,10 +78,13 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      paymentUrl: invoiceData.invoice_url,
+      paymentUrl: paymentUrl,
     });
   } catch (error) {
     console.error("Payment create error:", error);
-    return NextResponse.json({ error: "Erreur création paiement" }, { status: 500 });
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return NextResponse.json({
+      error: errorMessage || "Erreur lors de la création du paiement",
+    }, { status: 500 });
   }
 }
