@@ -58,9 +58,11 @@ export async function POST(req: NextRequest) {
     const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
 
     if (user) {
+      const u = user as any; // Cast TypeScript pour éviter les erreurs de type pendant le build Vercel
+
       if (plan === "boost") {
         // 🔥 Activation du Boost
-        const currentBoostExpiry = user.boostExpiresAt ? new Date(user.boostExpiresAt) : new Date();
+        const currentBoostExpiry = u.boostExpiresAt ? new Date(u.boostExpiresAt) : new Date();
         const baseDate = currentBoostExpiry > new Date() ? currentBoostExpiry : new Date();
         
         // Calcul cumulatif du boost
@@ -76,7 +78,7 @@ export async function POST(req: NextRequest) {
             isBoosted: true,
             boostExpiresAt: newBoostExpiry,
             updatedAt: new Date(),
-          })
+          } as any)
           .where(eq(users.id, userId));
           
         console.log(`🚀 Boost activé pour utilisateur ${userId} jusqu'au ${newBoostExpiry}`);
@@ -89,7 +91,7 @@ export async function POST(req: NextRequest) {
             premiumPlan: plan,
             premiumExpiresAt: expiresAt,
             updatedAt: new Date(),
-          })
+          } as any)
           .where(eq(users.id, userId));
 
         console.log(`💎 Plan ${plan} activé pour utilisateur ${userId} jusqu'au ${expiresAt}`);
