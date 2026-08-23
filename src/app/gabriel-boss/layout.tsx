@@ -14,6 +14,7 @@ import {
   X,
   Home,
   Activity,
+  CreditCard,
 } from "lucide-react";
 
 interface Counts {
@@ -21,6 +22,7 @@ interface Counts {
   premium: number;
   verifications: number;
   reports: number;
+  pendingPayments?: number;
 }
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -30,6 +32,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     premium: 0,
     verifications: 0,
     reports: 0,
+    pendingPayments: 0,
   });
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -38,7 +41,19 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       const res = await fetch("/api/admin/counts");
       if (res.ok) {
         const data = await res.json();
-        setCounts(data);
+        setCounts((prev) => ({ ...prev, ...data }));
+      }
+    } catch {
+      // silently fail
+    }
+
+    // Compteur paiements en attente (optionnel)
+    try {
+      const payRes = await fetch("/api/admin/payments");
+      if (payRes.ok) {
+        const payData = await payRes.json();
+        const pending = Array.isArray(payData.pending) ? payData.pending.length : 0;
+        setCounts((prev) => ({ ...prev, pendingPayments: pending }));
       }
     } catch {
       // silently fail
@@ -61,6 +76,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       label: "Dashboard",
       icon: <LayoutDashboard className="w-5 h-5" />,
       badge: 0,
+      showBadge: false,
+      alert: false,
+      badgeColor: "bg-slate-700",
     },
     {
       href: "/gabriel-boss/utilisateurs",
@@ -69,6 +87,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       badge: counts.users,
       badgeColor: "bg-blue-500",
       showBadge: false,
+      alert: false,
+    },
+    {
+      href: "/gabriel-boss/paiements",
+      label: "Paiements CM",
+      icon: <CreditCard className="w-5 h-5" />,
+      badge: counts.pendingPayments || 0,
+      badgeColor: "bg-emerald-500",
+      showBadge: true,
+      alert: (counts.pendingPayments || 0) > 0,
     },
     {
       href: "/gabriel-boss/abonnes",
@@ -77,6 +105,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       badge: counts.premium,
       badgeColor: "bg-amber-500",
       showBadge: false,
+      alert: false,
     },
     {
       href: "/gabriel-boss/verifications",
@@ -160,7 +189,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           {/* Séparateur */}
           <div className="my-4 border-t border-slate-800" />
 
-          {/* ✨ ANALYTICS - NOUVEAU */}
+          {/* ANALYTICS */}
           <Link
             href="/gabriel-boss/analytics"
             prefetch
@@ -176,22 +205,23 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               NEW
             </span>
           </Link>
-          {/* 📊 MONITORING - NOUVEAU */}
-<Link
-  href="/gabriel-boss/monitoring"
-  prefetch
-  className={`relative flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium ${
-    pathname === "/gabriel-boss/monitoring"
-      ? "bg-gradient-to-r from-red-600 to-orange-600 text-white shadow-lg shadow-red-500/25"
-      : "text-slate-400 hover:bg-slate-800 hover:text-white"
-  }`}
->
-  <Activity className="w-5 h-5" />
-  <span className="flex-1">Monitoring</span>
-  <span className="text-[9px] px-1.5 py-0.5 bg-red-500 text-white rounded-full font-black">
-    NEW
-  </span>
-</Link>
+
+          {/* MONITORING */}
+          <Link
+            href="/gabriel-boss/monitoring"
+            prefetch
+            className={`relative flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium ${
+              pathname === "/gabriel-boss/monitoring"
+                ? "bg-gradient-to-r from-red-600 to-orange-600 text-white shadow-lg shadow-red-500/25"
+                : "text-slate-400 hover:bg-slate-800 hover:text-white"
+            }`}
+          >
+            <Activity className="w-5 h-5" />
+            <span className="flex-1">Monitoring</span>
+            <span className="text-[9px] px-1.5 py-0.5 bg-red-500 text-white rounded-full font-black">
+              NEW
+            </span>
+          </Link>
         </nav>
 
         {/* Footer sidebar */}
@@ -285,7 +315,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               );
             })}
 
-            {/* ✨ ANALYTICS - NOUVEAU (mobile) */}
+            {/* ANALYTICS mobile */}
             <Link
               href="/gabriel-boss/analytics"
               prefetch
@@ -301,22 +331,23 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 NEW
               </span>
             </Link>
-            {/* 📊 MONITORING - NOUVEAU */}
-<Link
-  href="/gabriel-boss/monitoring"
-  prefetch
-  className={`relative flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium ${
-    pathname === "/gabriel-boss/monitoring"
-      ? "bg-gradient-to-r from-red-600 to-orange-600 text-white shadow-lg shadow-red-500/25"
-      : "text-slate-400 hover:bg-slate-800 hover:text-white"
-  }`}
->
-  <Activity className="w-5 h-5" />
-  <span className="flex-1">Monitoring</span>
-  <span className="text-[9px] px-1.5 py-0.5 bg-red-500 text-white rounded-full font-black">
-    NEW
-  </span>
-</Link>
+
+            {/* MONITORING mobile */}
+            <Link
+              href="/gabriel-boss/monitoring"
+              prefetch
+              className={`relative flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium ${
+                pathname === "/gabriel-boss/monitoring"
+                  ? "bg-gradient-to-r from-red-600 to-orange-600 text-white"
+                  : "text-slate-400 hover:bg-slate-800 hover:text-white"
+              }`}
+            >
+              <Activity className="w-5 h-5" />
+              <span className="flex-1">Monitoring</span>
+              <span className="text-[9px] px-1.5 py-0.5 bg-red-500 text-white rounded-full font-black">
+                NEW
+              </span>
+            </Link>
 
             <div className="my-3 border-t border-slate-800" />
 
