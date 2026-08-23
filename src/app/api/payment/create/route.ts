@@ -12,6 +12,7 @@ import {
   PremiumPlan,
   BillingPeriod,
 } from "@/lib/paydunya";
+import { sendTelegramAlert, formatPaymentAlert } from "@/lib/telegram";
 
 type PaymentCountry = "CM" | "OTHER";
 
@@ -28,7 +29,7 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json();
 
-    // 1. Normalisation intelligente du PLAN (premium, gold, boost)
+    // 1. Normalisation du PLAN
     let plan: PremiumPlan = "premium";
     const rawPlan = String(body.plan || body.planType || body.type || "premium").toLowerCase();
     if (rawPlan.includes("gold")) {
@@ -39,7 +40,7 @@ export async function POST(req: NextRequest) {
       plan = "premium";
     }
 
-    // 2. Normalisation intelligente de la DURÉE / PERIODE
+    // 2. Normalisation de la DURÉE
     let period: BillingPeriod = "monthly";
     const rawPeriod = String(body.period || body.duration || body.billingPeriod || body.periodLabel || "monthly").toLowerCase();
 
@@ -52,7 +53,7 @@ export async function POST(req: NextRequest) {
     } else if (rawPeriod.includes("7d") || rawPeriod.includes("7j") || rawPeriod.includes("7")) {
       period = "7d";
     } else {
-      period = "monthly"; // Par défaut 1 mois
+      period = "monthly";
     }
 
     const country: PaymentCountry | undefined = body.country;
@@ -68,10 +69,7 @@ export async function POST(req: NextRequest) {
     const baseUrl =
       process.env.NEXT_PUBLIC_SITE_URL || "https://lovelink237.com";
 
-    /*
-     * Si aucun pays n'a encore été sélectionné :
-     * Redirection vers la page de choix du pays.
-     */
+    // Si le pays n'est pas encore choisi -> Redirection choix du pays
     if (country !== "CM" && country !== "OTHER") {
       const choiceUrl = new URL(
         "/premium/choose-payment-country",
@@ -105,15 +103,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const u = user as any;
     const merchantTransactionId = generateMerchantTransactionId(userId);
 
     let paymentUrl = "";
     let paymentToken = "";
 
     if (country === "CM") {
-      /*
-       * 🇨🇲 CAMEROUN : Paiement direct MTN / Orange Manuel
-       */
+      // 🇨🇲 CAMEROUN : Paiement direct MTN / Orange Manuel
       const manualUrl = new URL("/premium/manual-cm", baseUrl);
 
       manualUrl.searchParams.set("plan", plan);
@@ -125,9 +122,7 @@ export async function POST(req: NextRequest) {
       paymentUrl = manualUrl.toString();
       paymentToken = `MANUAL-${merchantTransactionId}`.substring(0, 30);
     } else {
-      /*
-       * 🌍 AUTRES PAYS : PayDunya (Wave, OM, Carte)
-       */
+      // 🌍 AUTRES PAYS : PayDunya
       const urls = getPaymentUrls(merchantTransactionId);
 
       urls.return_url =
@@ -165,6 +160,7 @@ export async function POST(req: NextRequest) {
       throw new Error("L'URL de paiement générée est invalide");
     }
 
+    // Sauvegarde en BDD
     await db.insert(payments).values({
       userId,
       merchantTransactionId,
@@ -178,6 +174,23 @@ export async function POST(req: NextRequest) {
       clientFirstName: user.firstName,
       clientLastName: user.lastName || "",
     } as any);
+
+    // 🤖 ENVOI ALERTE TELEGRAM EN ARRIÈRE-PLAN
+    sendTelegramAlert(
+      formatPaymentAlert({
+        type: country === "CM" ? "manual_cm" : "intent",
+        userId: userId,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        plan: plan,
+        period: period,
+        amount: amount,
+        currency: country === "CM" ? "XAF" : "XOF",
+        gateway: country === "CM" ? "MTN / Orange CM (Manuel)" : "PayDunya",
+        tx: merchantTransactionId,
+        phone: u.phone || u.phoneNumber || "",
+      })
+    ).catch((err) => console.error("Telegram alert background error:", err));
 
     return NextResponse.json({
       success: true,
