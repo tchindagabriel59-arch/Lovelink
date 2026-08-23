@@ -533,9 +533,7 @@ function MessagesContent() {
 
   return (
     <div className="flex h-[calc(100vh-64px)] lg:h-screen bg-[#F7F8FC]">
-      {/* ════════════════════════════════════════ */}
-      {/* LISTE DES MESSAGES — style Farata */}
-      {/* ════════════════════════════════════════ */}
+      {/* SIDEBAR CONVERSATIONS - Style Farata */}
       <div
         className={`${
           selectedMatch ? "hidden md:flex" : "flex"
@@ -549,14 +547,13 @@ function MessagesContent() {
                 Messages
               </h2>
               <p className="text-xs text-slate-400 mt-0.5 font-medium">
-                {matchesList.length} conversation
-                {matchesList.length > 1 ? "s" : ""}
+                {matchesList.length} conversation{matchesList.length > 1 ? "s" : ""}
               </p>
             </div>
           </div>
         </div>
 
-        {/* Bandeau Premium / Vocaux */}
+        {/* Card Vocaux Premium */}
         <div className="px-4 mb-3">
           <Link
             href="/premium"
@@ -584,7 +581,7 @@ function MessagesContent() {
           </Link>
         </div>
 
-        {/* Onglets */}
+        {/* Filter Tabs */}
         <div className="px-4 mb-3 flex items-center gap-2 overflow-x-auto pb-1">
           {[
             { id: "all" as FilterTab, label: "Tous", count: conversations.length },
@@ -621,7 +618,7 @@ function MessagesContent() {
           })}
         </div>
 
-        {/* Recherche */}
+        {/* Search Input */}
         <div className="px-4 mb-3">
           <div className="relative">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -657,7 +654,7 @@ function MessagesContent() {
           </div>
         ) : (
           <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-3">
-            {/* Nouveaux matchs */}
+            {/* New Matches Header */}
             {newMatches.length > 0 && filterTab === "all" && !searchQuery && (
               <div className="bg-white rounded-3xl p-4 border border-slate-100 shadow-sm">
                 <h3 className="text-[11px] font-black text-slate-400 uppercase tracking-wider mb-3">
@@ -704,10 +701,10 @@ function MessagesContent() {
               </div>
             )}
 
-            {/* Conversations en cartes */}
+            {/* Conversation Cards */}
             {filteredConversations.length === 0 ? (
               <div className="text-center py-10 text-sm text-slate-400">
-                Aucune conversation dans cet onglet
+                Aucune conversation trouvée
               </div>
             ) : (
               filteredConversations.map((match) => {
@@ -809,12 +806,9 @@ function MessagesContent() {
         )}
       </div>
 
-      {/* ════════════════════════════════════════ */}
-      {/* ZONE DE CHAT — style Farata */}
-      {/* ════════════════════════════════════════ */}
+      {/* ZONE DE CHAT */}
       {selectedMatch ? (
         <div className="flex-1 flex flex-col bg-[#F3F4F8] relative">
-          {/* Motif de fond léger */}
           <div
             className="absolute inset-0 opacity-[0.04] pointer-events-none"
             style={{
@@ -824,7 +818,7 @@ function MessagesContent() {
             }}
           />
 
-          {/* Header chat */}
+          {/* Header Chat */}
           <div className="relative z-10 px-3 py-3 bg-white/90 backdrop-blur border-b border-slate-100 flex items-center gap-3 shadow-sm">
             <button
               onClick={() => setSelectedMatch(null)}
@@ -874,7 +868,7 @@ function MessagesContent() {
             )}
           </div>
 
-          {/* Messages */}
+          {/* Body Messages */}
           <div className="relative z-10 flex-1 overflow-y-auto p-4 space-y-2">
             {loadingMessages ? (
               <ChatSkeleton />
@@ -1005,7 +999,7 @@ function MessagesContent() {
             </div>
           )}
 
-          {/* Input style Farata */}
+          {/* Input Form */}
           <form
             onSubmit={handleSend}
             className="relative z-10 p-3 bg-white/95 backdrop-blur border-t border-slate-100"
