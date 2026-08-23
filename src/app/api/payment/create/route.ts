@@ -12,6 +12,7 @@ import {
   PremiumPlan,
   BillingPeriod,
 } from "@/lib/paydunya";
+import { createNotchPayPayment } from "@/lib/notchpay";
 
 export async function POST(req: NextRequest) {
   try {
@@ -19,9 +20,11 @@ export async function POST(req: NextRequest) {
     if (!userId) return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
 
     const body = await req.json();
-    const { plan, period, returnPath = "/premium" } = body as {
+    const { plan, period, gateway = "auto", country = "CM", returnPath = "/discover" } = body as {
       plan: PremiumPlan;
       period: BillingPeriod;
+      gateway?: "notchpay" | "paydunya" | "auto";
+      country?: string;
       returnPath?: string;
     };
 
@@ -32,41 +35,55 @@ export async function POST(req: NextRequest) {
     if (!user) return NextResponse.json({ error: "Utilisateur introuvable" }, { status: 404 });
 
     const merchantTransactionId = generateMerchantTransactionId(userId);
-    const urls = getPaymentUrls(merchantTransactionId);
-    
     const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://lovelink237.com";
-    urls.return_url = `${baseUrl}${returnPath}?tx=${merchantTransactionId}&status=success`;
-    urls.cancel_url = `${baseUrl}${returnPath}?tx=${merchantTransactionId}&status=failed`;
 
-    const invoiceData = await createPayDunyaInvoice({
-      invoice: {
-        total_amount: amount,
+    // 🔀 DÉCISION DU GATEWAY : Si Cameroun (CM) ou forcé NotchPay -> NotchPay, sinon -> PayDunya
+    const useNotchPay = gateway === "notchpay" || (gateway === "auto" && country === "CM");
+
+    let paymentUrl = "";
+    let paymentToken = "";
+
+    if (useNotchPay) {
+      // 🇨🇲 ROUTE NOTCH PAY (Cameroun : Orange Money CM / MTN CM / Carte)
+      const notchPayResult = await createNotchPayPayment({
+        email: user.email || `user_${userId}@lovelink.com`,
+        amount: amount,
+        currency: "XAF",
+        reference: merchantTransactionId,
         description: description,
-      },
-      store: {
-        name: "LoveLink",
-        website_url: baseUrl,
-      },
-      actions: urls,
-      custom_data: {
-        userId: userId.toString(),
-        plan,
-        period,
-      },
-    });
+        user_name: `${user.firstName} ${user.lastName || ""}`.trim(),
+        callback: `${baseUrl}${returnPath}?tx=${merchantTransactionId}&status=success`,
+      });
 
-    // ✅ FIX CORRECTION PAYDUNYA URL : Prend response_text si invoice_url est vide
-    const paymentUrl = invoiceData.invoice_url || invoiceData.response_text;
+      paymentUrl = notchPayResult.authorization_url;
+      paymentToken = notchPayResult.reference;
+    } else {
+      // 🌍 ROUTE PAYDUNYA (Zone UEMOA : Sénégal, CI, Bénin, etc.)
+      const urls = getPaymentUrls(merchantTransactionId);
+      urls.return_url = `${baseUrl}${returnPath}?tx=${merchantTransactionId}&status=success`;
+      urls.cancel_url = `${baseUrl}${returnPath}?tx=${merchantTransactionId}&status=failed`;
 
-    if (!paymentUrl || !paymentUrl.startsWith("http")) {
-      throw new Error("L'URL de paiement générée par PayDunya est invalide");
+      const invoiceData = await createPayDunyaInvoice({
+        invoice: { total_amount: amount, description: description },
+        store: { name: "LoveLink", website_url: baseUrl },
+        actions: urls,
+        custom_data: { userId: userId.toString(), plan, period },
+      });
+
+      paymentUrl = invoiceData.invoice_url || invoiceData.response_text;
+      paymentToken = invoiceData.token || "";
     }
 
+    if (!paymentUrl || !paymentUrl.startsWith("http")) {
+      throw new Error("L'URL de paiement générée est invalide");
+    }
+
+    // Sauvegarde de l'intention de paiement en BDD
     await db.insert(payments).values({
       userId,
       merchantTransactionId,
-      paymentToken: invoiceData.token || "",
-      paymentUrl: paymentUrl,
+      paymentToken,
+      paymentUrl,
       amount,
       plan,
       billingPeriod: period,
@@ -79,12 +96,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       paymentUrl: paymentUrl,
+      gatewayUsed: useNotchPay ? "notchpay" : "paydunya",
     });
   } catch (error) {
     console.error("Payment create error:", error);
     const errorMessage = error instanceof Error ? error.message : String(error);
-    return NextResponse.json({
-      error: errorMessage || "Erreur lors de la création du paiement",
-    }, { status: 500 });
+    return NextResponse.json(
+      { error: errorMessage || "Erreur lors de la création du paiement" },
+      { status: 500 }
+    );
   }
 }
