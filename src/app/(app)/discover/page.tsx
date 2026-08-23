@@ -32,48 +32,229 @@ import {
 } from "lucide-react";
 
 // ==========================================
-// 🚀 COMPOSANT : ONBOARDING TOUR (Tutoriel)
+// 🚀 ONBOARDING TOUR — flèches collées aux vrais éléments
 // ==========================================
 function OnboardingTour({ onFinish }: { onFinish: () => void }) {
   const [step, setStep] = useState(0);
 
+  // Positions calibrées pour le mobile LoveLink (barre d'actions + header)
   const steps = [
     {
+      id: "welcome",
       title: "Bienvenue sur LoveLink ! 🎉",
-      text: "Faisons un petit tour rapide pour t'aider à obtenir tes premiers matchs.",
-      position: "fixed inset-0 flex items-center justify-center p-4",
-      bubbleClass: "max-w-sm",
-      arrow: "none",
+      text: "Petit tour rapide pour t’aider à obtenir tes premiers matchs. Ça ne prend que 10 secondes.",
+      // Pas de cible : bulle centrée
+      target: null as null | {
+        top?: string;
+        bottom?: string;
+        left?: string;
+        width: string;
+        height: string;
+      },
+      tooltipSide: "center" as const,
     },
     {
-      title: "Liker ou Passer 💚",
-      text: "Swipe vers la droite ou clique sur le cœur vert pour Liker. Swipe à gauche ou clique sur la croix rouge pour passer.",
-      position: "fixed bottom-36 left-0 right-0 flex justify-center p-4",
-      bubbleClass: "max-w-xs",
-      arrow: "bottom",
+      id: "pass",
+      title: "Passer un profil ❌",
+      text: "Appuie sur la croix rouge (ou swipe à gauche) si le profil ne t’intéresse pas.",
+      // Bouton X — 2e bouton de la barre
+      target: {
+        bottom: "5.5rem",
+        left: "calc(50% - 5.2rem)",
+        width: "3.5rem",
+        height: "3.5rem",
+      },
+      tooltipSide: "top" as const,
     },
     {
+      id: "like",
+      title: "Liker un profil 💚",
+      text: "Appuie sur le cœur vert (ou swipe à droite) pour liker. Si la personne like aussi → Match !",
+      // Bouton Like — 4e bouton
+      target: {
+        bottom: "5.5rem",
+        left: "calc(50% + 1.7rem)",
+        width: "3.5rem",
+        height: "3.5rem",
+      },
+      tooltipSide: "top" as const,
+    },
+    {
+      id: "superlike",
       title: "Le Super Like ⭐",
-      text: "L'étoile bleue te permet de te démarquer ! La personne recevra une notification instantanée.",
-      position: "fixed bottom-36 left-0 right-0 flex justify-center p-4",
-      bubbleClass: "max-w-xs",
-      arrow: "bottom",
+      text: "L’étoile bleue te démarque : la personne reçoit une notif immédiate. Utilise-la avec soin !",
+      // Bouton Super Like — centre
+      target: {
+        bottom: "5.7rem",
+        left: "calc(50% - 1.5rem)",
+        width: "3rem",
+        height: "3rem",
+      },
+      tooltipSide: "top" as const,
     },
     {
-      title: "Les Filtres 🔍",
-      text: "Utilise ces boutons en haut pour ne voir que les personnes En Ligne, ou les profils Vérifiés.",
-      position: "fixed top-24 left-0 right-0 flex justify-center p-4",
-      bubbleClass: "max-w-xs",
-      arrow: "top",
+      id: "message",
+      title: "Message Direct 💬",
+      text: "La bulle violette envoie un message avant même le match. Réservé Premium.",
+      // Bouton Message
+      target: {
+        bottom: "5.7rem",
+        left: "calc(50% + 5.1rem)",
+        width: "2.75rem",
+        height: "2.75rem",
+      },
+      tooltipSide: "top" as const,
     },
     {
-      title: "Message Direct & Boost 🚀",
-      text: "La bulle violette te permet d'envoyer un message avant même le match. La fusée booste ton profil pour être vu de tous !",
-      position: "fixed bottom-36 left-0 right-0 flex justify-center p-4",
-      bubbleClass: "max-w-xs",
-      arrow: "bottom",
+      id: "boost",
+      title: "Boost ton profil 🚀",
+      text: "La fusée met ton profil en avant pendant 24h, 3j ou 7j. Idéal pour multiplier les vues !",
+      // Bouton Boost (fusée)
+      target: {
+        bottom: "5.7rem",
+        left: "calc(50% + 7.9rem)",
+        width: "2.75rem",
+        height: "2.75rem",
+      },
+      tooltipSide: "top" as const,
+    },
+    {
+      id: "profile",
+      title: "Voir le profil complet 👆",
+      text: "Appuie sur le prénom ou la photo pour voir le bio, les centres d’intérêt et toutes les photos.",
+      // Zone prénom / infos en bas de carte
+      target: {
+        bottom: "9.5rem",
+        left: "1rem",
+        width: "70%",
+        height: "4.5rem",
+      },
+      tooltipSide: "top" as const,
+    },
+    {
+      id: "nav",
+      title: "Ta barre de navigation 📱",
+      text: "Accueil, Découvrir, Likes, Matchs, Messages et Premium : tout est accessible en un tap en bas de l’écran.",
+      // Bottom nav globale
+      target: {
+        bottom: "0",
+        left: "0",
+        width: "100%",
+        height: "4.2rem",
+      },
+      tooltipSide: "top" as const,
     },
   ];
+
+  const current = steps[step];
+  const isLast = step === steps.length - 1;
+
+  const nextStep = () => {
+    if (!isLast) setStep((s) => s + 1);
+    else onFinish();
+  };
+
+  return (
+    <div className="fixed inset-0 z-[200]">
+      {/* Fond sombre */}
+      <div className="absolute inset-0 bg-black/75" onClick={onFinish} />
+
+      {/* 🔦 SPOTLIGHT collé à l'élément */}
+      {current.target && (
+        <div
+          className="absolute z-[210] rounded-full pointer-events-none transition-all duration-300"
+          style={{
+            top: current.target.top,
+            bottom: current.target.bottom,
+            left: current.target.left,
+            width: current.target.width,
+            height: current.target.height,
+            // Halo blanc + trou dans l'overlay
+            boxShadow:
+              "0 0 0 4px rgba(255,255,255,0.95), 0 0 0 8px rgba(244,63,94,0.45), 0 0 0 9999px rgba(0,0,0,0.75)",
+            borderRadius:
+              current.id === "nav" || current.id === "profile"
+                ? "1rem"
+                : "9999px",
+          }}
+        />
+      )}
+
+      {/* 💬 BULLE d'explication */}
+      <div
+        className={`absolute z-[220] px-4 w-full flex pointer-events-none ${
+          current.tooltipSide === "center"
+            ? "inset-0 items-center justify-center"
+            : current.tooltipSide === "top"
+            ? "justify-center"
+            : "justify-center"
+        }`}
+        style={
+          current.tooltipSide === "top" && current.target
+            ? {
+                // Place la bulle juste AU-DESSUS du spotlight
+                bottom: `calc(${current.target.bottom || "0px"} + ${
+                  current.target.height
+                } + 1.25rem)`,
+              }
+            : undefined
+        }
+      >
+        <div className="pointer-events-auto relative max-w-[320px] w-full bg-white rounded-3xl p-5 shadow-2xl animate-in fade-in zoom-in duration-200">
+          {/* Flèche vers le bas (pointe vers l'élément en dessous) */}
+          {current.tooltipSide === "top" && (
+            <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-white rotate-45 shadow-sm" />
+          )}
+
+          <div className="relative z-10">
+            <h3 className="text-lg font-black text-slate-900 mb-1.5 leading-tight">
+              {current.title}
+            </h3>
+            <p className="text-sm text-slate-600 mb-5 leading-relaxed">
+              {current.text}
+            </p>
+
+            <div className="flex items-center justify-between gap-3">
+              {/* Progress dots */}
+              <div className="flex gap-1.5 flex-wrap">
+                {steps.map((_, i) => (
+                  <div
+                    key={i}
+                    className={`h-1.5 rounded-full transition-all ${
+                      i === step
+                        ? "w-4 bg-gradient-to-r from-rose-500 to-purple-600"
+                        : i < step
+                        ? "w-1.5 bg-rose-300"
+                        : "w-1.5 bg-slate-200"
+                    }`}
+                  />
+                ))}
+              </div>
+
+              <div className="flex items-center gap-3 flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={onFinish}
+                  className="text-xs font-bold text-slate-400 hover:text-slate-600"
+                >
+                  Passer
+                </button>
+                <button
+                  type="button"
+                  onClick={nextStep}
+                  className="bg-gradient-to-r from-rose-500 to-purple-600 text-white px-4 py-2.5 rounded-full text-sm font-bold shadow-md active:scale-95 transition flex items-center gap-1"
+                >
+                  {isLast ? "C'est parti !" : "Suivant"}
+                  {!isLast && <ArrowRight className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
   const current = steps[step];
 
