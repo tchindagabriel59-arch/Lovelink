@@ -8,31 +8,20 @@ import {
   X,
   MapPin,
   Sparkles,
-  Flag,
   Crown,
   MessageCircle,
   Star,
   RotateCcw,
-  Ban,
-  Gem,
-  Lock,
   BadgeCheck,
-  ChevronUp,
-  AlertTriangle,
-  CheckCircle2,
   Zap,
-  Eye,
-  Users,
-  Settings,
-  BookOpen,
-  RefreshCw,
-  Globe,
   Rocket,
   ArrowRight,
+  Lock,
+  Gem,
 } from "lucide-react";
 
 // ==========================================
-// 🚀 ONBOARDING TOUR — Flèches ciblées
+// 🚀 ONBOARDING TOUR
 // ==========================================
 function OnboardingTour({ onFinish }: { onFinish: () => void }) {
   const [step, setStep] = useState(0);
@@ -55,7 +44,7 @@ function OnboardingTour({ onFinish }: { onFinish: () => void }) {
       title: "Passer un profil ❌",
       text: "Appuie sur la croix rouge (ou swipe à gauche) si le profil ne t'intéresse pas.",
       target: {
-        bottom: "1.2rem",
+        bottom: "5rem",
         left: "calc(50% - 4.5rem)",
         width: "3.5rem",
         height: "3.5rem",
@@ -67,7 +56,7 @@ function OnboardingTour({ onFinish }: { onFinish: () => void }) {
       title: "Liker un profil 💚",
       text: "Appuie sur le cœur vert (ou swipe à droite) pour liker. Si la personne te like aussi → Match !",
       target: {
-        bottom: "1.2rem",
+        bottom: "5rem",
         left: "calc(50% + 1.2rem)",
         width: "3.5rem",
         height: "3.5rem",
@@ -79,7 +68,7 @@ function OnboardingTour({ onFinish }: { onFinish: () => void }) {
       title: "Le Super Like ⭐",
       text: "L'étoile bleue te démarque instantanément avec une notification prioritaire.",
       target: {
-        bottom: "1.4rem",
+        bottom: "5.2rem",
         left: "calc(50% - 1.5rem)",
         width: "3rem",
         height: "3rem",
@@ -91,7 +80,7 @@ function OnboardingTour({ onFinish }: { onFinish: () => void }) {
       title: "Message Direct 💬",
       text: "La bulle violette te permet d'envoyer un message avant même d'avoir matché !",
       target: {
-        bottom: "1.5rem",
+        bottom: "5.3rem",
         left: "calc(50% + 4.8rem)",
         width: "2.75rem",
         height: "2.75rem",
@@ -103,7 +92,7 @@ function OnboardingTour({ onFinish }: { onFinish: () => void }) {
       title: "Booster mon profil 🚀",
       text: "La fusée propulse ton profil en tête de pile dans ta ville pour multiplier tes vues !",
       target: {
-        bottom: "1.5rem",
+        bottom: "5.3rem",
         left: "calc(50% + 7.8rem)",
         width: "2.75rem",
         height: "2.75rem",
@@ -122,10 +111,8 @@ function OnboardingTour({ onFinish }: { onFinish: () => void }) {
 
   return (
     <div className="fixed inset-0 z-[200]">
-      {/* Overlay sombre */}
       <div className="absolute inset-0 bg-black/75" onClick={onFinish} />
 
-      {/* 🔦 SPOTLIGHT CIBLÉ SUR LE BOUTON */}
       {current.target && (
         <div
           className="absolute z-[210] rounded-full pointer-events-none transition-all duration-300"
@@ -140,7 +127,6 @@ function OnboardingTour({ onFinish }: { onFinish: () => void }) {
         />
       )}
 
-      {/* 💬 BULLE EXPLICATIVE */}
       <div
         className={`absolute z-[220] px-4 w-full flex pointer-events-none ${
           current.tooltipSide === "center"
@@ -150,13 +136,12 @@ function OnboardingTour({ onFinish }: { onFinish: () => void }) {
         style={
           current.tooltipSide === "top" && current.target
             ? {
-                bottom: `calc(${current.target.bottom} + ${current.target.height} + 1.25rem)`,
+                bottom: `calc(${current.target.bottom} + ${current.target.height} + 1rem)`,
               }
             : undefined
         }
       >
         <div className="pointer-events-auto relative max-w-[320px] w-full bg-white rounded-3xl p-5 shadow-2xl animate-in fade-in zoom-in duration-200">
-          {/* Flèche vers le bas */}
           {current.tooltipSide === "top" && (
             <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-white rotate-45 shadow-sm" />
           )}
@@ -170,7 +155,6 @@ function OnboardingTour({ onFinish }: { onFinish: () => void }) {
             </p>
 
             <div className="flex items-center justify-between gap-3">
-              {/* Progress dots */}
               <div className="flex gap-1.5">
                 {steps.map((_, i) => (
                   <div
@@ -214,7 +198,6 @@ function OnboardingTour({ onFinish }: { onFinish: () => void }) {
 // ==========================================
 // INTERFACES & HELPERS
 // ==========================================
-
 interface Profile {
   id: number;
   firstName: string;
@@ -225,7 +208,6 @@ interface Profile {
   city: string | null;
   country: string | null;
   photoUrl: string | null;
-  coverPhotoUrl: string | null;
   photo1Url: string | null;
   photo2Url: string | null;
   photo3Url: string | null;
@@ -233,50 +215,13 @@ interface Profile {
   interests: string | null;
   occupation: string | null;
   isOnline: boolean;
-  lastSeen?: string | null;
   isPremium: boolean;
   isVerified: boolean;
-  distance: number | null;
-  hasLikedMe: boolean;
-  hasSuperLikedMe: boolean;
-  prompt1Question: string | null;
-  prompt1Answer: string | null;
-  prompt2Question: string | null;
-  prompt2Answer: string | null;
-  prompt3Question: string | null;
-  prompt3Answer: string | null;
-  compatibility: number;
-  commonInterests: string[];
-  isRecycled?: boolean;
-}
-
-interface SuperLikeStatus {
-  isPremium: boolean;
-  used: number;
-  limit: number;
-  remaining: number;
-  canSuperLike: boolean;
 }
 
 interface CurrentUser {
   isPremium?: boolean;
 }
-
-interface DiscoverStats {
-  likesToday: number;
-  superLikesToday: number;
-  pendingLikes: number;
-  likesGivenToday: number;
-  maxFreeLikes: number;
-  isPremium: boolean;
-  recentSuperLikers: {
-    id: number;
-    firstName: string;
-    photoUrl: string | null;
-  }[];
-}
-
-type FilterType = "all" | "verified" | "online" | "premium" | "new";
 
 function getAge(birthDate: string): number {
   const today = new Date();
@@ -286,39 +231,6 @@ function getAge(birthDate: string): number {
   if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
   return age;
 }
-
-function getActivityStatus(profile: Profile): { text: string; color: string } {
-  if (profile.isOnline) {
-    return { text: "En ligne", color: "bg-green-500" };
-  }
-  if (profile.lastSeen) {
-    const now = new Date();
-    const lastSeen = new Date(profile.lastSeen);
-    const diffMin = Math.floor(
-      (now.getTime() - lastSeen.getTime()) / (1000 * 60)
-    );
-    if (diffMin < 60) return { text: "Actif récemment", color: "bg-green-400" };
-    if (diffMin < 1440)
-      return { text: "Actif aujourd'hui", color: "bg-yellow-400" };
-  }
-  return { text: "Par activité récente", color: "bg-green-500" };
-}
-
-const gradients = [
-  "from-rose-400 to-pink-500",
-  "from-purple-400 to-violet-500",
-  "from-blue-400 to-cyan-500",
-  "from-amber-400 to-orange-500",
-  "from-emerald-400 to-teal-500",
-];
-
-const filters: { value: FilterType; label: string; icon: React.ReactNode }[] = [
-  { value: "all", label: "Tous", icon: <Sparkles className="w-3.5 h-3.5" /> },
-  { value: "verified", label: "Vérifiés", icon: <BadgeCheck className="w-3.5 h-3.5" /> },
-  { value: "online", label: "En ligne", icon: <div className="w-2 h-2 bg-green-500 rounded-full" /> },
-  { value: "premium", label: "Premium", icon: <Crown className="w-3.5 h-3.5" /> },
-  { value: "new", label: "Nouveaux", icon: <Zap className="w-3.5 h-3.5" /> },
-];
 
 function getAllPhotos(profile: Profile): string[] {
   return [
@@ -332,12 +244,9 @@ function getAllPhotos(profile: Profile): string[] {
 
 function DiscoverSkeleton() {
   return (
-    <div className="fixed inset-0 bg-black lg:relative lg:min-h-screen lg:bg-gradient-to-br lg:from-slate-100 lg:to-rose-50 lg:flex lg:items-center lg:justify-center lg:p-4">
-      <div className="relative w-full h-full lg:w-[420px] lg:h-[750px] lg:rounded-3xl overflow-hidden bg-slate-800 shadow-2xl animate-pulse">
-        <div className="absolute inset-0 bg-gradient-to-br from-slate-700 to-slate-900" />
-        <div className="absolute inset-0 flex items-center justify-center">
-          <Heart className="w-12 h-12 text-rose-400 animate-pulse fill-rose-400" />
-        </div>
+    <div className="fixed inset-0 bg-black flex items-center justify-center p-4">
+      <div className="relative w-full h-full lg:w-[420px] lg:h-[750px] lg:rounded-3xl overflow-hidden bg-slate-800 animate-pulse flex items-center justify-center">
+        <Heart className="w-12 h-12 text-rose-400 animate-pulse fill-rose-400" />
       </div>
     </div>
   );
@@ -354,10 +263,6 @@ export default function DiscoverPage() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [canRewind, setCanRewind] = useState(false);
-  const [activeFilter, setActiveFilter] = useState<FilterType>("all");
-  const [stats, setStats] = useState<DiscoverStats | null>(null);
-  const [superLikeStatus, setSuperLikeStatus] = useState<SuperLikeStatus | null>(null);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [showPremiumModal, setShowPremiumModal] = useState(false);
   const [premiumFeature, setPremiumFeature] = useState<string>("");
@@ -370,7 +275,6 @@ export default function DiscoverPage() {
   const [animating, setAnimating] = useState<"left" | "right" | "up" | null>(null);
   const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
-  const cardRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const hasSeenTour = localStorage.getItem("lovelink_tour_completed");
@@ -387,26 +291,18 @@ export default function DiscoverPage() {
   useEffect(() => {
     async function loadAll() {
       try {
-        const [profilesRes, superLikeRes, meRes, statsRes] = await Promise.all([
-          fetch(`/api/discover?filter=${activeFilter}`),
-          fetch("/api/like"),
+        const [profilesRes, meRes] = await Promise.all([
+          fetch("/api/discover"),
           fetch("/api/auth/me"),
-          fetch("/api/discover-stats"),
         ]);
 
         if (profilesRes.ok) {
           const data = await profilesRes.json();
           setProfiles(data.profiles || []);
         }
-        if (superLikeRes.ok) {
-          setSuperLikeStatus(await superLikeRes.json());
-        }
         if (meRes.ok) {
           const data = await meRes.json();
           setCurrentUser(data.user);
-        }
-        if (statsRes.ok) {
-          setStats(await statsRes.json());
         }
       } catch {
         // silent
@@ -415,7 +311,7 @@ export default function DiscoverPage() {
       }
     }
     loadAll();
-  }, [activeFilter]);
+  }, []);
 
   const handleAction = useCallback(
     async (isLike: boolean) => {
@@ -423,7 +319,6 @@ export default function DiscoverPage() {
 
       const profile = profiles[currentIndex];
       setAnimating(isLike ? "right" : "left");
-      setCanRewind(true);
 
       fetch("/api/like", {
         method: "POST",
@@ -445,7 +340,6 @@ export default function DiscoverPage() {
     const profile = profiles[currentIndex];
 
     setAnimating("up");
-    setCanRewind(true);
 
     fetch("/api/like", {
       method: "POST",
@@ -526,7 +420,6 @@ export default function DiscoverPage() {
     );
   }
 
-  const gradient = gradients[currentProfile.id % gradients.length];
   const rotation = dragOffset.x / 20;
 
   let cardTransform = `translate(${dragOffset.x}px, ${dragOffset.y}px) rotate(${rotation}deg)`;
@@ -564,10 +457,32 @@ export default function DiscoverPage() {
         </div>
       )}
 
+      {/* MODALE PREMIUM */}
+      {showPremiumModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl text-slate-900 text-center">
+            <Crown className="w-16 h-16 text-amber-500 mx-auto mb-3" />
+            <h3 className="font-black text-xl mb-2">Fonctionnalité Premium 👑</h3>
+            <p className="text-slate-600 text-sm mb-6">
+              {premiumFeature === "rewind"
+                ? "Revenir au profil précédent est réservé aux membres Premium."
+                : "Envoyer un message direct sans matcher est réservé aux membres Premium."}
+            </p>
+            <div className="flex gap-3">
+              <button onClick={() => setShowPremiumModal(false)} className="flex-1 py-3 border border-slate-200 rounded-xl text-sm font-semibold">
+                Fermer
+              </button>
+              <Link href="/premium" onClick={() => setShowPremiumModal(false)} className="flex-1 py-3 bg-amber-500 text-white font-bold rounded-xl text-sm flex items-center justify-center gap-1">
+                <Gem size={16} /> Premium
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* CARTE PROFIL */}
       <div
         key={currentIndex}
-        ref={cardRef}
         style={{ transform: cardTransform, transition: dragStart ? "none" : "transform 350ms ease" }}
         className="relative w-full h-full lg:w-[420px] lg:h-[750px] lg:rounded-3xl overflow-hidden bg-black shadow-2xl"
       >
@@ -575,37 +490,44 @@ export default function DiscoverPage() {
           {hasPhotos ? (
             <img src={photos[currentPhotoIndex]} alt="" className="w-full h-full object-cover" />
           ) : (
-            <div className={`w-full h-full bg-gradient-to-br ${gradient} flex items-center justify-center text-7xl font-bold text-white`}>
+            <div className="w-full h-full bg-gradient-to-br from-rose-500 to-purple-600 flex items-center justify-center text-7xl font-bold text-white">
               {currentProfile.firstName.charAt(0)}
             </div>
           )}
         </div>
 
-        <div className="absolute bottom-0 left-0 right-0 h-64 bg-gradient-to-t from-black via-black/60 to-transparent pointer-events-none z-10" />
+        {/* GRADIENT OMBRE */}
+        <div className="absolute bottom-0 left-0 right-0 h-72 bg-gradient-to-t from-black via-black/60 to-transparent pointer-events-none z-10" />
 
-        <div className="absolute bottom-28 left-4 right-4 text-white z-20 pointer-events-none">
-          <h2 className="text-3xl font-black">{currentProfile.firstName}, {getAge(currentProfile.birthDate)}</h2>
-          <p className="text-sm text-white/80 flex items-center gap-1 mt-1"><MapPin size={14} /> {currentProfile.city || "Cameroun"}</p>
+        {/* PROFIL INFOS (RELEVÉ AU-DESSUS DES BOUTONS) */}
+        <div className="absolute bottom-36 left-4 right-4 text-white z-20 pointer-events-none">
+          <h2 className="text-3xl font-black flex items-center gap-2">
+            {currentProfile.firstName}, {getAge(currentProfile.birthDate)}
+            {currentProfile.isVerified && <BadgeCheck className="w-6 h-6 text-blue-400 fill-blue-500" />}
+          </h2>
+          <p className="text-sm text-white/80 flex items-center gap-1 mt-1">
+            <MapPin size={14} /> {currentProfile.city || "Cameroun"}
+          </p>
         </div>
 
-        {/* BARRE D'ACTIONS */}
-        <div className="absolute bottom-6 left-0 right-0 flex items-center justify-center gap-2 z-30 px-2">
-          <button onClick={handleRewind} className="w-11 h-11 bg-white rounded-full shadow-lg flex items-center justify-center text-amber-500">
+        {/* 🎯 BARRE D'ACTIONS : RELEVÉE À bottom-20 (AU-DESSUS DE LA BARRE DE NAV MOBILE) */}
+        <div className="absolute bottom-20 lg:bottom-6 left-0 right-0 flex items-center justify-center gap-2 z-30 px-2">
+          <button onClick={handleRewind} className="w-11 h-11 bg-white rounded-full shadow-lg flex items-center justify-center text-amber-500 hover:scale-110 active:scale-95 transition">
             <RotateCcw size={20} />
           </button>
-          <button onClick={() => handleAction(false)} className="w-14 h-14 bg-white rounded-full shadow-xl flex items-center justify-center text-red-500">
+          <button onClick={() => handleAction(false)} className="w-14 h-14 bg-white rounded-full shadow-xl flex items-center justify-center text-red-500 hover:scale-110 active:scale-95 transition">
             <X size={28} />
           </button>
-          <button onClick={handleSuperLike} className="w-12 h-12 bg-white rounded-full shadow-lg flex items-center justify-center text-blue-500">
+          <button onClick={handleSuperLike} className="w-12 h-12 bg-white rounded-full shadow-lg flex items-center justify-center text-blue-500 hover:scale-110 active:scale-95 transition">
             <Star size={24} className="fill-blue-500" />
           </button>
-          <button onClick={() => handleAction(true)} className="w-14 h-14 bg-white rounded-full shadow-xl flex items-center justify-center text-green-500">
+          <button onClick={() => handleAction(true)} className="w-14 h-14 bg-white rounded-full shadow-xl flex items-center justify-center text-green-500 hover:scale-110 active:scale-95 transition">
             <Heart size={28} className="fill-green-500" />
           </button>
-          <button onClick={handleDirectMessage} className="w-11 h-11 bg-white rounded-full shadow-lg flex items-center justify-center text-purple-500">
+          <button onClick={handleDirectMessage} className="w-11 h-11 bg-white rounded-full shadow-lg flex items-center justify-center text-purple-500 hover:scale-110 active:scale-95 transition">
             <MessageCircle size={20} />
           </button>
-          <button onClick={() => router.push("/boost")} className="w-11 h-11 bg-gradient-to-tr from-purple-600 to-amber-500 rounded-full shadow-lg flex items-center justify-center text-white">
+          <button onClick={() => router.push("/boost")} className="w-11 h-11 bg-gradient-to-tr from-purple-600 to-amber-500 rounded-full shadow-lg flex items-center justify-center text-white hover:scale-110 active:scale-95 transition">
             <Rocket size={20} />
           </button>
         </div>
