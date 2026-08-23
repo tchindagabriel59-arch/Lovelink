@@ -33,6 +33,8 @@ export const users = pgTable("users", {
   photo4Url: text("photo_4_url").default(""),
   interests: text("interests").default(""),
   occupation: varchar("occupation", { length: 150 }).default(""),
+    maritalStatus: varchar("marital_status", { length: 30 }).default(""),
+  discoverySource: varchar("discovery_source", { length: 50 }).default(""),
   isOnline: boolean("is_online").default(false),
   isAdmin: boolean("is_admin").default(false),
   isBanned: boolean("is_banned").default(false),
