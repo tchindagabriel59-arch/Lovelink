@@ -12,7 +12,6 @@ import {
   PremiumPlan,
   BillingPeriod,
 } from "@/lib/paydunya";
-import { createNotchPayPayment } from "@/lib/notchpay";
 
 export async function POST(req: NextRequest) {
   try {
@@ -37,26 +36,16 @@ export async function POST(req: NextRequest) {
     const merchantTransactionId = generateMerchantTransactionId(userId);
     const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://lovelink237.com";
 
-    // 🔀 DÉCISION DU GATEWAY : Si Cameroun (CM) ou forcé NotchPay -> NotchPay, sinon -> PayDunya
+    // 🔀 DÉCISION DU GATEWAY : Si Cameroun (CM) ou forcé NotchPay -> Mode Manuel CM Temporaire
     const useNotchPay = gateway === "notchpay" || (gateway === "auto" && country === "CM");
 
     let paymentUrl = "";
     let paymentToken = "";
 
     if (useNotchPay) {
-      // 🇨🇲 ROUTE NOTCH PAY (Cameroun : Orange Money CM / MTN CM / Carte)
-      const notchPayResult = await createNotchPayPayment({
-        email: user.email || `user_${userId}@lovelink.com`,
-        amount: amount,
-        currency: "XAF",
-        reference: merchantTransactionId,
-        description: description,
-        user_name: `${user.firstName} ${user.lastName || ""}`.trim(),
-        callback: `${baseUrl}${returnPath}?tx=${merchantTransactionId}&status=success`,
-      });
-
-      paymentUrl = notchPayResult.authorization_url;
-      paymentToken = notchPayResult.reference;
+      // 🇨🇲 MODE MANUEL CAMEROUN TEMPORAIRE (Attente validation NotchPay Live)
+      paymentUrl = `${baseUrl}/premium/manual-cm?plan=${plan}&period=${period}&amount=${amount}&userId=${userId}`;
+      paymentToken = `MANUAL-${merchantTransactionId}`;
     } else {
       // 🌍 ROUTE PAYDUNYA (Zone UEMOA : Sénégal, CI, Bénin, etc.)
       const urls = getPaymentUrls(merchantTransactionId);
@@ -96,7 +85,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       paymentUrl: paymentUrl,
-      gatewayUsed: useNotchPay ? "notchpay" : "paydunya",
+      gatewayUsed: useNotchPay ? "manual_cm" : "paydunya",
     });
   } catch (error) {
     console.error("Payment create error:", error);
