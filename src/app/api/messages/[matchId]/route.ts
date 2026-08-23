@@ -15,7 +15,6 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ matchId: string }> }
 ) {
-  // ✅ MONITORING
   const startTime = Date.now();
   const endpoint = "/api/messages/[matchId]";
   const method = "GET";
@@ -136,7 +135,6 @@ export async function GET(
         ),
     ]);
 
-    // ✅ LOG : Succès 200
     logApiCall({
       endpoint,
       method,
@@ -178,7 +176,6 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ matchId: string }> }
 ) {
-  // ✅ MONITORING
   const startTime = Date.now();
   const endpoint = "/api/messages/[matchId]";
   const method = "POST";
@@ -314,7 +311,7 @@ export async function POST(
 
     const cleanContent = content.trim();
 
-    // Insérer le message
+    // Insérer le message en BDD
     const newMessage = await db
       .insert(messages)
       .values({
@@ -325,19 +322,23 @@ export async function POST(
       })
       .returning();
 
+    // 🎯 DÉTECTION DU TYPE DE MESSAGE (Photo, Vocal ou Texte)
     const isPhoto = cleanContent.startsWith("[IMAGE]");
+    const isAudio = cleanContent.startsWith("[AUDIO]");
 
-    const notifContent = isPhoto
-      ? `📷 ${sender?.firstName ?? "Quelqu'un"} vous a envoyé une photo`
-      : `💬 ${sender?.firstName ?? "Quelqu'un"} : ${cleanContent.substring(0, 50)}${
-          cleanContent.length > 50 ? "..." : ""
-        }`;
+    const senderName = sender?.firstName ?? "Quelqu'un";
 
-    const pushContent = isPhoto
-      ? "📷 Vous a envoyé une photo"
-      : cleanContent.substring(0, 100);
+    // Contenu notification in-app
+    let notifContent = `💬 ${senderName} : ${cleanContent.substring(0, 50)}${cleanContent.length > 50 ? "..." : ""}`;
+    if (isPhoto) notifContent = `📷 ${senderName} vous a envoyé une photo`;
+    if (isAudio) notifContent = `🎙️ ${senderName} vous a envoyé un message vocal`;
 
-    // ⚡ Notification + Push EN PARALLÈLE
+    // Contenu notification Push mobile
+    let pushContent = cleanContent.substring(0, 100);
+    if (isPhoto) pushContent = "📷 T'a envoyé une photo";
+    if (isAudio) pushContent = "🎙️ T'a envoyé un message vocal";
+
+    // ⚡ Notification + Push EN PARALLÈLE (Non-bloquant)
     Promise.all([
       createNotification({
         userId: recipientId,
@@ -347,13 +348,12 @@ export async function POST(
       }),
       sendPushToUser(
         recipientId,
-        PushTemplates.message(sender?.firstName ?? "Quelqu'un", pushContent)
+        PushTemplates.message(senderName, pushContent)
       ),
     ]).catch((err) => {
       console.error("Notification error (non-blocking):", err);
     });
 
-    // ✅ LOG : Succès 200 - message envoyé
     logApiCall({
       endpoint,
       method,
@@ -362,12 +362,13 @@ export async function POST(
       userId,
       errorMessage: isPhoto
         ? `📷 Photo envoyée à user ${recipientId}`
-        : `💬 Message envoyé à user ${recipientId} (${cleanContent.length} chars)`,
+        : isAudio
+        ? `🎙️ Vocal envoyé à user ${recipientId}`
+        : `💬 Message envoyé à user ${recipientId}`,
       userAgent,
       ipAddress,
     });
 
-    // Retour immédiat au client
     return NextResponse.json({
       success: true,
       message: newMessage[0],
