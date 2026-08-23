@@ -110,7 +110,7 @@ function AudioPlayer({ audioUrl, isMine }: { audioUrl: string; isMine: boolean }
   };
 
   const formatAudioTime = (secs: number) => {
-    if (isNaN(secs)) return "0:00";
+    if (isNaN(secs) || !isFinite(secs)) return "0:00";
     const m = Math.floor(secs / 60);
     const s = Math.floor(secs % 60);
     return `${m}:${s < 10 ? "0" : ""}${s}`;
@@ -227,7 +227,7 @@ function MessagesContent() {
   const [filterTab, setFilterTab] = useState<FilterTab>("all");
   const [searchQuery, setSearchQuery] = useState("");
 
-  // 🎙️ ÉTATS ENREGISTREMENT VOCAL
+  // 🎙️ ENREGISTREMENT VOCAL
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [sendingAudio, setSendingAudio] = useState(false);
@@ -238,10 +238,6 @@ function MessagesContent() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const isTypingRef = useRef(false);
-  const [otherIsTyping, setOtherIsTyping] = useState(false);
-  const lastTypingSentRef = useRef<number>(0);
-  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastMessageIdRef = useRef<number | null>(null);
   const shouldScrollRef = useRef(true);
   const lastMatchesHashRef = useRef<string>("");
@@ -344,7 +340,7 @@ function MessagesContent() {
     }
   }, [chatMessages, scrollToBottom]);
 
-  // 🎙️ DÉMARRER ENREGISTREMENT VOCAL
+  // 🎙️ DÉMARRER ENREGISTREMENT VOCAL (Support iOS + Android + PC)
   const startRecording = async () => {
     if (!user?.isPremium) {
       alert("🎙️ Les messages vocaux sont réservés aux membres Premium ! Passe Premium pour faire entendre ta voix.");
@@ -353,7 +349,22 @@ function MessagesContent() {
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
+
+      let mimeType = "audio/webm";
+      if (typeof MediaRecorder !== "undefined") {
+        if (!MediaRecorder.isTypeSupported("audio/webm")) {
+          if (MediaRecorder.isTypeSupported("audio/mp4")) {
+            mimeType = "audio/mp4";
+          } else {
+            mimeType = "";
+          }
+        }
+      }
+
+      const mediaRecorder = mimeType
+        ? new MediaRecorder(stream, { mimeType })
+        : new MediaRecorder(stream);
+
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
 
@@ -370,12 +381,13 @@ function MessagesContent() {
       timerRef.current = setInterval(() => {
         setRecordingTime((prev) => prev + 1);
       }, 1000);
-    } catch {
-      alert("Permission micro refusée ou non supportée sur ton appareil.");
+    } catch (err) {
+      console.error("Microphone access error:", err);
+      alert("Accès au micro refusé ou non supporté.");
     }
   };
 
-  // 🎙️ ENVOYER LE VOCAL
+  // 🎙️ ENVOYER LE VOCAL (Converti direct en Base64 sans bug serveur !)
   const stopAndSendRecording = async () => {
     if (!mediaRecorderRef.current || !selectedMatch) return;
 
@@ -383,40 +395,40 @@ function MessagesContent() {
     const recorder = mediaRecorderRef.current;
 
     recorder.onstop = async () => {
-      const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+      const audioBlob = new Blob(audioChunksRef.current, { type: recorder.mimeType || "audio/webm" });
       recorder.stream.getTracks().forEach((track) => track.stop());
 
-      try {
-        const fileName = `vocal_${Date.now()}.webm`;
-        const uploadRes = await fetch(`/api/upload?filename=${encodeURIComponent(fileName)}`, {
-          method: "POST",
-          body: audioBlob,
-        });
+      // Conversion en Base64 ultra fiable
+      const reader = new FileReader();
+      reader.readAsDataURL(audioBlob);
+      reader.onloadend = async () => {
+        try {
+          const base64Audio = reader.result as string;
 
-        if (!uploadRes.ok) throw new Error("Erreur upload vocal");
-        const blobData = await uploadRes.json();
-        const audioUrl = blobData.url;
+          const res = await fetch(`/api/messages/${selectedMatch}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ content: `[AUDIO]${base64Audio}` }),
+          });
 
-        const res = await fetch(`/api/messages/${selectedMatch}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ content: `[AUDIO]${audioUrl}` }),
-        });
+          if (!res.ok) {
+            throw new Error("Erreur envoi message vocal");
+          }
 
-        if (res.ok) {
           const data = await res.json();
           setChatMessages((prev) => [...prev, data.message]);
           lastMessageIdRef.current = data.message.id;
           shouldScrollRef.current = true;
           fetchMatchesList();
+        } catch (err) {
+          console.error("Vocal send error:", err);
+          alert("Erreur d'envoi du vocal. Recommence.");
+        } finally {
+          setIsRecording(false);
+          setSendingAudio(false);
+          if (timerRef.current) clearInterval(timerRef.current);
         }
-      } catch {
-        alert("Erreur lors de l'envoi du vocal.");
-      } finally {
-        setIsRecording(false);
-        setSendingAudio(false);
-        if (timerRef.current) clearInterval(timerRef.current);
-      }
+      };
     };
 
     recorder.stop();
@@ -535,20 +547,6 @@ function MessagesContent() {
     });
   }
 
-  function timeAgo(dateStr: string) {
-    const diff = Date.now() - new Date(dateStr).getTime();
-    const mins = Math.floor(diff / 60000);
-    if (mins < 1) return "maintenant";
-    if (mins < 60) return `${mins}min`;
-    const hours = Math.floor(mins / 60);
-    if (hours < 24) return `${hours}h`;
-    return new Date(dateStr).toLocaleDateString("fr-FR", {
-      day: "numeric",
-      month: "short",
-    });
-  }
-
-  // 💬 RENDU DES MESSAGES (Texte, Image ou Vocal)
   const renderMessageContent = (content: string, isMine: boolean) => {
     if (content.startsWith("[IMAGE]")) {
       const imageUrl = content.replace("[IMAGE]", "");
@@ -575,7 +573,6 @@ function MessagesContent() {
     );
   };
 
-  const newMatches = matchesList.filter((m) => !m.lastMessage);
   const conversations = matchesList.filter((m) => m.lastMessage);
 
   const filteredConversations = conversations.filter((match) => {
@@ -781,7 +778,7 @@ function MessagesContent() {
             {loadingMessages ? (
               <ChatSkeleton />
             ) : (
-              chatMessages.map((msg, index) => {
+              chatMessages.map((msg) => {
                 const isMine = msg.senderId === user?.id;
 
                 return (
