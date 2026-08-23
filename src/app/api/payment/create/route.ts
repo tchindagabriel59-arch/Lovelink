@@ -34,11 +34,10 @@ export async function POST(req: NextRequest) {
     const merchantTransactionId = generateMerchantTransactionId(userId);
     const urls = getPaymentUrls(merchantTransactionId);
     
-    // Remplacer l'URL de retour selon si c'est Premium ou Boost
-    urls.return_url = `${process.env.NEXT_PUBLIC_SITE_URL || "https://lovelink237.com"}${returnPath}?tx=${merchantTransactionId}&status=success`;
-    urls.cancel_url = `${process.env.NEXT_PUBLIC_SITE_URL || "https://lovelink237.com"}${returnPath}?tx=${merchantTransactionId}&status=failed`;
+    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://lovelink237.com";
+    urls.return_url = `${baseUrl}${returnPath}?tx=${merchantTransactionId}&status=success`;
+    urls.cancel_url = `${baseUrl}${returnPath}?tx=${merchantTransactionId}&status=failed`;
 
-    // 1. Créer la facture chez PayDunya
     const invoiceData = await createPayDunyaInvoice({
       invoice: {
         total_amount: amount,
@@ -46,7 +45,7 @@ export async function POST(req: NextRequest) {
       },
       store: {
         name: "LoveLink",
-        website_url: process.env.NEXT_PUBLIC_SITE_URL || "https://lovelink237.com",
+        website_url: baseUrl,
       },
       actions: urls,
       custom_data: {
@@ -56,7 +55,6 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // 2. Enregistrer en base de données "pending"
     await db.insert(payments).values({
       userId,
       merchantTransactionId,
