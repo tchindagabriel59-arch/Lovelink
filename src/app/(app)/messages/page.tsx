@@ -554,32 +554,57 @@ function MessagesContent() {
         </div>
 
         {/* Card Vocaux Premium */}
-        <div className="px-4 mb-3">
-          <Link
-            href="/premium"
-            className="flex items-center justify-between rounded-2xl bg-gradient-to-r from-amber-300 via-yellow-300 to-amber-200 p-3.5 shadow-sm border border-amber-200/80"
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-white/70 flex items-center justify-center">
-                <Mic className="w-5 h-5 text-amber-700" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <p className="text-sm font-black text-amber-950">
-                    Messages vocaux
-                  </p>
-                  <span className="text-[9px] font-black uppercase tracking-wider bg-white/80 text-amber-700 px-1.5 py-0.5 rounded-md">
-                    Nouveau
-                  </span>
-                </div>
-                <p className="text-[11px] text-amber-900/70 font-medium">
-                  Fais entendre ta voix · Exclusif Premium ✨
-                </p>
-              </div>
-            </div>
-            <span className="text-amber-800 text-lg">›</span>
-          </Link>
+<div className="px-4 mb-3">
+  {user?.isPremium ? (
+    <div
+      onClick={() => alert("🎙️ Les messages vocaux sont activés sur ton compte Premium ! Ouvre une conversation et clique sur l'icône photo/vocal pour discuter.")}
+      className="cursor-pointer flex items-center justify-between rounded-2xl bg-gradient-to-r from-purple-600 via-rose-500 to-pink-500 p-3.5 shadow-sm text-white"
+    >
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-full bg-white/20 backdrop-blur flex items-center justify-center">
+          <Mic className="w-5 h-5 text-white" />
         </div>
+        <div>
+          <div className="flex items-center gap-2">
+            <p className="text-sm font-black text-white">Messages vocaux activés</p>
+            <span className="text-[9px] font-black uppercase tracking-wider bg-white/30 text-white px-1.5 py-0.5 rounded-md">
+              👑 Premium
+            </span>
+          </div>
+          <p className="text-[11px] text-white/80 font-medium">
+            Profite de tes vocaux illimités dans tes discussions ✨
+          </p>
+        </div>
+      </div>
+      <span className="text-white/80 text-lg">›</span>
+    </div>
+  ) : (
+    <Link
+      href="/premium"
+      className="flex items-center justify-between rounded-2xl bg-gradient-to-r from-amber-300 via-yellow-300 to-amber-200 p-3.5 shadow-sm border border-amber-200/80"
+    >
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-full bg-white/70 flex items-center justify-center">
+          <Mic className="w-5 h-5 text-amber-700" />
+        </div>
+        <div>
+          <div className="flex items-center gap-2">
+            <p className="text-sm font-black text-amber-950">
+              Messages vocaux
+            </p>
+            <span className="text-[9px] font-black uppercase tracking-wider bg-white/80 text-amber-700 px-1.5 py-0.5 rounded-md">
+              Nouveau
+            </span>
+          </div>
+          <p className="text-[11px] text-amber-900/70 font-medium">
+            Fais entendre ta voix · Exclusif Premium ✨
+          </p>
+        </div>
+      </div>
+      <span className="text-amber-800 text-lg">›</span>
+    </Link>
+  )}
+</div>
 
         {/* Filter Tabs */}
         <div className="px-4 mb-3 flex items-center gap-2 overflow-x-auto pb-1">
