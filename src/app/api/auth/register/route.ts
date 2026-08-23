@@ -6,16 +6,14 @@ import bcrypt from "bcryptjs";
 import { createToken } from "@/lib/auth";
 import { sendWelcomeEmail } from "@/lib/emails";
 import { sendMetaEvent, getClientIp, generateEventId } from "@/lib/meta-capi";
-import {
-  generateUniqueReferralCode,
-  findUserByReferralCode,
-  applyReferralReward,
+import { 
+  generateUniqueReferralCode, 
+  findUserByReferralCode, 
+  applyReferralReward 
 } from "@/lib/referral";
 import { logApiCall } from "@/lib/api-logger";
 
-function getDefaultPrefGender(
-  userGender: string
-): "male" | "female" | "non_binary" | "other" | null {
+function getDefaultPrefGender(userGender: string): "male" | "female" | "non_binary" | "other" | null {
   switch (userGender) {
     case "male":
       return "female";
@@ -47,19 +45,20 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const {
-      email,
-      password,
-      firstName,
-      lastName,
-      birthDate,
-      gender,
+    const { 
+      email, 
+      password, 
+      firstName, 
+      lastName, 
+      birthDate, 
+      gender, 
       lookingFor,
       city,
       country,
       occupation,
       maritalStatus,
       discoverySource,
+      photoUrl,
       eventId: clientEventId,
       referralCode: providedReferralCode,
     } = body;
@@ -74,6 +73,7 @@ export async function POST(req: NextRequest) {
         userAgent,
         ipAddress,
       });
+
       return NextResponse.json(
         { error: "Tous les champs obligatoires sont requis" },
         { status: 400 }
@@ -108,6 +108,7 @@ export async function POST(req: NextRequest) {
         userAgent,
         ipAddress,
       });
+
       return NextResponse.json(
         { error: "Cet email est déjà utilisé" },
         { status: 409 }
@@ -123,15 +124,8 @@ export async function POST(req: NextRequest) {
       referrer = await findUserByReferralCode(providedReferralCode);
     }
 
-    const validLookingFor = [
-      "relationship",
-      "friendship",
-      "casual",
-      "marriage",
-    ] as const;
-    const safeLookingFor = validLookingFor.includes(lookingFor)
-      ? lookingFor
-      : "relationship";
+    const validLookingFor = ["relationship", "friendship", "casual", "marriage"] as const;
+    const safeLookingFor = validLookingFor.includes(lookingFor) ? lookingFor : "relationship";
 
     const [newUser] = await db
       .insert(users)
@@ -148,6 +142,7 @@ export async function POST(req: NextRequest) {
         occupation: occupation?.trim() || "",
         maritalStatus: maritalStatus?.trim() || "",
         discoverySource: discoverySource?.trim() || "",
+        photoUrl: photoUrl || "",
         prefGender: defaultPrefGender,
         prefAgeMin: 18,
         prefAgeMax: 99,
@@ -169,34 +164,32 @@ export async function POST(req: NextRequest) {
     });
 
     const metaEventId = clientEventId || generateEventId();
-
+    
     try {
       const clientIp = getClientIp(req as any);
-      const capiUserAgent = req.headers.get("user-agent") || undefined;
-      const fbp = req.cookies.get("_fbp")?.value;
-      const fbc = req.cookies.get("_fbc")?.value;
-      const referer = req.headers.get("referer");
-      const eventSourceUrl =
-        referer ||
-        `${process.env.NEXT_PUBLIC_SITE_URL || "https://lovelink237.com"}/register`;
+      const capiUserAgent = req.headers.get('user-agent') || undefined;
+      const fbp = req.cookies.get('_fbp')?.value;
+      const fbc = req.cookies.get('_fbc')?.value;
+      const referer = req.headers.get('referer');
+      const eventSourceUrl = referer || `${process.env.NEXT_PUBLIC_SITE_URL || 'https://lovelink237.com'}/register`;
 
       await sendMetaEvent({
-        eventName: "CompleteRegistration",
+        eventName: 'CompleteRegistration',
         eventId: metaEventId,
         eventSourceUrl,
         userData: {
           email,
           firstName,
           lastName,
-          country: "sn",
+          country: 'sn',
           clientIpAddress: clientIp,
           clientUserAgent: capiUserAgent,
           fbp,
           fbc,
         },
         customData: {
-          content_name: "Inscription LoveLink",
-        },
+          content_name: 'Inscription LoveLink',
+        }
       });
     } catch (capiError) {
       console.error("[Meta CAPI] Erreur CompleteRegistration:", capiError);
@@ -228,8 +221,8 @@ export async function POST(req: NextRequest) {
       statusCode: 200,
       durationMs: Date.now() - startTime,
       userId: newUser.id,
-      errorMessage: referrer
-        ? `Inscription tunnel OK (parrainage: ${providedReferralCode})`
+      errorMessage: referrer 
+        ? `Inscription tunnel OK (parrainage: ${providedReferralCode})` 
         : "Inscription tunnel OK",
       userAgent,
       ipAddress,
@@ -256,46 +249,3 @@ export async function POST(req: NextRequest) {
     );
   }
 }
-// 1. Extraire photoUrl dans le req.json()
-const {
-  email,
-  password,
-  firstName,
-  lastName,
-  birthDate,
-  gender,
-  lookingFor,
-  city,
-  country,
-  occupation,
-  maritalStatus,
-  discoverySource,
-  photoUrl, // <--- AJOUTER
-  eventId: clientEventId,
-  referralCode: providedReferralCode,
-} = body;
-
-// 2. Insérer photoUrl dans db.insert(users)
-const [newUser] = await db
-  .insert(users)
-  .values({
-    email: email.toLowerCase().trim(),
-    passwordHash,
-    firstName: firstName.trim(),
-    lastName: (lastName || "").trim(),
-    birthDate,
-    gender,
-    lookingFor: safeLookingFor,
-    city: city?.trim() || "",
-    country: country?.trim() || "",
-    occupation: occupation?.trim() || "",
-    maritalStatus: maritalStatus?.trim() || "",
-    discoverySource: discoverySource?.trim() || "",
-    photoUrl: photoUrl || "", // <--- AJOUTER
-    prefGender: defaultPrefGender,
-    prefAgeMin: 18,
-    prefAgeMax: 99,
-    referralCode: newReferralCode,
-    referredBy: referrer?.id || null,
-  })
-  .returning();
