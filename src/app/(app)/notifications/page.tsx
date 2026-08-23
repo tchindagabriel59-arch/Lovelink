@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import {
   ArrowLeft,
   Bell,
@@ -11,38 +12,25 @@ import {
   UserPlus,
   Sparkles,
   MessageCircle,
+  Trash2,
 } from "lucide-react";
 
-type NotifType =
-  | "all"
-  | "visit"
-  | "like"
-  | "match"
-  | "message"
-  | "favorite"
-  | "request"
-  | "other";
+type NotifType = "all" | "visit" | "like" | "match" | "message" | "request";
 
 interface NotificationItem {
   id: number;
-  type?: string;
-  title?: string;
-  message?: string;
-  body?: string;
-  content?: string;
-  isRead?: boolean;
-  read?: boolean;
-  createdAt?: string;
-  created_at?: string;
-  fromUser?: {
-    id?: number;
-    firstName?: string;
-    photoUrl?: string | null;
+  type: string;
+  content: string;
+  isRead: boolean;
+  createdAt: string;
+  fromUser: {
+    id: number;
+    firstName: string;
+    photoUrl: string | null;
   } | null;
-  data?: Record<string, any> | null;
 }
 
-function timeAgo(dateStr?: string) {
+function timeAgo(dateStr: string) {
   if (!dateStr) return "";
   const diff = Date.now() - new Date(dateStr).getTime();
   const mins = Math.floor(diff / 60000);
@@ -59,8 +47,8 @@ function timeAgo(dateStr?: string) {
   });
 }
 
-function dayLabel(dateStr?: string) {
-  if (!dateStr) return "Autres";
+function dayLabel(dateStr: string) {
+  if (!dateStr) return "Plus ancien";
   const d = new Date(dateStr);
   const now = new Date();
   const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -74,23 +62,22 @@ function dayLabel(dateStr?: string) {
   return "Plus ancien";
 }
 
-function normalizeType(raw?: string): NotifType {
+function normalizeType(raw: string): NotifType {
   const t = (raw || "").toLowerCase();
   if (t.includes("visit") || t.includes("visite")) return "visit";
-  if (t.includes("like") || t.includes("favori") || t.includes("favorite"))
-    return "favorite";
+  if (t.includes("like") || t.includes("favori")) return "like";
   if (t.includes("match")) return "match";
   if (t.includes("message")) return "message";
   if (t.includes("request") || t.includes("demande") || t.includes("contact"))
     return "request";
-  return "other";
+  return "visit";
 }
 
 function notifIcon(type: NotifType) {
   switch (type) {
     case "visit":
       return { Icon: Eye, color: "text-sky-500", bg: "bg-sky-50" };
-    case "favorite":
+    case "like":
       return { Icon: Heart, color: "text-rose-500", bg: "bg-rose-50" };
     case "match":
       return { Icon: Sparkles, color: "text-purple-500", bg: "bg-purple-50" };
@@ -99,7 +86,7 @@ function notifIcon(type: NotifType) {
     case "request":
       return { Icon: UserPlus, color: "text-fuchsia-500", bg: "bg-fuchsia-50" };
     default:
-      return { Icon: Bell, color: "text-slate-500", bg: "bg-slate-100" };
+      return { Icon: Bell, color: "text-rose-500", bg: "bg-rose-50" };
   }
 }
 
@@ -109,27 +96,26 @@ export default function NotificationsPage() {
   const [filter, setFilter] = useState<NotifType>("all");
   const [marking, setMarking] = useState(false);
 
-  const load = useCallback(async () => {
+  const fetchNotifs = useCallback(async () => {
     try {
       const res = await fetch("/api/notifications");
-      if (!res.ok) return;
-      const data = await res.json();
-      const list: NotificationItem[] =
-        data.notifications || data.data || data.items || [];
-      setItems(Array.isArray(list) ? list : []);
+      if (res.ok) {
+        const data = await res.json();
+        setItems(data.notifications || []);
+      }
     } catch {
       // silent
-    } finally {
+    } flex-shrink-0 {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    fetchNotifs();
+  }, [fetchNotifs]);
 
   const unreadCount = useMemo(
-    () => items.filter((n) => !(n.isRead ?? n.read)).length,
+    () => items.filter((n) => !n.isRead).length,
     [items]
   );
 
@@ -141,7 +127,7 @@ export default function NotificationsPage() {
   const grouped = useMemo(() => {
     const map = new Map<string, NotificationItem[]>();
     for (const n of filtered) {
-      const key = dayLabel(n.createdAt || n.created_at);
+      const key = dayLabel(n.createdAt);
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(n);
     }
@@ -149,14 +135,7 @@ export default function NotificationsPage() {
   }, [filtered]);
 
   const counts = useMemo(() => {
-    const base = {
-      all: items.length,
-      visit: 0,
-      request: 0,
-      favorite: 0,
-      match: 0,
-      message: 0,
-    };
+    const base = { all: items.length, visit: 0, request: 0, like: 0, match: 0 };
     for (const n of items) {
       const t = normalizeType(n.type);
       if (t in base) (base as any)[t] += 1;
@@ -167,16 +146,21 @@ export default function NotificationsPage() {
   async function markAllRead() {
     setMarking(true);
     try {
-      await fetch("/api/notifications", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ markAllRead: true }),
-      }).catch(() =>
-        fetch("/api/notifications/read-all", { method: "POST" }).catch(() => null)
-      );
-      setItems((prev) => prev.map((n) => ({ ...n, isRead: true, read: true })));
+      await fetch("/api/notifications", { method: "PATCH" });
+      setItems((prev) => prev.map((n) => ({ ...n, isRead: true })));
+    } catch {
+      // silent
     } finally {
       setMarking(false);
+    }
+  }
+
+  async function deleteNotif(id: number) {
+    try {
+      await fetch(`/api/notifications?id=${id}`, { method: "DELETE" });
+      setItems((prev) => prev.filter((n) => n.id !== id));
+    } catch {
+      // silent
     }
   }
 
@@ -184,13 +168,13 @@ export default function NotificationsPage() {
     { id: "all", label: "Tout", count: counts.all },
     { id: "visit", label: "Visites", count: counts.visit },
     { id: "request", label: "Demandes", count: counts.request },
-    { id: "favorite", label: "Favoris", count: counts.favorite },
+    { id: "like", label: "Favoris", count: counts.like },
     { id: "match", label: "Matchs", count: counts.match },
   ];
 
   return (
-    <div className="min-h-[calc(100vh-64px)] bg-[#F7F8FC]">
-      <div className="max-w-lg mx-auto px-4 pt-4 pb-24">
+    <div className="min-h-[calc(100vh-64px)] bg-[#F7F8FC] pb-20">
+      <div className="max-w-md mx-auto px-4 pt-4">
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
@@ -229,7 +213,7 @@ export default function NotificationsPage() {
           </button>
         </div>
 
-        {/* Filtres */}
+        {/* Filter Tabs */}
         <div className="flex gap-2 overflow-x-auto pb-3 mb-2">
           {tabs.map((tab) => {
             const active = filter === tab.id;
@@ -254,11 +238,14 @@ export default function NotificationsPage() {
           })}
         </div>
 
-        {/* Liste */}
+        {/* Notifications List */}
         {loading ? (
           <div className="space-y-3 animate-pulse">
-            {[...Array(6)].map((_, i) => (
-              <div key={i} className="h-20 rounded-3xl bg-white border border-slate-100" />
+            {[...Array(5)].map((_, i) => (
+              <div
+                key={i}
+                className="h-20 rounded-3xl bg-white border border-slate-100"
+              />
             ))}
           </div>
         ) : filtered.length === 0 ? (
@@ -268,7 +255,7 @@ export default function NotificationsPage() {
             </div>
             <p className="font-bold text-slate-700">Aucune notification</p>
             <p className="text-sm text-slate-400 mt-1">
-              Les likes, visites et matchs apparaîtront ici
+              Tes likes, visites et matchs apparaîtront ici
             </p>
           </div>
         ) : (
@@ -286,61 +273,80 @@ export default function NotificationsPage() {
 
                 <div className="space-y-2.5">
                   {list.map((n) => {
-                    const type = normalizeType(n.type);
-                    const { Icon, color, bg } = notifIcon(type);
-                    const unread = !(n.isRead ?? n.read);
-                    const title =
-                      n.title ||
-                      (type === "favorite"
-                        ? "Nouveau favori !"
-                        : type === "visit"
-                        ? "Nouvelle visite"
-                        : type === "match"
-                        ? "Nouveau match !"
-                        : type === "request"
-                        ? "Nouvelle demande de contact"
-                        : type === "message"
-                        ? "Nouveau message"
-                        : "Notification");
-                    const body =
-                      n.message ||
-                      n.body ||
-                      n.content ||
-                      "Ouvre pour en savoir plus";
-                    const when = timeAgo(n.createdAt || n.created_at);
+                    const normType = normalizeType(n.type);
+                    const { Icon, color, bg } = notifIcon(normType);
+                    const unread = !n.isRead;
 
                     return (
                       <div
                         key={n.id}
-                        className={`relative flex items-start gap-3 p-3.5 rounded-3xl border shadow-sm ${
+                        className={`group relative flex items-start gap-3 p-3.5 rounded-3xl border shadow-sm transition ${
                           unread
                             ? "bg-white border-rose-100"
                             : "bg-white/80 border-slate-100"
                         }`}
                       >
-                        <div
-                          className={`w-11 h-11 rounded-2xl ${bg} flex items-center justify-center flex-shrink-0`}
-                        >
-                          <Icon className={`w-5 h-5 ${color}`} />
-                        </div>
+                        {/* Avatar ou Icône */}
+                        {n.fromUser?.photoUrl ? (
+                          <div className="relative flex-shrink-0">
+                            <Image
+                              src={n.fromUser.photoUrl}
+                              alt={n.fromUser.firstName || "Profil"}
+                              width={44}
+                              height={44}
+                              className="rounded-2xl object-cover"
+                            />
+                            <div
+                              className={`absolute -bottom-1 -right-1 w-5 h-5 rounded-full ${bg} flex items-center justify-center border-2 border-white`}
+                            >
+                              <Icon className={`w-3 h-3 ${color}`} />
+                            </div>
+                          </div>
+                        ) : (
+                          <div
+                            className={`w-11 h-11 rounded-2xl ${bg} flex items-center justify-center flex-shrink-0`}
+                          >
+                            <Icon className={`w-5 h-5 ${color}`} />
+                          </div>
+                        )}
 
+                        {/* Content */}
                         <div className="flex-1 min-w-0">
                           <div className="flex items-start justify-between gap-2">
                             <p className="font-bold text-slate-900 text-sm leading-snug">
                               <span className={color}>♥ </span>
-                              {title}
+                              {normType === "like"
+                                ? "Nouveau favori !"
+                                : normType === "visit"
+                                ? "Nouvelle visite"
+                                : normType === "match"
+                                ? "Nouveau match !"
+                                : normType === "request"
+                                ? "Nouvelle demande"
+                                : "Notification"}
                             </p>
                             {unread && (
                               <span className="mt-1 w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0" />
                             )}
                           </div>
+
                           <p className="text-sm text-slate-500 mt-0.5 line-clamp-2">
-                            {body}
+                            {n.content}
                           </p>
+
                           <p className="text-[11px] text-slate-400 mt-1 font-medium">
-                            {when}
+                            {timeAgo(n.createdAt)}
                           </p>
                         </div>
+
+                        {/* Supprimer button */}
+                        <button
+                          onClick={() => deleteNotif(n.id)}
+                          className="opacity-0 group-hover:opacity-100 p-1.5 text-slate-300 hover:text-rose-500 transition"
+                          title="Supprimer"
+                        >
+                          <Trash2 size={16} />
+                        </button>
                       </div>
                     );
                   })}
