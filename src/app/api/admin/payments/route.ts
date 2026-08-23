@@ -55,40 +55,75 @@ export async function POST(req: NextRequest) {
     if (!user) return NextResponse.json({ error: "Utilisateur introuvable" }, { status: 404 });
 
     const u = user as any;
+    const now = new Date();
+
+    // Normalisation insensible à la casse
+    const rawPlan = String(payment.plan || "").toLowerCase();
+    const rawPeriod = String(payment.billingPeriod || "").toLowerCase();
+
+    const isBoost = rawPlan.includes("boost");
+
+    if (isBoost) {
+      // 🚀 ACTIVATION DU BOOST
+      let hoursToAdd = 24;
+      if (rawPeriod.includes("3d") || rawPeriod.includes("3j") || rawPeriod.includes("3")) {
+        hoursToAdd = 72;
+      } else if (rawPeriod.includes("7d") || rawPeriod.includes("7j") || rawPeriod.includes("7")) {
+        hoursToAdd = 168;
+      }
+
+      let baseDate = now;
+      if (u.boostExpiresAt) {
+        const parsed = new Date(u.boostExpiresAt);
+        if (!isNaN(parsed.getTime()) && parsed > now) {
+          baseDate = parsed;
+        }
+      }
+
+      const newExpiry = new Date(baseDate.getTime() + hoursToAdd * 60 * 60 * 1000);
+
+      await db.update(users).set({
+        isBoosted: true,
+        boostExpiresAt: newExpiry,
+        updatedAt: now,
+      } as any).where(eq(users.id, user.id));
+
+    } else {
+      // 💎 ACTIVATION PREMIUM / GOLD
+      const planName = rawPlan.includes("gold") ? "gold" : "premium";
+      let monthsToAdd = 1;
+      if (rawPeriod.includes("year") || rawPeriod.includes("an") || rawPeriod.includes("1y")) {
+        monthsToAdd = 12;
+      }
+
+      let baseDate = now;
+      if (u.premiumExpiresAt) {
+        const parsed = new Date(u.premiumExpiresAt);
+        if (!isNaN(parsed.getTime()) && parsed > now) {
+          baseDate = parsed;
+        }
+      }
+
+      const newExpiry = new Date(baseDate);
+      newExpiry.setMonth(newExpiry.getMonth() + monthsToAdd);
+
+      await db.update(users).set({
+        isPremium: true,
+        premiumPlan: planName,
+        premiumExpiresAt: newExpiry,
+        updatedAt: now,
+      } as any).where(eq(users.id, user.id));
+    }
 
     // Mettre à jour le statut du paiement
     await db.update(payments)
-      .set({ status: "completed", updatedAt: new Date() } as any)
+      .set({ status: "completed", updatedAt: now } as any)
       .where(eq(payments.id, paymentId));
-
-    const now = new Date();
-
-    // Activer le service
-    if (payment.plan === "boost") {
-      let hoursToAdd = 24;
-      if (payment.billingPeriod === "3d") hoursToAdd = 72;
-      if (payment.billingPeriod === "7d") hoursToAdd = 168;
-
-      const currentExpiry = u.boostExpiresAt ? new Date(u.boostExpiresAt) : now;
-      const baseDate = currentExpiry > now ? currentExpiry : now;
-      const newExpiry = new Date(baseDate.getTime() + hoursToAdd * 60 * 60 * 1000);
-
-      await db.update(users).set({ isBoosted: true, boostExpiresAt: newExpiry } as any).where(eq(users.id, u.id));
-    } else {
-      // Premium ou Gold
-      let monthsToAdd = 1;
-      if (payment.billingPeriod === "yearly") monthsToAdd = 12;
-
-      const currentExpiry = u.premiumExpiresAt ? new Date(u.premiumExpiresAt) : now;
-      const baseDate = currentExpiry > now ? currentExpiry : now;
-      const newExpiry = new Date(baseDate.setMonth(baseDate.getMonth() + monthsToAdd));
-
-      await db.update(users).set({ isPremium: true, premiumPlan: payment.plan, premiumExpiresAt: newExpiry } as any).where(eq(users.id, u.id));
-    }
 
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Erreur POST validate payment:", error);
-    return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
+    const msg = error instanceof Error ? error.message : String(error);
+    return NextResponse.json({ error: msg || "Erreur serveur" }, { status: 500 });
   }
 }
