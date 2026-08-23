@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
     const { plan, period, gateway = "auto", returnPath = "/discover" } = body as {
       plan: PremiumPlan;
       period: BillingPeriod;
-      gateway?: "notchpay" | "paydunya" | "auto";
+      gateway?: "notchpay" | "paydunya" | "manual_cm" | "auto";
       returnPath?: string;
     };
 
@@ -33,36 +33,33 @@ export async function POST(req: NextRequest) {
     const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
     if (!user) return NextResponse.json({ error: "Utilisateur introuvable" }, { status: 404 });
 
-    // Cast en 'any' pour éviter les blocages TypeScript au build Vercel
     const u = user as any;
 
-    // 2. Détection intelligente du pays (Cameroun vs Reste du monde)
+    // 2. Détection du Pays : Par défaut, c'est le CAMEROUN 🇨🇲
     const userCountry = (u.country || "").toUpperCase();
-    const userPhone = u.phone || u.phoneNumber || "";
+    const uemoaCountries = ["SN", "CI", "BJ", "BF", "ML", "TG"]; // Pays PayDunya
     
-    // Est au Cameroun si pays = "CM" ou "CAMEROUN" ou téléphone commence par +237 / 237
-    const isCameroon =
-      userCountry === "CM" ||
-      userCountry.includes("CAMER") ||
-      userPhone.startsWith("+237") ||
-      userPhone.startsWith("237");
+    // Si l'utilisateur est explicitement dans un pays UEMOA (ex: Sénégal, CI), on utilise PayDunya.
+    // Sinon (Cameroun, ou pays non défini) -> On utilise la passerelle Cameroun !
+    const isUemoa = uemoaCountries.includes(userCountry);
+    const useNotchPayOrManual = !isUemoa || gateway === "notchpay" || gateway === "manual_cm";
 
     const merchantTransactionId = generateMerchantTransactionId(userId);
     const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://lovelink237.com";
 
     let paymentUrl = "";
     let paymentToken = "";
-    let currency = "XOF";
-    let paymentMethod = "paydunya";
+    let currency = "XAF";
+    let paymentMethod = "manual_cm";
 
-    if (gateway === "notchpay" || (gateway === "auto" && isCameroon)) {
+    if (useNotchPayOrManual) {
       // 🇨🇲 CAMEROUN : Mode Manuel MTN / Orange
       paymentUrl = `${baseUrl}/premium/manual-cm?plan=${plan}&period=${period}&amount=${amount}&userId=${userId}`;
       paymentToken = `MANUAL-${merchantTransactionId}`.substring(0, 30);
       currency = "XAF";
       paymentMethod = "manual_cm";
     } else {
-      // 🌍 AUTRES PAYS : PayDunya (Sénégal, CI, Bénin, etc.)
+      // 🌍 PAYS UEMOA (Sénégal, Côte d'Ivoire, etc.) : PayDunya
       const urls = getPaymentUrls(merchantTransactionId);
       urls.return_url = `${baseUrl}${returnPath}?tx=${merchantTransactionId}&status=success`;
       urls.cancel_url = `${baseUrl}${returnPath}?tx=${merchantTransactionId}&status=failed`;
@@ -75,7 +72,7 @@ export async function POST(req: NextRequest) {
       });
 
       paymentUrl = invoiceData.invoice_url || invoiceData.response_text;
-      paymentToken = invoiceData.token || "";
+      paymentToken = invoiceData.token || merchantTransactionId;
       currency = "XOF";
       paymentMethod = "paydunya";
     }
@@ -84,22 +81,23 @@ export async function POST(req: NextRequest) {
       throw new Error("L'URL de paiement générée est invalide");
     }
 
-    // 3. Sauvegarde BDD Sécurisée
+    // 3. Sauvegarde BDD Sécurisée (Tous les champs sont fournis pour éviter l'erreur SQL)
     await db.insert(payments).values({
       userId,
       merchantTransactionId,
-      paymentToken,
-      paymentUrl,
-      amount,
-      currency,
-      plan,
-      billingPeriod: period,
-      paymentMethod,
+      paymentToken: paymentToken || merchantTransactionId,
+      paymentUrl: paymentUrl,
+      amount: Number(amount),
+      currency: currency,
+      plan: plan || "premium",
+      billingPeriod: period || "monthly",
+      paymentMethod: paymentMethod,
       status: "pending",
+      statusMessage: "Paiement en attente de validation",
       clientEmail: u.email || `user_${userId}@lovelink.com`,
       clientFirstName: u.firstName || "Utilisateur",
       clientLastName: u.lastName || "",
-      clientPhone: userPhone,
+      clientPhone: u.phone || u.phoneNumber || "",
     } as any);
 
     return NextResponse.json({
