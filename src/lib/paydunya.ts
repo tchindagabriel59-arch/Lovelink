@@ -1,9 +1,6 @@
 // ============================================
 // 💳 HELPER PAYDUNYA - API v1
 // ============================================
-// Documentation : https://paydunya.com/developers
-// Basé au Sénégal 🇸🇳 - Support multi-pays Afrique
-// ============================================
 
 const PAYDUNYA_MODE = process.env.PAYDUNYA_MODE || "test";
 const PAYDUNYA_BASE_URL =
@@ -11,15 +8,12 @@ const PAYDUNYA_BASE_URL =
     ? "https://app.paydunya.com/api/v1"
     : "https://app.paydunya.com/sandbox-api/v1";
 
-const MASTER_KEY = process.env.PAYDUNYA_MASTER_KEY!;
-const PUBLIC_KEY = process.env.PAYDUNYA_PUBLIC_KEY!;
-const PRIVATE_KEY = process.env.PAYDUNYA_PRIVATE_KEY!;
-const TOKEN = process.env.PAYDUNYA_TOKEN!;
+const MASTER_KEY = process.env.PAYDUNYA_MASTER_KEY || "";
+const PUBLIC_KEY = process.env.PAYDUNYA_PUBLIC_KEY || "";
+const PRIVATE_KEY = process.env.PAYDUNYA_PRIVATE_KEY || "";
+const TOKEN = process.env.PAYDUNYA_TOKEN || "";
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://lovelink237.com";
 
-// ============================================
-// TYPES
-// ============================================
 export interface PayDunyaInvoiceItem {
   name: string;
   quantity: number;
@@ -51,15 +45,15 @@ export interface PayDunyaCreateInvoiceRequest {
 }
 
 export interface PayDunyaCreateInvoiceResponse {
-  response_code: string;      // "00" = success
+  response_code: string;
   response_text: string;
   description?: string;
-  token?: string;              // Token de la transaction PayDunya
-  invoice_url?: string;        // URL de paiement à ouvrir
+  token?: string;
+  invoice_url?: string;
 }
 
 export interface PayDunyaVerifyResponse {
-  response_code: string;       // "00" = success
+  response_code: string;
   response_text: string;
   hash?: string;
   invoice?: {
@@ -87,9 +81,6 @@ export interface PayDunyaVerifyResponse {
   provider_reference?: string;
 }
 
-// ============================================
-// 🔑 HEADERS COMMUNS
-// ============================================
 function getPayDunyaHeaders() {
   return {
     "Content-Type": "application/json",
@@ -100,9 +91,6 @@ function getPayDunyaHeaders() {
   };
 }
 
-// ============================================
-// 💳 CRÉER UNE FACTURE (invoice) PAYDUNYA
-// ============================================
 export async function createPayDunyaInvoice(
   params: PayDunyaCreateInvoiceRequest
 ): Promise<PayDunyaCreateInvoiceResponse> {
@@ -131,9 +119,6 @@ export async function createPayDunyaInvoice(
   }
 }
 
-// ============================================
-// 🔍 VÉRIFIER UNE FACTURE PAYDUNYA (source de vérité)
-// ============================================
 export async function verifyPayDunyaInvoice(
   token: string
 ): Promise<PayDunyaVerifyResponse> {
@@ -160,23 +145,12 @@ export async function verifyPayDunyaInvoice(
   }
 }
 
-// ============================================
-// 🛠️ HELPERS UTILITAIRES
-// ============================================
-
-/**
- * Génère un merchant_transaction_id unique
- * Format: LL[USERID][TIMESTAMP][RANDOM] (max 30 caractères)
- */
 export function generateMerchantTransactionId(userId: number): string {
   const timestamp = Date.now().toString(36);
   const random = Math.random().toString(36).substring(2, 8);
   return `LL${userId}${timestamp}${random}`.substring(0, 30);
 }
 
-/**
- * Retourne les URLs de callback pour un paiement
- */
 export function getPaymentUrls(merchantTransactionId: string) {
   return {
     return_url: `${SITE_URL}/premium/success?tx=${merchantTransactionId}`,
@@ -190,35 +164,59 @@ export function getPaymentUrls(merchantTransactionId: string) {
 // ============================================
 export const PREMIUM_PRICING = {
   premium: {
-    monthly: 2500,   // 2 500 FCFA/mois
-    yearly: 21000,   // 21 000 FCFA/an
+    monthly: 2500,
+    yearly: 21000,
   },
   gold: {
-    monthly: 5000,   // 5 000 FCFA/mois
-    yearly: 42000,   // 42 000 FCFA/an
+    monthly: 5000,
+    yearly: 42000,
   },
 } as const;
 
 export const BOOST_PRICING = {
-  "24h": 1500, // 1 500 FCFA
-  "3d": 3000,  // 3 000 FCFA
-  "7d": 5000,  // 5 000 FCFA
+  "24h": 1500,
+  "3d": 3000,
+  "7d": 5000,
 } as const;
 
-export type PremiumPlan = "premium" | "gold" | "boost"; // ✅ On ajoute "boost"
+export type PremiumPlan = "premium" | "gold" | "boost";
 export type BillingPeriod = "monthly" | "yearly" | "24h" | "3d" | "7d";
 
 export function getPremiumPrice(plan: PremiumPlan, period: BillingPeriod): number {
   if (plan === "boost") {
-    return BOOST_PRICING[period as keyof typeof BOOST_PRICING];
+    if (period in BOOST_PRICING) {
+      return BOOST_PRICING[period as keyof typeof BOOST_PRICING];
+    }
+    return 1500;
   }
-  return PREMIUM_PRICING[plan as "premium" | "gold"][period as "monthly" | "yearly"];
+  if (plan === "premium" || plan === "gold") {
+    if (period === "monthly" || period === "yearly") {
+      return PREMIUM_PRICING[plan][period];
+    }
+  }
+  return 2500;
+}
+
+export function getSubscriptionExpiryDate(period: BillingPeriod): Date {
+  const now = new Date();
+  if (period === "monthly") {
+    now.setMonth(now.getMonth() + 1);
+  } else if (period === "yearly") {
+    now.setFullYear(now.getFullYear() + 1);
+  } else if (period === "24h") {
+    now.setHours(now.getHours() + 24);
+  } else if (period === "3d") {
+    now.setHours(now.getHours() + 72);
+  } else if (period === "7d") {
+    now.setHours(now.getHours() + 168);
+  }
+  return now;
 }
 
 export function getPaymentDesignation(plan: PremiumPlan, period: BillingPeriod): string {
   if (plan === "boost") {
-    const labels = { "24h": "24 heures", "3d": "3 jours", "7d": "7 jours" };
-    return `LoveLink Boost - ${labels[period as keyof typeof labels]}`;
+    const labels: Record<string, string> = { "24h": "24 heures", "3d": "3 jours", "7d": "7 jours" };
+    return `LoveLink Boost - ${labels[period] || period}`;
   }
   const planLabel = plan === "premium" ? "Premium" : "Gold";
   const periodLabel = period === "monthly" ? "1 mois" : "1 an";
