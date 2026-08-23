@@ -105,7 +105,7 @@ export default function NotificationsPage() {
       }
     } catch {
       // silent
-    } flex-shrink-0 {
+    } finally {
       setLoading(false);
     }
   }, []);
