@@ -136,7 +136,13 @@ export const PushTemplates = {
 
   boost: () => ({
     title: "🚀 Boost activé !",
-    body: "Ton profil est mis en avant pendant 30 min !",
+    boost: () => ({
+  title: "🚀 Boost activé !",
+  body: "Ton profil est mis en avant. Profite de ta visibilité max !",
+  icon: "/icon",
+  tag: "boost",
+  url: "/discover",
+}),,
     icon: "/icon",
     tag: "boost",
     url: "/boost",
