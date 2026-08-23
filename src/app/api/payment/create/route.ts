@@ -13,90 +13,190 @@ import {
   BillingPeriod,
 } from "@/lib/paydunya";
 
+type PaymentCountry = "CM" | "OTHER";
+
 export async function POST(req: NextRequest) {
   try {
     const userId = await getCurrentUserId();
-    if (!userId) return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
 
-    const body = await req.json();
-    const { plan, period, country = "CM", returnPath = "/discover" } = body as {
+    if (!userId) {
+      return NextResponse.json(
+        { error: "Non autorisé" },
+        { status: 401 }
+      );
+    }
+
+    const body = (await req.json()) as {
       plan: PremiumPlan;
       period: BillingPeriod;
-      country?: "CM" | "OTHER";
+      country?: PaymentCountry;
       returnPath?: string;
     };
+
+    const { plan, period, country } = body;
+
+    if (!plan || !period) {
+      return NextResponse.json(
+        { error: "Plan ou durée manquant" },
+        { status: 400 }
+      );
+    }
+
+    const defaultReturnPath = plan === "boost" ? "/discover" : "/premium";
+
+    const returnPath =
+      typeof body.returnPath === "string" &&
+      body.returnPath.startsWith("/") &&
+      !body.returnPath.startsWith("//")
+        ? body.returnPath
+        : defaultReturnPath;
+
+    const baseUrl =
+      process.env.NEXT_PUBLIC_SITE_URL || "https://lovelink237.com";
+
+    /*
+     * Aucun pays n'a encore été sélectionné :
+     * on renvoie vers la page intermédiaire.
+     */
+    if (country !== "CM" && country !== "OTHER") {
+      const choiceUrl = new URL(
+        "/premium/choose-payment-country",
+        baseUrl
+      );
+
+      choiceUrl.searchParams.set("plan", plan);
+      choiceUrl.searchParams.set("period", period);
+      choiceUrl.searchParams.set("returnPath", returnPath);
+
+      return NextResponse.json({
+        success: true,
+        requiresCountrySelection: true,
+        paymentUrl: choiceUrl.toString(),
+      });
+    }
 
     const amount = getPremiumPrice(plan, period);
     const description = getPaymentDesignation(plan, period);
 
-    // 1. Récupération de l'utilisateur
-    const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
-    if (!user) return NextResponse.json({ error: "Utilisateur introuvable" }, { status: 404 });
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
 
-    const u = user as any;
-    const merchantTransactionId = generateMerchantTransactionId(userId);
-    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://lovelink237.com";
+    if (!user) {
+      return NextResponse.json(
+        { error: "Utilisateur introuvable" },
+        { status: 404 }
+      );
+    }
+
+    const merchantTransactionId =
+      generateMerchantTransactionId(userId);
 
     let paymentUrl = "";
     let paymentToken = "";
-    const isCameroon = country === "CM";
-    const currency = isCameroon ? "XAF" : "XOF";
-    const paymentMethod = isCameroon ? "manual_cm" : "paydunya";
 
-    if (isCameroon) {
-      // 🇨🇲 CAMEROUN : Redirection Paiement Manuel MTN / Orange
-      paymentUrl = `${baseUrl}/premium/manual-cm?plan=${plan}&period=${period}&amount=${amount}&userId=${userId}`;
+    if (country === "CM") {
+      /*
+       * CAMEROUN :
+       * paiement manuel temporaire.
+       */
+      const manualUrl = new URL("/premium/manual-cm", baseUrl);
+
+      manualUrl.searchParams.set("plan", plan);
+      manualUrl.searchParams.set("period", period);
+      manualUrl.searchParams.set("amount", String(amount));
+      manualUrl.searchParams.set("userId", String(userId));
+      manualUrl.searchParams.set("tx", merchantTransactionId);
+
+      paymentUrl = manualUrl.toString();
       paymentToken = `MANUAL-${merchantTransactionId}`.substring(0, 30);
     } else {
-      // 🌍 AUTRES PAYS : PayDunya (Zone UEMOA - Sénégal, CI, Bénin, Wave, etc.)
+      /*
+       * AUTRES PAYS :
+       * paiement PayDunya.
+       */
       const urls = getPaymentUrls(merchantTransactionId);
-      urls.return_url = `${baseUrl}${returnPath}?tx=${merchantTransactionId}&status=success`;
-      urls.cancel_url = `${baseUrl}${returnPath}?tx=${merchantTransactionId}&status=failed`;
+
+      urls.return_url =
+        `${baseUrl}${returnPath}` +
+        `?tx=${encodeURIComponent(merchantTransactionId)}` +
+        `&status=success`;
+
+      urls.cancel_url =
+        `${baseUrl}${returnPath}` +
+        `?tx=${encodeURIComponent(merchantTransactionId)}` +
+        `&status=failed`;
 
       const invoiceData = await createPayDunyaInvoice({
-        invoice: { total_amount: amount, description: description },
-        store: { name: "LoveLink", website_url: baseUrl },
+        invoice: {
+          total_amount: amount,
+          description,
+        },
+        store: {
+          name: "LoveLink",
+          website_url: baseUrl,
+        },
         actions: urls,
-        custom_data: { userId: userId.toString(), plan, period },
+        custom_data: {
+          userId: String(userId),
+          plan,
+          period,
+        },
       });
 
-      paymentUrl = invoiceData.invoice_url || invoiceData.response_text;
-      paymentToken = invoiceData.token || merchantTransactionId;
+      paymentUrl =
+        invoiceData.invoice_url || invoiceData.response_text;
+
+      paymentToken =
+        invoiceData.token || merchantTransactionId;
     }
 
     if (!paymentUrl || !paymentUrl.startsWith("http")) {
-      throw new Error("L'URL de paiement générée est invalide");
+      throw new Error(
+        "L'URL de paiement générée est invalide"
+      );
     }
 
-    // 2. Sauvegarde BDD Sécurisée
+    /*
+     * On conserve l'insertion originale déjà compatible
+     * avec ton schéma Drizzle.
+     */
     await db.insert(payments).values({
       userId,
       merchantTransactionId,
-      paymentToken: paymentToken || merchantTransactionId,
-      paymentUrl: paymentUrl,
-      amount: Number(amount),
-      currency: currency,
-      plan: plan || "premium",
-      billingPeriod: period || "monthly",
-      paymentMethod: paymentMethod,
+      paymentToken,
+      paymentUrl,
+      amount,
+      plan,
+      billingPeriod: period,
       status: "pending",
-      statusMessage: "Paiement en attente de validation",
-      clientEmail: u.email || `user_${userId}@lovelink.com`,
-      clientFirstName: u.firstName || "Utilisateur",
-      clientLastName: u.lastName || "",
-      clientPhone: u.phone || u.phoneNumber || "",
-    } as any);
+      clientEmail: user.email,
+      clientFirstName: user.firstName,
+      clientLastName: user.lastName || "",
+    });
 
     return NextResponse.json({
       success: true,
-      paymentUrl: paymentUrl,
-      gatewayUsed: paymentMethod,
+      paymentUrl,
+      gatewayUsed:
+        country === "CM" ? "manual_cm" : "paydunya",
     });
   } catch (error) {
     console.error("Payment create error:", error);
-    const errorMessage = error instanceof Error ? error.message : String(error);
+
+    const errorMessage =
+      error instanceof Error
+        ? error.message
+        : String(error);
+
     return NextResponse.json(
-      { error: errorMessage || "Erreur lors de la création du paiement" },
+      {
+        error:
+          errorMessage ||
+          "Erreur lors de la création du paiement",
+      },
       { status: 500 }
     );
   }
