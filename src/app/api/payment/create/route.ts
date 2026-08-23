@@ -19,10 +19,10 @@ export async function POST(req: NextRequest) {
     if (!userId) return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
 
     const body = await req.json();
-    const { plan, period, gateway = "auto", returnPath = "/discover" } = body as {
+    const { plan, period, country = "CM", returnPath = "/discover" } = body as {
       plan: PremiumPlan;
       period: BillingPeriod;
-      gateway?: "notchpay" | "paydunya" | "manual_cm" | "auto";
+      country?: "CM" | "OTHER";
       returnPath?: string;
     };
 
@@ -34,32 +34,21 @@ export async function POST(req: NextRequest) {
     if (!user) return NextResponse.json({ error: "Utilisateur introuvable" }, { status: 404 });
 
     const u = user as any;
-
-    // 2. Détection du Pays : Par défaut, c'est le CAMEROUN 🇨🇲
-    const userCountry = (u.country || "").toUpperCase();
-    const uemoaCountries = ["SN", "CI", "BJ", "BF", "ML", "TG"]; // Pays PayDunya
-    
-    // Si l'utilisateur est explicitement dans un pays UEMOA (ex: Sénégal, CI), on utilise PayDunya.
-    // Sinon (Cameroun, ou pays non défini) -> On utilise la passerelle Cameroun !
-    const isUemoa = uemoaCountries.includes(userCountry);
-    const useNotchPayOrManual = !isUemoa || gateway === "notchpay" || gateway === "manual_cm";
-
     const merchantTransactionId = generateMerchantTransactionId(userId);
     const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://lovelink237.com";
 
     let paymentUrl = "";
     let paymentToken = "";
-    let currency = "XAF";
-    let paymentMethod = "manual_cm";
+    const isCameroon = country === "CM";
+    const currency = isCameroon ? "XAF" : "XOF";
+    const paymentMethod = isCameroon ? "manual_cm" : "paydunya";
 
-    if (useNotchPayOrManual) {
-      // 🇨🇲 CAMEROUN : Mode Manuel MTN / Orange
+    if (isCameroon) {
+      // 🇨🇲 CAMEROUN : Redirection Paiement Manuel MTN / Orange
       paymentUrl = `${baseUrl}/premium/manual-cm?plan=${plan}&period=${period}&amount=${amount}&userId=${userId}`;
       paymentToken = `MANUAL-${merchantTransactionId}`.substring(0, 30);
-      currency = "XAF";
-      paymentMethod = "manual_cm";
     } else {
-      // 🌍 PAYS UEMOA (Sénégal, Côte d'Ivoire, etc.) : PayDunya
+      // 🌍 AUTRES PAYS : PayDunya (Zone UEMOA - Sénégal, CI, Bénin, Wave, etc.)
       const urls = getPaymentUrls(merchantTransactionId);
       urls.return_url = `${baseUrl}${returnPath}?tx=${merchantTransactionId}&status=success`;
       urls.cancel_url = `${baseUrl}${returnPath}?tx=${merchantTransactionId}&status=failed`;
@@ -73,15 +62,13 @@ export async function POST(req: NextRequest) {
 
       paymentUrl = invoiceData.invoice_url || invoiceData.response_text;
       paymentToken = invoiceData.token || merchantTransactionId;
-      currency = "XOF";
-      paymentMethod = "paydunya";
     }
 
     if (!paymentUrl || !paymentUrl.startsWith("http")) {
       throw new Error("L'URL de paiement générée est invalide");
     }
 
-    // 3. Sauvegarde BDD Sécurisée (Tous les champs sont fournis pour éviter l'erreur SQL)
+    // 2. Sauvegarde BDD Sécurisée
     await db.insert(payments).values({
       userId,
       merchantTransactionId,
