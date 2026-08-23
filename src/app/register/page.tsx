@@ -199,7 +199,6 @@ function RegisterPageContent() {
   };
 
   const prevStep = () => {
-    // Ne pas revenir sur le genre une fois verrouillé
     if (step === 5 && genderLocked) {
       setStep(3);
     } else {
@@ -215,8 +214,8 @@ function RegisterPageContent() {
       setError("Fichier image uniquement");
       return;
     }
-    if (file.size > 8 * 1024 * 1024) {
-      setError("Photo trop lourde (max 8 Mo)");
+    if (file.size > 10 * 1024 * 1024) {
+      setError("Photo trop lourde (max 10 Mo)");
       return;
     }
     setPhotoFile(file);
@@ -230,6 +229,37 @@ function RegisterPageContent() {
     setError("");
 
     try {
+      // 1. Upload binaire de la photo sur Cloudinary
+      let uploadedPhotoUrl = "";
+      if (photoFile) {
+        try {
+          const uploadRes = await fetch("/api/upload", {
+            method: "POST",
+            headers: {
+              "Content-Type": photoFile.type || "image/jpeg",
+            },
+            body: photoFile, // Envoi binaire directement
+          });
+
+          if (uploadRes.ok) {
+            const uploadData = await uploadRes.json();
+            uploadedPhotoUrl = uploadData.url || uploadData.display_url || "";
+          } else {
+            const errData = await uploadRes.json().catch(() => null);
+            setError(
+              errData?.error || "Erreur d'envoi de la photo. Réessaie."
+            );
+            setLoading(false);
+            return;
+          }
+        } catch {
+          setError("Impossible d'envoyer la photo. Vérifie ta connexion.");
+          setLoading(false);
+          return;
+        }
+      }
+
+      // 2. Création du compte avec la photoUrl enregistrée direct en DB
       const res = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -246,6 +276,7 @@ function RegisterPageContent() {
           occupation: form.occupation,
           maritalStatus: form.maritalStatus,
           discoverySource: form.discoverySource,
+          photoUrl: uploadedPhotoUrl,
           referralCode: activeReferralCode,
         }),
       });
@@ -255,18 +286,6 @@ function RegisterPageContent() {
         setError(data.error || "Erreur lors de l'inscription");
         setLoading(false);
         return;
-      }
-
-      // Upload photo après création du compte (cookie auth OK)
-      if (photoFile) {
-        try {
-          const fd = new FormData();
-          fd.append("file", photoFile);
-          fd.append("type", "profile");
-          await fetch("/api/upload", { method: "POST", body: fd });
-        } catch (err) {
-          console.error("Upload photo après register:", err);
-        }
       }
 
       if (typeof window !== "undefined" && typeof window.fbq === "function") {
@@ -346,7 +365,7 @@ function RegisterPageContent() {
               </div>
             )}
 
-            {/* ========== STEP 1 : Prénom ========== */}
+            {/* STEP 1 : Prénom */}
             {step === 1 && (
               <div className="space-y-5 animate-fade-in">
                 <div className="text-center mb-2">
@@ -388,7 +407,7 @@ function RegisterPageContent() {
               </div>
             )}
 
-            {/* ========== STEP 2 : Email / MDP ========== */}
+            {/* STEP 2 : Email / MDP */}
             {step === 2 && (
               <div className="space-y-5 animate-fade-in">
                 <div className="text-center mb-2">
@@ -449,7 +468,7 @@ function RegisterPageContent() {
               </div>
             )}
 
-            {/* ========== STEP 3 : Âge ========== */}
+            {/* STEP 3 : Date de naissance */}
             {step === 3 && (
               <div className="space-y-5 animate-fade-in">
                 <div className="text-center mb-2">
@@ -481,7 +500,7 @@ function RegisterPageContent() {
               </div>
             )}
 
-            {/* ========== STEP 4 : Genre IRRÉVERSIBLE ========== */}
+            {/* STEP 4 : Genre IRRÉVERSIBLE */}
             {step === 4 && (
               <div className="space-y-5 animate-fade-in">
                 <div className="text-center mb-2">
@@ -544,7 +563,7 @@ function RegisterPageContent() {
               </div>
             )}
 
-            {/* ========== STEP 5 : Looking for ========== */}
+            {/* STEP 5 : Recherche */}
             {step === 5 && (
               <div className="space-y-5 animate-fade-in">
                 <div className="text-center mb-2">
@@ -581,7 +600,7 @@ function RegisterPageContent() {
               </div>
             )}
 
-            {/* ========== STEP 6 : Ville + Job ========== */}
+            {/* STEP 6 : Ville + Job */}
             {step === 6 && (
               <div className="space-y-5 animate-fade-in">
                 <div className="text-center mb-2">
@@ -632,7 +651,7 @@ function RegisterPageContent() {
               </div>
             )}
 
-            {/* ========== STEP 7 : Situation + Source ========== */}
+            {/* STEP 7 : Situation + Source */}
             {step === 7 && (
               <div className="space-y-6 animate-fade-in">
                 <div className="text-center">
@@ -686,7 +705,7 @@ function RegisterPageContent() {
               </div>
             )}
 
-            {/* ========== STEP 8 : Photo + CGU ========== */}
+            {/* STEP 8 : Photo + CGU (CORRIGÉ SANS CAPTURE="USER") */}
             {step === 8 && (
               <div className="space-y-5 animate-fade-in">
                 <div className="text-center mb-2">
@@ -720,16 +739,16 @@ function RegisterPageContent() {
                         Appuie pour choisir une photo
                       </span>
                       <span className="text-xs text-slate-500 mt-1">
-                        JPG, PNG — max 8 Mo
+                        Galerie ou Appareil photo (max 10 Mo)
                       </span>
                     </>
                   )}
                 </button>
+                {/* ✅ SANS capture="user" = laisse le choix Galerie / Caméra */}
                 <input
                   ref={fileInputRef}
                   type="file"
                   accept="image/*"
-                  capture="user"
                   className="hidden"
                   onChange={handlePhoto}
                 />
@@ -749,9 +768,9 @@ function RegisterPageContent() {
                     id="acceptAge"
                     checked={acceptAge}
                     onChange={(e) => setAcceptAge(e.target.checked)}
-                    className="mt-1 w-5 h-5 accent-rose-500"
+                    className="mt-1 w-5 h-5 accent-rose-500 cursor-pointer"
                   />
-                  <label htmlFor="acceptAge" className="text-sm text-slate-700">
+                  <label htmlFor="acceptAge" className="text-sm text-slate-700 cursor-pointer">
                     Je certifie avoir <strong>au moins 18 ans</strong>
                   </label>
                 </div>
@@ -761,9 +780,9 @@ function RegisterPageContent() {
                     id="acceptCGU"
                     checked={acceptCGU}
                     onChange={(e) => setAcceptCGU(e.target.checked)}
-                    className="mt-1 w-5 h-5 accent-purple-500"
+                    className="mt-1 w-5 h-5 accent-purple-500 cursor-pointer"
                   />
-                  <label htmlFor="acceptCGU" className="text-sm text-slate-700">
+                  <label htmlFor="acceptCGU" className="text-sm text-slate-700 cursor-pointer">
                     J&apos;accepte les{" "}
                     <Link href="/cgu" target="_blank" className="text-rose-500 underline font-bold">
                       CGU
@@ -810,7 +829,7 @@ function RegisterPageContent() {
                   className="flex-1 flex items-center justify-center gap-2 px-6 py-3.5 bg-gradient-to-r from-rose-500 to-purple-600 text-white rounded-2xl font-black shadow-lg disabled:opacity-50"
                 >
                   {loading ? (
-                    "Création..."
+                    "Création du compte..."
                   ) : (
                     <>
                       Terminer
