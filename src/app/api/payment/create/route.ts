@@ -26,22 +26,36 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const body = (await req.json()) as {
-      plan: PremiumPlan;
-      period: BillingPeriod;
-      country?: PaymentCountry;
-      returnPath?: string;
-    };
+    const body = await req.json();
 
-    const { plan, period, country } = body;
-
-    if (!plan || !period) {
-      return NextResponse.json(
-        { error: "Plan ou durée manquant" },
-        { status: 400 }
-      );
+    // 1. Normalisation intelligente du PLAN (premium, gold, boost)
+    let plan: PremiumPlan = "premium";
+    const rawPlan = String(body.plan || body.planType || body.type || "premium").toLowerCase();
+    if (rawPlan.includes("gold")) {
+      plan = "gold";
+    } else if (rawPlan.includes("boost")) {
+      plan = "boost";
+    } else {
+      plan = "premium";
     }
 
+    // 2. Normalisation intelligente de la DURÉE / PERIODE
+    let period: BillingPeriod = "monthly";
+    const rawPeriod = String(body.period || body.duration || body.billingPeriod || body.periodLabel || "monthly").toLowerCase();
+
+    if (rawPeriod.includes("an") || rawPeriod.includes("year") || rawPeriod === "1y" || rawPeriod === "yearly") {
+      period = "yearly";
+    } else if (rawPeriod.includes("24") || rawPeriod.includes("1j")) {
+      period = "24h";
+    } else if (rawPeriod.includes("3d") || rawPeriod.includes("3j") || rawPeriod.includes("3")) {
+      period = "3d";
+    } else if (rawPeriod.includes("7d") || rawPeriod.includes("7j") || rawPeriod.includes("7")) {
+      period = "7d";
+    } else {
+      period = "monthly"; // Par défaut 1 mois
+    }
+
+    const country: PaymentCountry | undefined = body.country;
     const defaultReturnPath = plan === "boost" ? "/discover" : "/premium";
 
     const returnPath =
@@ -55,8 +69,8 @@ export async function POST(req: NextRequest) {
       process.env.NEXT_PUBLIC_SITE_URL || "https://lovelink237.com";
 
     /*
-     * Aucun pays n'a encore été sélectionné :
-     * on renvoie vers la page intermédiaire.
+     * Si aucun pays n'a encore été sélectionné :
+     * Redirection vers la page de choix du pays.
      */
     if (country !== "CM" && country !== "OTHER") {
       const choiceUrl = new URL(
@@ -91,16 +105,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const merchantTransactionId =
-      generateMerchantTransactionId(userId);
+    const merchantTransactionId = generateMerchantTransactionId(userId);
 
     let paymentUrl = "";
     let paymentToken = "";
 
     if (country === "CM") {
       /*
-       * CAMEROUN :
-       * paiement manuel temporaire.
+       * 🇨🇲 CAMEROUN : Paiement direct MTN / Orange Manuel
        */
       const manualUrl = new URL("/premium/manual-cm", baseUrl);
 
@@ -114,8 +126,7 @@ export async function POST(req: NextRequest) {
       paymentToken = `MANUAL-${merchantTransactionId}`.substring(0, 30);
     } else {
       /*
-       * AUTRES PAYS :
-       * paiement PayDunya.
+       * 🌍 AUTRES PAYS : PayDunya (Wave, OM, Carte)
        */
       const urls = getPaymentUrls(merchantTransactionId);
 
@@ -146,23 +157,14 @@ export async function POST(req: NextRequest) {
         },
       });
 
-      paymentUrl =
-        invoiceData.invoice_url || invoiceData.response_text;
-
-      paymentToken =
-        invoiceData.token || merchantTransactionId;
+      paymentUrl = invoiceData.invoice_url || invoiceData.response_text;
+      paymentToken = invoiceData.token || merchantTransactionId;
     }
 
     if (!paymentUrl || !paymentUrl.startsWith("http")) {
-      throw new Error(
-        "L'URL de paiement générée est invalide"
-      );
+      throw new Error("L'URL de paiement générée est invalide");
     }
 
-    /*
-     * On conserve l'insertion originale déjà compatible
-     * avec ton schéma Drizzle.
-     */
     await db.insert(payments).values({
       userId,
       merchantTransactionId,
@@ -175,27 +177,22 @@ export async function POST(req: NextRequest) {
       clientEmail: user.email,
       clientFirstName: user.firstName,
       clientLastName: user.lastName || "",
-    });
+    } as any);
 
     return NextResponse.json({
       success: true,
       paymentUrl,
-      gatewayUsed:
-        country === "CM" ? "manual_cm" : "paydunya",
+      gatewayUsed: country === "CM" ? "manual_cm" : "paydunya",
     });
   } catch (error) {
     console.error("Payment create error:", error);
 
     const errorMessage =
-      error instanceof Error
-        ? error.message
-        : String(error);
+      error instanceof Error ? error.message : String(error);
 
     return NextResponse.json(
       {
-        error:
-          errorMessage ||
-          "Erreur lors de la création du paiement",
+        error: errorMessage || "Erreur lors de la création du paiement",
       },
       { status: 500 }
     );
