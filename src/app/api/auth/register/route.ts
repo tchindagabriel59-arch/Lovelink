@@ -256,3 +256,46 @@ export async function POST(req: NextRequest) {
     );
   }
 }
+// 1. Extraire photoUrl dans le req.json()
+const {
+  email,
+  password,
+  firstName,
+  lastName,
+  birthDate,
+  gender,
+  lookingFor,
+  city,
+  country,
+  occupation,
+  maritalStatus,
+  discoverySource,
+  photoUrl, // <--- AJOUTER
+  eventId: clientEventId,
+  referralCode: providedReferralCode,
+} = body;
+
+// 2. Insérer photoUrl dans db.insert(users)
+const [newUser] = await db
+  .insert(users)
+  .values({
+    email: email.toLowerCase().trim(),
+    passwordHash,
+    firstName: firstName.trim(),
+    lastName: (lastName || "").trim(),
+    birthDate,
+    gender,
+    lookingFor: safeLookingFor,
+    city: city?.trim() || "",
+    country: country?.trim() || "",
+    occupation: occupation?.trim() || "",
+    maritalStatus: maritalStatus?.trim() || "",
+    discoverySource: discoverySource?.trim() || "",
+    photoUrl: photoUrl || "", // <--- AJOUTER
+    prefGender: defaultPrefGender,
+    prefAgeMin: 18,
+    prefAgeMax: 99,
+    referralCode: newReferralCode,
+    referredBy: referrer?.id || null,
+  })
+  .returning();
