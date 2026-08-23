@@ -32,6 +32,7 @@ import {
   EyeOff,
   Gift,
   Info,
+  Bell,
 } from "lucide-react";
 
 interface UserData {
@@ -89,13 +90,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     unreadMessages: 0,
   });
 
-  // ✅ NOUVEAU : Compteurs "vus" pour badges intelligents (localStorage)
+  // Compteurs "vus" pour badges intelligents (localStorage)
   const [seenMatchesCount, setSeenMatchesCount] = useState<number>(0);
   const [seenLikesCount, setSeenLikesCount] = useState<number>(0);
 
   const hasFetchedRef = useRef(false);
 
-  // ✅ Charger les valeurs "vues" depuis localStorage au démarrage
+  // Charger les valeurs "vues" depuis localStorage au démarrage
   useEffect(() => {
     if (typeof window !== "undefined") {
       const savedMatches = localStorage.getItem("seenMatchesCount");
@@ -158,7 +159,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     if (user) fetchCounts();
   }, [pathname, user, fetchCounts]);
 
-  // ✅ NOUVEAU : Marquer les matchs comme "vus" quand on ouvre la page
+  // Marquer les matchs comme "vus" quand on ouvre la page
   useEffect(() => {
     if (pathname === "/matches" && counts.matches > 0) {
       setSeenMatchesCount(counts.matches);
@@ -168,7 +169,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     }
   }, [pathname, counts.matches]);
 
-  // ✅ NOUVEAU : Marquer les likes comme "vus" quand on ouvre la page
+  // Marquer les likes comme "vus" quand on ouvre la page
   useEffect(() => {
     if (pathname === "/likes-recus" && counts.likesReceived > 0) {
       setSeenLikesCount(counts.likesReceived);
@@ -197,7 +198,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     router.push("/");
   };
 
-  // ✅ Calcul des badges intelligents (NOUVEAUX matchs/likes non vus)
+  // Calcul des badges intelligents (NOUVEAUX matchs/likes non vus)
   const newMatchesBadge = Math.max(0, counts.matches - seenMatchesCount);
   const newLikesBadge = Math.max(0, counts.likesReceived - seenLikesCount);
 
@@ -218,20 +219,26 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       href: "/likes-recus",
       label: "Qui m'a liké",
       icon: <Star className="w-5 h-5" />,
-      badge: newLikesBadge, // ✅ Badge INTELLIGENT (nouveaux likes uniquement)
+      badge: newLikesBadge,
     },
     {
       href: "/matches",
       label: "Matchs",
       icon: <Heart className="w-5 h-5" />,
-      badge: newMatchesBadge, // ✅ Badge INTELLIGENT (nouveaux matchs uniquement)
+      badge: newMatchesBadge,
     },
     {
       href: "/messages",
       label: "Messages",
       icon: <MessageCircle className="w-5 h-5" />,
-      badge: counts.unreadMessages, // Reste basé sur non lus (déjà bien géré côté BDD)
+      badge: counts.unreadMessages,
       alert: true,
+    },
+    {
+      href: "/notifications",
+      label: "Notifications",
+      icon: <Bell className="w-5 h-5" />,
+      badge: 0,
     },
     {
       href: "/profile",
@@ -265,6 +272,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     },
   ];
 
+  // Bottom nav mobile : Accueil, Découvrir, Likes, Matchs, Messages
   const mobileNavItems = navItems.slice(0, 5);
 
   if (loading) {
@@ -289,7 +297,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       }}
     >
       <div className="min-h-screen bg-slate-50 flex">
-
         {/* ========== SIDEBAR DESKTOP ========== */}
         <aside className="hidden lg:flex w-72 bg-white border-r border-slate-100 flex-col fixed inset-y-0 left-0 z-30">
           <div className="p-6 flex items-center justify-between">
@@ -297,7 +304,18 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               <Heart className="w-8 h-8 text-rose-500 fill-rose-500" />
               <span className="text-2xl font-bold gradient-text">LoveLink</span>
             </Link>
-            <Notifications />
+
+            {/* Cloche dropdown existante + accès page complète */}
+            <div className="flex items-center gap-1">
+              <Notifications />
+              <Link
+                href="/notifications"
+                className="p-2 rounded-full text-slate-500 hover:bg-rose-50 hover:text-rose-500 transition"
+                title="Toutes les notifications"
+              >
+                <Bell className="w-5 h-5" />
+              </Link>
+            </div>
           </div>
 
           <nav className="flex-1 px-4 space-y-1 overflow-y-auto">
@@ -426,13 +444,33 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 </span>
               )}
             </Link>
-            <div className="flex items-center gap-2">
+
+            <div className="flex items-center gap-1">
+              {/* Dropdown rapide (composant existant) */}
               <Notifications />
+
+              {/* Page complète style Farata */}
+              <Link
+                href="/notifications"
+                className={`p-2 rounded-full transition ${
+                  pathname === "/notifications"
+                    ? "text-rose-500 bg-rose-50"
+                    : "text-slate-600 hover:bg-rose-50 hover:text-rose-500"
+                }`}
+                title="Notifications"
+              >
+                <Bell className="w-5 h-5" />
+              </Link>
+
               <button
                 onClick={() => setMenuOpen(!menuOpen)}
                 className="p-2 text-slate-600"
               >
-                {menuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+                {menuOpen ? (
+                  <X className="w-6 h-6" />
+                ) : (
+                  <Menu className="w-6 h-6" />
+                )}
               </button>
             </div>
           </div>
@@ -516,7 +554,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           )}
         </div>
 
-        {/* ========== MOBILE BOTTOM NAV avec BADGES ========== */}
+        {/* ========== MOBILE BOTTOM NAV ========== */}
         <div className="lg:hidden fixed bottom-0 left-0 right-0 z-30 bg-white border-t border-slate-100">
           <div className="flex items-center justify-around py-2">
             {mobileNavItems.map((item) => (
@@ -566,7 +604,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <div className="bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-600 text-white text-center py-1.5 px-4 text-xs font-black tracking-wider flex items-center justify-center gap-2 shadow-md">
               <EyeOff className="w-3.5 h-3.5" />
               MODE INCOGNITO ACTIVÉ • TU ES INVISIBLE DANS DISCOVER
-              <Link href="/preferences" className="ml-2 underline hover:no-underline">
+              <Link
+                href="/preferences"
+                className="ml-2 underline hover:no-underline"
+              >
                 Gérer
               </Link>
             </div>
