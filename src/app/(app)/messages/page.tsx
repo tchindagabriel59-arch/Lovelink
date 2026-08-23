@@ -19,6 +19,9 @@ import {
   Search,
   Mic,
   Sparkles,
+  Play,
+  Pause,
+  Trash2,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -71,10 +74,76 @@ const gradients = [
   "from-blue-400 to-cyan-500",
   "from-amber-400 to-orange-500",
   "from-emerald-400 to-teal-500",
-  "from-fuchsia-400 to-pink-500",
 ];
 
 const quickEmojis = ["❤️", "😂", "🔥", "👍", "🥰", "😍", "😘", "🎉"];
+
+// 🎵 LECTEUR AUDIO POUR LES MESSAGES VOCAUX
+function AudioPlayer({ audioUrl, isMine }: { audioUrl: string; isMine: boolean }) {
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [duration, setDuration] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    const audio = new Audio(audioUrl);
+    audioRef.current = audio;
+
+    audio.onloadedmetadata = () => setDuration(audio.duration || 0);
+    audio.ontimeupdate = () => setCurrentTime(audio.currentTime || 0);
+    audio.onended = () => setIsPlaying(false);
+
+    return () => {
+      audio.pause();
+    };
+  }, [audioUrl]);
+
+  const togglePlay = () => {
+    if (!audioRef.current) return;
+    if (isPlaying) {
+      audioRef.current.pause();
+      setIsPlaying(false);
+    } else {
+      audioRef.current.play();
+      setIsPlaying(true);
+    }
+  };
+
+  const formatAudioTime = (secs: number) => {
+    if (isNaN(secs)) return "0:00";
+    const m = Math.floor(secs / 60);
+    const s = Math.floor(secs % 60);
+    return `${m}:${s < 10 ? "0" : ""}${s}`;
+  };
+
+  return (
+    <div className={`flex items-center gap-3 py-1 px-1 min-w-[200px] ${isMine ? "text-white" : "text-slate-800"}`}>
+      <button
+        type="button"
+        onClick={togglePlay}
+        className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 shadow-sm transition ${
+          isMine
+            ? "bg-white text-rose-500 hover:bg-slate-100"
+            : "bg-gradient-to-r from-rose-500 to-purple-600 text-white"
+        }`}
+      >
+        {isPlaying ? <Pause size={18} /> : <Play size={18} className="ml-0.5" />}
+      </button>
+      <div className="flex-1">
+        <div className={`h-1.5 rounded-full overflow-hidden mb-1 ${isMine ? "bg-white/30" : "bg-slate-200"}`}>
+          <div
+            className={`h-full transition-all duration-100 ${isMine ? "bg-white" : "bg-rose-500"}`}
+            style={{ width: `${duration ? (currentTime / duration) * 100 : 0}%` }}
+          />
+        </div>
+        <div className={`flex justify-between text-[10px] font-semibold ${isMine ? "text-white/80" : "text-slate-400"}`}>
+          <span>{formatAudioTime(currentTime)}</span>
+          <span>{formatAudioTime(duration)}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function MatchesListSkeleton() {
   return (
@@ -100,12 +169,6 @@ function ChatSkeleton() {
       </div>
       <div className="flex justify-end mt-3">
         <div className="h-10 w-40 bg-rose-100 rounded-2xl rounded-br-md" />
-      </div>
-      <div className="flex justify-end mt-0.5">
-        <div className="h-10 w-56 bg-rose-100 rounded-2xl rounded-tr-md" />
-      </div>
-      <div className="flex justify-start mt-3">
-        <div className="h-10 w-52 bg-white rounded-2xl rounded-bl-md shadow-sm" />
       </div>
     </div>
   );
@@ -163,6 +226,15 @@ function MessagesContent() {
   const [showEmojis, setShowEmojis] = useState(false);
   const [filterTab, setFilterTab] = useState<FilterTab>("all");
   const [searchQuery, setSearchQuery] = useState("");
+
+  // 🎙️ ÉTATS ENREGISTREMENT VOCAL
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingTime, setRecordingTime] = useState(0);
+  const [sendingAudio, setSendingAudio] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -247,18 +319,6 @@ function MessagesContent() {
             setChatMessages(newMessages);
             lastMessageIdRef.current = lastNewMessageId;
             shouldScrollRef.current = true;
-
-            setOtherUser((prev) => {
-              const newOther = data.otherUser;
-              if (!newOther) return prev;
-              if (
-                prev?.isOnline !== newOther.isOnline ||
-                prev?.lastSeen !== newOther.lastSeen
-              ) {
-                return newOther;
-              }
-              return prev;
-            });
           }
         }
       } catch {
@@ -278,67 +338,105 @@ function MessagesContent() {
   }, [selectedMatch, fetchMessages]);
 
   useEffect(() => {
-    if (!selectedMatch || !otherUser) return;
-    fetch("/api/notifications/clear-messages", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ fromUserId: otherUser.id }),
-    }).catch(() => {});
-  }, [selectedMatch, otherUser]);
-
-  useEffect(() => {
     if (shouldScrollRef.current && chatMessages.length > 0) {
       scrollToBottom();
       shouldScrollRef.current = false;
     }
   }, [chatMessages, scrollToBottom]);
 
-  useEffect(() => {
-    if (!selectedMatch) return;
-    const interval = setInterval(() => {
-      if (!isTypingRef.current) {
-        fetchMessages(selectedMatch, false);
-      }
-    }, 10000);
-    return () => clearInterval(interval);
-  }, [selectedMatch, fetchMessages]);
-
-  useEffect(() => {
-    if (!selectedMatch) {
-      setOtherIsTyping(false);
+  // 🎙️ DÉMARRER ENREGISTREMENT VOCAL
+  const startRecording = async () => {
+    if (!user?.isPremium) {
+      alert("🎙️ Les messages vocaux sont réservés aux membres Premium ! Passe Premium pour faire entendre ta voix.");
       return;
     }
 
-    const checkTyping = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.start(100);
+      setIsRecording(true);
+      setRecordingTime(0);
+
+      timerRef.current = setInterval(() => {
+        setRecordingTime((prev) => prev + 1);
+      }, 1000);
+    } catch {
+      alert("Permission micro refusée ou non supportée sur ton appareil.");
+    }
+  };
+
+  // 🎙️ ENVOYER LE VOCAL
+  const stopAndSendRecording = async () => {
+    if (!mediaRecorderRef.current || !selectedMatch) return;
+
+    setSendingAudio(true);
+    const recorder = mediaRecorderRef.current;
+
+    recorder.onstop = async () => {
+      const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+      recorder.stream.getTracks().forEach((track) => track.stop());
+
       try {
-        const res = await fetch(`/api/messages/typing?matchId=${selectedMatch}`);
+        const fileName = `vocal_${Date.now()}.webm`;
+        const uploadRes = await fetch(`/api/upload?filename=${encodeURIComponent(fileName)}`, {
+          method: "POST",
+          body: audioBlob,
+        });
+
+        if (!uploadRes.ok) throw new Error("Erreur upload vocal");
+        const blobData = await uploadRes.json();
+        const audioUrl = blobData.url;
+
+        const res = await fetch(`/api/messages/${selectedMatch}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content: `[AUDIO]${audioUrl}` }),
+        });
+
         if (res.ok) {
           const data = await res.json();
-          setOtherIsTyping(data.isTyping || false);
+          setChatMessages((prev) => [...prev, data.message]);
+          lastMessageIdRef.current = data.message.id;
+          shouldScrollRef.current = true;
+          fetchMatchesList();
         }
-      } catch {}
+      } catch {
+        alert("Erreur lors de l'envoi du vocal.");
+      } finally {
+        setIsRecording(false);
+        setSendingAudio(false);
+        if (timerRef.current) clearInterval(timerRef.current);
+      }
     };
 
-    checkTyping();
-    const interval = setInterval(checkTyping, 3000);
-    return () => clearInterval(interval);
-  }, [selectedMatch]);
+    recorder.stop();
+  };
 
-  useEffect(() => {
-    setOtherIsTyping(false);
-  }, [selectedMatch]);
+  // 🎙️ ANNULER LE VOCAL
+  const cancelRecording = () => {
+    if (mediaRecorderRef.current) {
+      mediaRecorderRef.current.stream.getTracks().forEach((track) => track.stop());
+      mediaRecorderRef.current.stop();
+    }
+    if (timerRef.current) clearInterval(timerRef.current);
+    setIsRecording(false);
+    setRecordingTime(0);
+    audioChunksRef.current = [];
+  };
 
   async function handleSend(e: React.FormEvent) {
     e.preventDefault();
     if (!newMessage.trim() || !selectedMatch || sending) return;
-
-    if (selectedMatch) {
-      fetch("/api/messages/typing", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ matchId: selectedMatch, isTyping: false }),
-      }).catch(() => {});
-    }
 
     const messageToSend = newMessage;
     setNewMessage("");
@@ -430,33 +528,6 @@ function MessagesContent() {
     }
   }
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setNewMessage(e.target.value);
-    isTypingRef.current = true;
-
-    const now = Date.now();
-    if (selectedMatch && now - lastTypingSentRef.current > 2000) {
-      lastTypingSentRef.current = now;
-      fetch("/api/messages/typing", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ matchId: selectedMatch, isTyping: true }),
-      }).catch(() => {});
-    }
-
-    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-    typingTimeoutRef.current = setTimeout(() => {
-      isTypingRef.current = false;
-      if (selectedMatch) {
-        fetch("/api/messages/typing", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ matchId: selectedMatch, isTyping: false }),
-        }).catch(() => {});
-      }
-    }, 2000);
-  };
-
   function formatMessageTime(dateStr: string) {
     return new Date(dateStr).toLocaleTimeString("fr-FR", {
       hour: "2-digit",
@@ -471,15 +542,14 @@ function MessagesContent() {
     if (mins < 60) return `${mins}min`;
     const hours = Math.floor(mins / 60);
     if (hours < 24) return `${hours}h`;
-    const days = Math.floor(hours / 24);
-    if (days < 7) return `${days}j`;
     return new Date(dateStr).toLocaleDateString("fr-FR", {
       day: "numeric",
       month: "short",
     });
   }
 
-  const renderMessageContent = (content: string) => {
+  // 💬 RENDU DES MESSAGES (Texte, Image ou Vocal)
+  const renderMessageContent = (content: string, isMine: boolean) => {
     if (content.startsWith("[IMAGE]")) {
       const imageUrl = content.replace("[IMAGE]", "");
       return (
@@ -487,16 +557,16 @@ function MessagesContent() {
           className="relative w-48 h-48 rounded-xl overflow-hidden cursor-pointer"
           onClick={() => window.open(imageUrl, "_blank")}
         >
-          <Image
-            src={imageUrl}
-            alt="Photo envoyée"
-            fill
-            className="object-cover"
-            sizes="192px"
-          />
+          <Image src={imageUrl} alt="Photo" fill className="object-cover" sizes="192px" />
         </div>
       );
     }
+
+    if (content.startsWith("[AUDIO]")) {
+      const audioUrl = content.replace("[AUDIO]", "");
+      return <AudioPlayer audioUrl={audioUrl} isMine={isMine} />;
+    }
+
     const isEmojiOnly = /^\p{Emoji}+$/u.test(content) && content.length <= 4;
     return (
       <p className={`leading-relaxed ${isEmojiOnly ? "text-4xl" : "text-sm"}`}>
@@ -524,126 +594,88 @@ function MessagesContent() {
     return true;
   });
 
-  const unreadConversationsCount = conversations.filter((m) => {
-    const lastMsgIsMine = m.lastMessage?.senderId === user?.id;
-    return m.unreadCount > 0 && !lastMsgIsMine;
-  }).length;
-
-  const readConversationsCount = conversations.length - unreadConversationsCount;
-
   return (
     <div className="flex h-[calc(100vh-64px)] lg:h-screen bg-[#F7F8FC]">
-      {/* SIDEBAR CONVERSATIONS - Style Farata */}
+      {/* SIDEBAR CONVERSATIONS */}
       <div
         className={`${
           selectedMatch ? "hidden md:flex" : "flex"
         } flex-col w-full md:w-[380px] lg:w-[420px] border-r border-slate-100 bg-[#F7F8FC]`}
       >
-        {/* Header */}
-        <div className="px-5 pt-5 pb-3 bg-[#F7F8FC]">
-          <div className="flex items-end justify-between">
-            <div>
-              <h2 className="text-3xl font-black tracking-tight bg-gradient-to-r from-rose-500 to-purple-600 bg-clip-text text-transparent">
-                Messages
-              </h2>
-              <p className="text-xs text-slate-400 mt-0.5 font-medium">
-                {matchesList.length} conversation{matchesList.length > 1 ? "s" : ""}
-              </p>
-            </div>
-          </div>
+        <div className="px-5 pt-5 pb-3">
+          <h2 className="text-3xl font-black tracking-tight bg-gradient-to-r from-rose-500 to-purple-600 bg-clip-text text-transparent">
+            Messages
+          </h2>
+          <p className="text-xs text-slate-400 mt-0.5 font-medium">
+            {matchesList.length} conversation{matchesList.length > 1 ? "s" : ""}
+          </p>
         </div>
 
         {/* Card Vocaux Premium */}
-<div className="px-4 mb-3">
-  {user?.isPremium ? (
-    <div
-      onClick={() => alert("🎙️ Les messages vocaux sont activés sur ton compte Premium ! Ouvre une conversation et clique sur l'icône photo/vocal pour discuter.")}
-      className="cursor-pointer flex items-center justify-between rounded-2xl bg-gradient-to-r from-purple-600 via-rose-500 to-pink-500 p-3.5 shadow-sm text-white"
-    >
-      <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-full bg-white/20 backdrop-blur flex items-center justify-center">
-          <Mic className="w-5 h-5 text-white" />
+        <div className="px-4 mb-3">
+          {user?.isPremium ? (
+            <div className="flex items-center justify-between rounded-2xl bg-gradient-to-r from-purple-600 via-rose-500 to-pink-500 p-3.5 shadow-sm text-white">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-white/20 backdrop-blur flex items-center justify-center">
+                  <Mic className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-black text-white">Messages vocaux activés</p>
+                    <span className="text-[9px] font-black uppercase tracking-wider bg-white/30 text-white px-1.5 py-0.5 rounded-md">
+                      👑 Premium
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-white/80 font-medium">
+                    Clique sur le micro en bas pour parler ! ✨
+                  </p>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <Link
+              href="/premium"
+              className="flex items-center justify-between rounded-2xl bg-gradient-to-r from-amber-300 via-yellow-300 to-amber-200 p-3.5 shadow-sm border border-amber-200/80"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-white/70 flex items-center justify-center">
+                  <Mic className="w-5 h-5 text-amber-700" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-black text-amber-950">Messages vocaux</p>
+                    <span className="text-[9px] font-black uppercase tracking-wider bg-white/80 text-amber-700 px-1.5 py-0.5 rounded-md">
+                      Nouveau
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-amber-900/70 font-medium">
+                    Fais entendre ta voix · Exclusif Premium ✨
+                  </p>
+                </div>
+              </div>
+              <span className="text-amber-800 text-lg">›</span>
+            </Link>
+          )}
         </div>
-        <div>
-          <div className="flex items-center gap-2">
-            <p className="text-sm font-black text-white">Messages vocaux activés</p>
-            <span className="text-[9px] font-black uppercase tracking-wider bg-white/30 text-white px-1.5 py-0.5 rounded-md">
-              👑 Premium
-            </span>
-          </div>
-          <p className="text-[11px] text-white/80 font-medium">
-            Profite de tes vocaux illimités dans tes discussions ✨
-          </p>
-        </div>
-      </div>
-      <span className="text-white/80 text-lg">›</span>
-    </div>
-  ) : (
-    <Link
-      href="/premium"
-      className="flex items-center justify-between rounded-2xl bg-gradient-to-r from-amber-300 via-yellow-300 to-amber-200 p-3.5 shadow-sm border border-amber-200/80"
-    >
-      <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-full bg-white/70 flex items-center justify-center">
-          <Mic className="w-5 h-5 text-amber-700" />
-        </div>
-        <div>
-          <div className="flex items-center gap-2">
-            <p className="text-sm font-black text-amber-950">
-              Messages vocaux
-            </p>
-            <span className="text-[9px] font-black uppercase tracking-wider bg-white/80 text-amber-700 px-1.5 py-0.5 rounded-md">
-              Nouveau
-            </span>
-          </div>
-          <p className="text-[11px] text-amber-900/70 font-medium">
-            Fais entendre ta voix · Exclusif Premium ✨
-          </p>
-        </div>
-      </div>
-      <span className="text-amber-800 text-lg">›</span>
-    </Link>
-  )}
-</div>
 
         {/* Filter Tabs */}
         <div className="px-4 mb-3 flex items-center gap-2 overflow-x-auto pb-1">
-          {[
-            { id: "all" as FilterTab, label: "Tous", count: conversations.length },
-            {
-              id: "unread" as FilterTab,
-              label: "Non lus",
-              count: unreadConversationsCount,
-            },
-            {
-              id: "read" as FilterTab,
-              label: "Lus",
-              count: readConversationsCount,
-            },
-          ].map((tab) => {
-            const active = filterTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setFilterTab(tab.id)}
-                className={`flex-shrink-0 px-4 py-2 rounded-full text-sm font-bold transition ${
-                  active
-                    ? "bg-gradient-to-r from-rose-500 to-purple-600 text-white shadow-md shadow-rose-200"
-                    : "bg-white text-slate-500 border border-slate-100"
-                }`}
-              >
-                {tab.label}
-                {tab.count > 0 && (
-                  <span className={`ml-1 ${active ? "text-white/90" : "text-slate-400"}`}>
-                    {tab.count}
-                  </span>
-                )}
-              </button>
-            );
-          })}
+          {["all", "unread", "read"].map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setFilterTab(tab as FilterTab)}
+              className={`flex-shrink-0 px-4 py-2 rounded-full text-sm font-bold transition ${
+                filterTab === tab
+                  ? "bg-gradient-to-r from-rose-500 to-purple-600 text-white shadow-md shadow-rose-200"
+                  : "bg-white text-slate-500 border border-slate-100"
+              }`}
+            >
+              {tab === "all" ? "Tous" : tab === "unread" ? "Non lus" : "Lus"}
+            </button>
+          ))}
         </div>
 
-        {/* Search Input */}
+        {/* Search */}
         <div className="px-4 mb-3">
           <div className="relative">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -658,175 +690,58 @@ function MessagesContent() {
 
         {loadingMatches ? (
           <MatchesListSkeleton />
-        ) : matchesList.length === 0 ? (
-          <div className="flex-1 flex items-center justify-center p-6">
-            <div className="text-center">
-              <div className="w-20 h-20 rounded-full bg-white shadow-sm flex items-center justify-center mx-auto mb-3">
-                <MessageCircle className="w-10 h-10 text-slate-200" />
-              </div>
-              <p className="text-slate-700 font-bold">Aucun match</p>
-              <p className="text-sm text-slate-400 mt-1 mb-4">
-                Matche avec quelqu&apos;un pour discuter
-              </p>
-              <Link
-                href="/discover"
-                className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-rose-500 to-purple-600 text-white rounded-full text-sm font-bold shadow-md"
-              >
-                <Compass className="w-4 h-4" />
-                Découvrir
-              </Link>
-            </div>
-          </div>
         ) : (
           <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-3">
-            {/* New Matches Header */}
-            {newMatches.length > 0 && filterTab === "all" && !searchQuery && (
-              <div className="bg-white rounded-3xl p-4 border border-slate-100 shadow-sm">
-                <h3 className="text-[11px] font-black text-slate-400 uppercase tracking-wider mb-3">
-                  ✨ Nouveaux matchs
-                </h3>
-                <div className="flex gap-3 overflow-x-auto pb-1">
-                  {newMatches.map((match) => (
-                    <button
-                      key={match.matchId}
-                      onClick={() => setSelectedMatch(match.matchId)}
-                      className="flex flex-col items-center gap-1.5 flex-shrink-0"
-                    >
-                      <div className="relative">
-                        <div
-                          className={`p-[2px] rounded-full ${
-                            match.user.isPremium
-                              ? "bg-gradient-to-r from-yellow-400 to-orange-500"
-                              : "bg-gradient-to-r from-rose-500 to-purple-600"
-                          }`}
-                        >
-                          <Avatar
-                            photoUrl={match.user.photoUrl}
-                            firstName={match.user.firstName}
-                            userId={match.user.id}
-                            size={64}
-                            className="border-2 border-white"
-                          />
-                        </div>
-                        {match.user.isOnline && (
-                          <div className="absolute bottom-0.5 right-0.5 w-3.5 h-3.5 bg-green-500 rounded-full border-2 border-white" />
-                        )}
-                        {match.user.isPremium && (
-                          <div className="absolute -top-1 -right-1 w-5 h-5 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full flex items-center justify-center border-2 border-white">
-                            <Crown className="w-2.5 h-2.5 text-white fill-white" />
-                          </div>
-                        )}
-                      </div>
-                      <span className="text-xs font-semibold text-slate-700 max-w-[70px] truncate">
+            {filteredConversations.map((match) => {
+              const lastMsgIsMine = match.lastMessage?.senderId === user?.id;
+              const isPremium = match.user.isPremium;
+              const isSelected = selectedMatch === match.matchId;
+
+              return (
+                <button
+                  key={match.matchId}
+                  onClick={() => setSelectedMatch(match.matchId)}
+                  className={`w-full flex items-center gap-3 p-3.5 rounded-3xl text-left transition shadow-sm border ${
+                    isSelected
+                      ? "bg-rose-50 border-rose-200"
+                      : isPremium
+                      ? "bg-gradient-to-r from-amber-50 to-yellow-50 border-amber-100"
+                      : "bg-white border-slate-100 hover:border-rose-100"
+                  }`}
+                >
+                  <Avatar
+                    photoUrl={match.user.photoUrl}
+                    firstName={match.user.firstName}
+                    userId={match.user.id}
+                    size={56}
+                  />
+
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="font-bold text-slate-900 truncate">
                         {match.user.firstName}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Conversation Cards */}
-            {filteredConversations.length === 0 ? (
-              <div className="text-center py-10 text-sm text-slate-400">
-                Aucune conversation trouvée
-              </div>
-            ) : (
-              filteredConversations.map((match) => {
-                const lastMsgIsMine = match.lastMessage?.senderId === user?.id;
-                const isPremium = match.user.isPremium;
-                const isSelected = selectedMatch === match.matchId;
-                const hasUnread = match.unreadCount > 0 && !lastMsgIsMine;
-
-                return (
-                  <button
-                    key={match.matchId}
-                    onClick={() => setSelectedMatch(match.matchId)}
-                    className={`w-full flex items-center gap-3 p-3.5 rounded-3xl text-left transition shadow-sm border ${
-                      isSelected
-                        ? "bg-rose-50 border-rose-200"
-                        : isPremium
-                        ? "bg-gradient-to-r from-amber-50 to-yellow-50 border-amber-100"
-                        : "bg-white border-slate-100 hover:border-rose-100"
-                    }`}
-                  >
-                    <div className="relative flex-shrink-0">
-                      <div
-                        className={
-                          isPremium
-                            ? "p-[2px] rounded-full bg-gradient-to-r from-yellow-400 to-orange-500"
-                            : ""
-                        }
-                      >
-                        <Avatar
-                          photoUrl={match.user.photoUrl}
-                          firstName={match.user.firstName}
-                          userId={match.user.id}
-                          size={56}
-                          className={isPremium ? "border-2 border-white" : ""}
-                        />
-                      </div>
-                      {match.user.isOnline && (
-                        <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 rounded-full border-2 border-white" />
-                      )}
-                    </div>
-
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-1 min-w-0">
-                          <p className="font-bold text-slate-900 truncate">
-                            {match.user.firstName}
-                            {match.user.lastName ? ` ${match.user.lastName.charAt(0)}.` : ""}
-                          </p>
-                          {match.user.isVerified && (
-                            <BadgeCheck className="w-3.5 h-3.5 text-blue-500 fill-blue-500 flex-shrink-0" />
-                          )}
-                          {isPremium && (
-                            <Crown className="w-3.5 h-3.5 text-yellow-500 fill-yellow-500 flex-shrink-0" />
-                          )}
-                        </div>
-                        {match.lastMessage && (
-                          <span className="text-[11px] text-slate-400 flex-shrink-0 font-medium">
-                            {formatMessageTime(match.lastMessage.createdAt)}
-                          </span>
-                        )}
-                      </div>
-
+                      </p>
                       {match.lastMessage && (
-                        <p
-                          className={`text-sm truncate mt-0.5 ${
-                            hasUnread
-                              ? "text-slate-800 font-semibold"
-                              : "text-slate-500"
-                          }`}
-                        >
-                          {lastMsgIsMine && (
-                            <span className="text-slate-400 font-normal">Vous: </span>
-                          )}
-                          {match.lastMessage.content.startsWith("[IMAGE]") ? (
-                            <span className="inline-flex items-center gap-1">
-                              <ImageIcon className="w-3.5 h-3.5" /> Photo
-                            </span>
-                          ) : (
-                            match.lastMessage.content
-                          )}
-                        </p>
+                        <span className="text-[11px] text-slate-400">
+                          {formatMessageTime(match.lastMessage.createdAt)}
+                        </span>
                       )}
                     </div>
 
-                    <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                      {hasUnread ? (
-                        <span className="min-w-[22px] h-[22px] px-1.5 bg-gradient-to-br from-rose-500 to-purple-600 text-white rounded-full flex items-center justify-center text-[10px] font-black">
-                          {match.unreadCount > 9 ? "9+" : match.unreadCount}
-                        </span>
-                      ) : (
-                        <span className="text-slate-300 text-lg">›</span>
-                      )}
-                    </div>
-                  </button>
-                );
-              })
-            )}
+                    {match.lastMessage && (
+                      <p className="text-sm truncate text-slate-500 mt-0.5">
+                        {lastMsgIsMine && "Vous: "}
+                        {match.lastMessage.content.startsWith("[AUDIO]")
+                          ? "🎙️ Message vocal"
+                          : match.lastMessage.content.startsWith("[IMAGE]")
+                          ? "📷 Photo"
+                          : match.lastMessage.content}
+                      </p>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
           </div>
         )}
       </div>
@@ -834,15 +749,6 @@ function MessagesContent() {
       {/* ZONE DE CHAT */}
       {selectedMatch ? (
         <div className="flex-1 flex flex-col bg-[#F3F4F8] relative">
-          <div
-            className="absolute inset-0 opacity-[0.04] pointer-events-none"
-            style={{
-              backgroundImage:
-                "radial-gradient(circle at 20px 20px, #e11d48 1.5px, transparent 0)",
-              backgroundSize: "40px 40px",
-            }}
-          />
-
           {/* Header Chat */}
           <div className="relative z-10 px-3 py-3 bg-white/90 backdrop-blur border-b border-slate-100 flex items-center gap-3 shadow-sm">
             <button
@@ -853,247 +759,160 @@ function MessagesContent() {
             </button>
 
             {otherUser && (
-              <>
-                <div className="relative">
-                  <Avatar
-                    photoUrl={otherUser.photoUrl}
-                    firstName={otherUser.firstName}
-                    userId={otherUser.id}
-                    size={44}
-                  />
-                  {otherUser.isOnline && (
-                    <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-white" />
-                  )}
-                </div>
-
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <p className="font-bold text-slate-900 truncate">
-                      {otherUser.firstName}
-                      {otherUser.lastName ? ` ${otherUser.lastName.charAt(0)}.` : ""}
-                    </p>
-                    {otherUser.isVerified && (
-                      <BadgeCheck className="w-4 h-4 text-blue-500 fill-blue-500" />
-                    )}
-                    {otherUser.isPremium && (
-                      <Crown className="w-4 h-4 text-yellow-500 fill-yellow-500" />
-                    )}
-                  </div>
+              <div className="flex items-center gap-3">
+                <Avatar
+                  photoUrl={otherUser.photoUrl}
+                  firstName={otherUser.firstName}
+                  userId={otherUser.id}
+                  size={44}
+                />
+                <div>
+                  <p className="font-bold text-slate-900">{otherUser.firstName}</p>
                   <p className="text-xs text-slate-500">
-                    {otherUser.isOnline ? (
-                      <span className="text-emerald-600 font-medium">En ligne</span>
-                    ) : otherUser.lastSeen ? (
-                      `Vu ${timeAgo(otherUser.lastSeen)}`
-                    ) : (
-                      "Hors ligne"
-                    )}
-                  </p>
-                </div>
-              </>
-            )}
-          </div>
-
-          {/* Body Messages */}
-          <div className="relative z-10 flex-1 overflow-y-auto p-4 space-y-2">
-            {loadingMessages ? (
-              <ChatSkeleton />
-            ) : chatMessages.length === 0 ? (
-              <div className="flex items-center justify-center h-full">
-                <div className="text-center max-w-xs px-4">
-                  <p className="text-slate-800 font-black text-xl">
-                    Dis bonjour à {otherUser?.firstName || "ton match"}
-                    {otherUser?.lastName ? ` ${otherUser.lastName.charAt(0)}.` : ""}
-                  </p>
-                  <p className="text-sm text-slate-400 mt-2 leading-relaxed">
-                    Sois respectueux(se) et bienveillant(e)
-                    <br />
-                    dans tes échanges
+                    {otherUser.isOnline ? "En ligne" : "Hors ligne"}
                   </p>
                 </div>
               </div>
+            )}
+          </div>
+
+          {/* Chat Messages */}
+          <div className="relative z-10 flex-1 overflow-y-auto p-4 space-y-2">
+            {loadingMessages ? (
+              <ChatSkeleton />
             ) : (
               chatMessages.map((msg, index) => {
                 const isMine = msg.senderId === user?.id;
-                const prevMsg = index > 0 ? chatMessages[index - 1] : null;
-                const nextMsg =
-                  index < chatMessages.length - 1
-                    ? chatMessages[index + 1]
-                    : null;
-                const isSameSenderAsPrev = prevMsg?.senderId === msg.senderId;
-                const isSameSenderAsNext = nextMsg?.senderId === msg.senderId;
-                const isFirstOfGroup = !isSameSenderAsPrev;
-                const isLastOfGroup = !isSameSenderAsNext;
-                const isImage = msg.content.startsWith("[IMAGE]");
 
                 return (
                   <div
                     key={msg.id}
-                    className={`flex ${isMine ? "justify-end" : "justify-start"} ${
-                      isFirstOfGroup ? "mt-3" : "mt-0.5"
-                    }`}
+                    className={`flex ${isMine ? "justify-end" : "justify-start"} mt-2`}
                   >
                     <div className="max-w-[75%]">
                       <div
-                        className={`${isImage ? "p-1" : "px-4 py-2.5"} ${
+                        className={`px-4 py-2.5 rounded-2xl ${
                           isMine
-                            ? `bg-gradient-to-r from-rose-500 to-purple-600 text-white shadow-md shadow-rose-200/50 ${
-                                isFirstOfGroup && isLastOfGroup
-                                  ? "rounded-2xl"
-                                  : isFirstOfGroup
-                                  ? "rounded-2xl rounded-br-md"
-                                  : isLastOfGroup
-                                  ? "rounded-2xl rounded-tr-md"
-                                  : "rounded-l-2xl rounded-r-md"
-                              }`
-                            : `bg-white text-slate-800 shadow-sm ${
-                                isFirstOfGroup && isLastOfGroup
-                                  ? "rounded-2xl"
-                                  : isFirstOfGroup
-                                  ? "rounded-2xl rounded-bl-md"
-                                  : isLastOfGroup
-                                  ? "rounded-2xl rounded-tl-md"
-                                  : "rounded-r-2xl rounded-l-md"
-                              }`
+                            ? "bg-gradient-to-r from-rose-500 to-purple-600 text-white shadow-md shadow-rose-200/50"
+                            : "bg-white text-slate-800 shadow-sm"
                         }`}
                       >
-                        {renderMessageContent(msg.content)}
+                        {renderMessageContent(msg.content, isMine)}
                       </div>
-
-                      {isLastOfGroup && (
-                        <div
-                          className={`flex items-center gap-1 mt-1 ${
-                            isMine ? "justify-end" : "justify-start"
-                          }`}
-                        >
-                          <span className="text-[10px] text-slate-400">
-                            {formatMessageTime(msg.createdAt)}
-                          </span>
-                          {isMine &&
-                            (msg.isRead ? (
-                              <CheckCheck className="w-3 h-3 text-blue-500" />
-                            ) : (
-                              <Check className="w-3 h-3 text-slate-400" />
-                            ))}
-                        </div>
-                      )}
+                      <span className={`text-[10px] text-slate-400 mt-1 block ${isMine ? "text-right" : "text-left"}`}>
+                        {formatMessageTime(msg.createdAt)}
+                      </span>
                     </div>
                   </div>
                 );
               })
             )}
-
-            {otherIsTyping && otherUser && (
-              <div className="flex justify-start mt-2">
-                <div className="bg-white shadow-sm rounded-2xl rounded-bl-md px-4 py-3">
-                  <div className="flex items-center gap-1">
-                    <span className="text-xs text-slate-500 mr-1">
-                      {otherUser.firstName} écrit
-                    </span>
-                    <span className="flex gap-1">
-                      <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" />
-                      <span
-                        className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce"
-                        style={{ animationDelay: "150ms" }}
-                      />
-                      <span
-                        className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce"
-                        style={{ animationDelay: "300ms" }}
-                      />
-                    </span>
-                  </div>
-                </div>
-              </div>
-            )}
-
             <div ref={messagesEndRef} />
           </div>
 
-          {showEmojis && (
-            <div className="relative z-10 px-4 py-2 bg-white border-t border-slate-100 flex items-center gap-2 overflow-x-auto">
-              {quickEmojis.map((emoji) => (
-                <button
-                  key={emoji}
-                  type="button"
-                  onClick={() => handleSendEmoji(emoji)}
-                  disabled={sending}
-                  className="text-3xl hover:scale-125 transition disabled:opacity-50 flex-shrink-0"
-                >
-                  {emoji}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* Input Form */}
+          {/* Form / Enregistreur vocal */}
           <form
             onSubmit={handleSend}
             className="relative z-10 p-3 bg-white/95 backdrop-blur border-t border-slate-100"
           >
-            <div className="flex items-center gap-2">
-              <input
-                type="file"
-                ref={fileInputRef}
-                accept="image/*"
-                onChange={handleImageUpload}
-                className="hidden"
-              />
-
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={uploadingImage}
-                className="p-2.5 rounded-full text-slate-400 hover:bg-slate-100 transition disabled:opacity-50"
-              >
-                {uploadingImage ? (
-                  <span className="text-xs">...</span>
-                ) : (
-                  <ImageIcon className="w-5 h-5" />
-                )}
-              </button>
-
-              <div className="flex-1 flex items-center bg-slate-100 rounded-full px-2">
-                <input
-                  type="text"
-                  value={newMessage}
-                  onChange={handleInputChange}
-                  placeholder="Écris ton message..."
-                  className="flex-1 px-3 py-3 bg-transparent text-sm outline-none placeholder:text-slate-400"
-                />
+            {isRecording ? (
+              /* ENREGISTREUR VOCAL ACTIF */
+              <div className="flex items-center justify-between bg-rose-50 border border-rose-200 rounded-full px-4 py-2">
                 <button
                   type="button"
-                  onClick={() => setShowEmojis(!showEmojis)}
-                  className={`p-2 rounded-full transition ${
-                    showEmojis
-                      ? "bg-rose-100 text-rose-600"
-                      : "text-slate-400 hover:text-slate-600"
-                  }`}
+                  onClick={cancelRecording}
+                  className="p-2 text-rose-500 hover:bg-rose-100 rounded-full transition"
+                  title="Annuler vocal"
                 >
-                  <Smile className="w-5 h-5" />
+                  <Trash2 className="w-5 h-5" />
+                </button>
+
+                <div className="flex items-center gap-2">
+                  <span className="w-3 h-3 bg-red-500 rounded-full animate-ping" />
+                  <span className="text-sm font-bold text-rose-600 font-mono">
+                    0:{recordingTime < 10 ? "0" : ""}{recordingTime}
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={stopAndSendRecording}
+                  disabled={sendingAudio}
+                  className="px-4 py-2 bg-gradient-to-r from-rose-500 to-purple-600 text-white font-bold text-xs rounded-full shadow-md hover:scale-105 transition disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  {sendingAudio ? "Envoi..." : "Envoyer"}
                 </button>
               </div>
+            ) : (
+              /* BARRE NORMALE DE MESSAGE */
+              <div className="flex items-center gap-2">
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  accept="image/*"
+                  onChange={handleImageUpload}
+                  className="hidden"
+                />
 
-              <button
-                type="submit"
-                disabled={!newMessage.trim() || sending}
-                className="w-12 h-12 rounded-full flex items-center justify-center text-white bg-gradient-to-r from-rose-500 to-purple-600 hover:shadow-lg hover:scale-105 transition disabled:opacity-30 disabled:hover:scale-100 shadow-md shadow-rose-200"
-              >
-                <Send className="w-4 h-4" />
-              </button>
-            </div>
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploadingImage}
+                  className="p-2.5 rounded-full text-slate-400 hover:bg-slate-100 transition disabled:opacity-50"
+                >
+                  <ImageIcon className="w-5 h-5" />
+                </button>
+
+                <div className="flex-1 flex items-center bg-slate-100 rounded-full px-2">
+                  <input
+                    type="text"
+                    value={newMessage}
+                    onChange={(e) => setNewMessage(e.target.value)}
+                    placeholder="Écris ton message..."
+                    className="flex-1 px-3 py-3 bg-transparent text-sm outline-none placeholder:text-slate-400"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowEmojis(!showEmojis)}
+                    className="p-2 text-slate-400 hover:text-slate-600"
+                  >
+                    <Smile className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {/* 🎙️ BOUTON MICROPHONE VOCAL */}
+                <button
+                  type="button"
+                  onClick={startRecording}
+                  className={`p-3 rounded-full transition shadow-md ${
+                    user?.isPremium
+                      ? "bg-gradient-to-r from-rose-500 to-purple-600 text-white hover:scale-105"
+                      : "bg-slate-200 text-slate-400"
+                  }`}
+                  title="Enregistrer un message vocal"
+                >
+                  <Mic className="w-5 h-5" />
+                </button>
+
+                {newMessage.trim() && (
+                  <button
+                    type="submit"
+                    disabled={sending}
+                    className="w-11 h-11 rounded-full flex items-center justify-center text-white bg-gradient-to-r from-rose-500 to-purple-600 hover:scale-105 transition shadow-md"
+                  >
+                    <Send className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+            )}
           </form>
         </div>
       ) : (
         <div className="hidden md:flex flex-1 items-center justify-center bg-[#F3F4F8]">
           <div className="text-center">
-            <div className="w-24 h-24 rounded-full bg-white shadow-sm flex items-center justify-center mx-auto mb-4">
-              <Sparkles className="w-10 h-10 text-rose-400" />
-            </div>
-            <p className="text-xl font-black text-slate-700">
-              Sélectionne une conversation
-            </p>
-            <p className="text-sm text-slate-500 mt-1">
-              Choisis un match pour commencer à discuter
-            </p>
+            <Sparkles className="w-12 h-12 text-rose-400 mx-auto mb-3" />
+            <p className="text-xl font-black text-slate-700">Sélectionne une conversation</p>
           </div>
         </div>
       )}
@@ -1103,13 +922,7 @@ function MessagesContent() {
 
 export default function MessagesPage() {
   return (
-    <Suspense
-      fallback={
-        <div className="flex items-center justify-center min-h-screen bg-[#F7F8FC]">
-          <Heart className="w-8 h-8 text-rose-400 animate-pulse" />
-        </div>
-      }
-    >
+    <Suspense fallback={<div className="flex items-center justify-center min-h-screen">Chargement...</div>}>
       <MessagesContent />
     </Suspense>
   );
