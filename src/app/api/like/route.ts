@@ -15,7 +15,7 @@ const SUPER_LIKE_LIMITS = {
 };
 
 // ═══════════════════════════════════════
-// GET : Récupérer le statut des Super Likes
+// GET : Statut Super Likes
 // ═══════════════════════════════════════
 export async function GET(req: NextRequest) {
   const startTime = Date.now();
@@ -49,10 +49,7 @@ export async function GET(req: NextRequest) {
       .select()
       .from(likes)
       .where(
-        and(
-          eq(likes.fromUserId, userId),
-          eq(likes.isSuperLike, true)
-        )
+        and(eq(likes.fromUserId, userId), eq(likes.isSuperLike, true))
       );
 
     const todaySuperLikes = superLikesToday.filter(
@@ -69,7 +66,7 @@ export async function GET(req: NextRequest) {
     const limit = isPremium ? SUPER_LIKE_LIMITS.premium : SUPER_LIKE_LIMITS.free;
     const used = todaySuperLikes.length;
     const remaining = Math.max(0, limit - used);
-    const canSuperLike = remaining > 0; // ✅ AJOUT
+    const canSuperLike = remaining > 0;
 
     logApiCall({
       endpoint,
@@ -82,13 +79,12 @@ export async function GET(req: NextRequest) {
       ipAddress,
     });
 
-    // ✅ FIX BUG : Renommer les champs pour matcher le frontend
     return NextResponse.json({
       isPremium,
-      used,           // ✅ Renommé (était superLikesUsed)
-      limit,          // ✅ Renommé (était superLikesLimit)
-      remaining,      // ✅ Renommé (était superLikesRemaining)
-      canSuperLike,   // ✅ AJOUT : Champ manquant
+      used,
+      limit,
+      remaining,
+      canSuperLike,
     });
   } catch (error) {
     console.error("Erreur GET like:", error);
@@ -109,7 +105,7 @@ export async function GET(req: NextRequest) {
 }
 
 // ═══════════════════════════════════════
-// POST : Créer un like / super like / dislike
+// POST : Like / Super Like / Dislike
 // ═══════════════════════════════════════
 export async function POST(req: NextRequest) {
   const startTime = Date.now();
@@ -167,7 +163,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Données manquantes" }, { status: 400 });
     }
 
-    // Vérifier limite Super Like
+    // Limite Super Like
     if (isSuperLike && isLike) {
       const currentUser = await db
         .select()
@@ -185,10 +181,7 @@ export async function POST(req: NextRequest) {
         .select()
         .from(likes)
         .where(
-          and(
-            eq(likes.fromUserId, userId),
-            eq(likes.isSuperLike, true)
-          )
+          and(eq(likes.fromUserId, userId), eq(likes.isSuperLike, true))
         );
 
       const todayCount = superLikesToday.filter(
@@ -224,10 +217,7 @@ export async function POST(req: NextRequest) {
       .select()
       .from(likes)
       .where(
-        and(
-          eq(likes.fromUserId, userId),
-          eq(likes.toUserId, toUserId)
-        )
+        and(eq(likes.fromUserId, userId), eq(likes.toUserId, toUserId))
       )
       .limit(1);
 
@@ -307,30 +297,26 @@ export async function POST(req: NextRequest) {
             .limit(1);
 
           const toUserData = toUser[0];
+          const fromName = fromUserData?.firstName ?? "Quelqu'un";
+          const toName = toUserData?.firstName ?? "Quelqu'un";
 
           await createNotification({
             userId: toUserId,
             type: "match",
             fromUserId: userId,
-            content: `🎉 Vous avez un nouveau match avec ${fromUserData?.firstName ?? "quelqu'un"} !`,
+            content: `🎉 Vous avez un nouveau match avec ${fromName} !`,
           });
 
           await createNotification({
             userId: userId,
             type: "match",
             fromUserId: toUserId,
-            content: `🎉 Vous avez un nouveau match avec ${toUserData?.firstName ?? "quelqu'un"} !`,
+            content: `🎉 Vous avez un nouveau match avec ${toName} !`,
           });
 
-          await sendPushToUser(
-            toUserId,
-            PushTemplates.match(fromUserData?.firstName ?? "Quelqu'un")
-          );
-
-          await sendPushToUser(
-            userId,
-            PushTemplates.match(toUserData?.firstName ?? "Quelqu'un")
-          );
+          // 🔔 Push Match (non bloquant)
+          sendPushToUser(toUserId, PushTemplates.match(fromName)).catch(() => {});
+          sendPushToUser(userId, PushTemplates.match(toName)).catch(() => {});
 
           if (toUserData?.email && fromUserData?.firstName) {
             sendMatchEmail(
@@ -341,35 +327,34 @@ export async function POST(req: NextRequest) {
           }
         }
       } else {
+        const fromName = fromUserData?.firstName ?? "Quelqu'un";
+
         if (isSuperLike) {
           await createNotification({
             userId: toUserId,
             type: "super_like",
             fromUserId: userId,
-            content: `⭐ ${fromUserData?.firstName ?? "Quelqu'un"} vous a envoyé un Super Like !`,
+            content: `⭐ ${fromName} vous a envoyé un Super Like !`,
           });
 
-          await sendPushToUser(
-            toUserId,
-            PushTemplates.superLike(fromUserData?.firstName ?? "Quelqu'un")
+          sendPushToUser(toUserId, PushTemplates.superLike(fromName)).catch(
+            () => {}
           );
         } else {
           await createNotification({
             userId: toUserId,
             type: "like",
             fromUserId: userId,
-            content: `💜 ${fromUserData?.firstName ?? "Quelqu'un"} vous a liké !`,
+            content: `💜 ${fromName} vous a liké !`,
           });
 
-          await sendPushToUser(
-            toUserId,
-            PushTemplates.like(fromUserData?.firstName ?? "Quelqu'un")
+          sendPushToUser(toUserId, PushTemplates.like(fromName)).catch(
+            () => {}
           );
         }
       }
     }
 
-    // ✅ FIX BUG : Renommer matchCreated → isMatch pour matcher le frontend
     const actionLabel = matchCreated
       ? `💕 MATCH créé avec user ${toUserId}!`
       : isLike
@@ -392,7 +377,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       matchCreated,
-      isMatch: matchCreated, // ✅ AJOUT : Champ que le frontend attend
+      isMatch: matchCreated,
       matchId,
     });
   } catch (error) {
