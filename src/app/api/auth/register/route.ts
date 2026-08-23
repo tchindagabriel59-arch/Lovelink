@@ -6,30 +6,36 @@ import bcrypt from "bcryptjs";
 import { createToken } from "@/lib/auth";
 import { sendWelcomeEmail } from "@/lib/emails";
 import { sendMetaEvent, getClientIp, generateEventId } from "@/lib/meta-capi";
-import { 
-  generateUniqueReferralCode, 
-  findUserByReferralCode, 
-  applyReferralReward 
+import {
+  generateUniqueReferralCode,
+  findUserByReferralCode,
+  applyReferralReward,
 } from "@/lib/referral";
 import { logApiCall } from "@/lib/api-logger";
 
-// 🎯 Auto-définir la préférence de genre selon le genre de l'utilisateur
-function getDefaultPrefGender(userGender: string): "male" | "female" | "non_binary" | "other" | null {
+function getDefaultPrefGender(
+  userGender: string
+): "male" | "female" | "non_binary" | "other" | null {
   switch (userGender) {
     case "male":
       return "female";
     case "female":
       return "male";
-    case "non_binary":
-    case "other":
-      return null;
     default:
       return null;
   }
 }
 
+function calculateAge(birthDate: string): number {
+  const today = new Date();
+  const birth = new Date(birthDate);
+  let age = today.getFullYear() - birth.getFullYear();
+  const m = today.getMonth() - birth.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
+  return age;
+}
+
 export async function POST(req: NextRequest) {
-  // ✅ MONITORING : Capture le temps de départ
   const startTime = Date.now();
   const endpoint = "/api/auth/register";
   const method = "POST";
@@ -41,19 +47,24 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { 
-      email, 
-      password, 
-      firstName, 
-      lastName, 
-      birthDate, 
-      gender, 
+    const {
+      email,
+      password,
+      firstName,
+      lastName,
+      birthDate,
+      gender,
+      lookingFor,
+      city,
+      country,
+      occupation,
+      maritalStatus,
+      discoverySource,
       eventId: clientEventId,
       referralCode: providedReferralCode,
     } = body;
 
     if (!email || !password || !firstName || !lastName || !birthDate || !gender) {
-      // ✅ LOG : Erreur 400 - champs manquants
       logApiCall({
         endpoint,
         method,
@@ -63,21 +74,31 @@ export async function POST(req: NextRequest) {
         userAgent,
         ipAddress,
       });
-
       return NextResponse.json(
-        { error: "Tous les champs sont requis" },
+        { error: "Tous les champs obligatoires sont requis" },
         { status: 400 }
       );
+    }
+
+    if (calculateAge(birthDate) < 18) {
+      return NextResponse.json(
+        { error: "Vous devez avoir au moins 18 ans" },
+        { status: 400 }
+      );
+    }
+
+    const validGenders = ["male", "female", "non_binary", "other"];
+    if (!validGenders.includes(gender)) {
+      return NextResponse.json({ error: "Genre invalide" }, { status: 400 });
     }
 
     const existing = await db
       .select()
       .from(users)
-      .where(eq(users.email, email))
+      .where(eq(users.email, email.toLowerCase().trim()))
       .limit(1);
 
     if (existing.length > 0) {
-      // ✅ LOG : Erreur 409 - email déjà utilisé
       logApiCall({
         endpoint,
         method,
@@ -87,7 +108,6 @@ export async function POST(req: NextRequest) {
         userAgent,
         ipAddress,
       });
-
       return NextResponse.json(
         { error: "Cet email est déjà utilisé" },
         { status: 409 }
@@ -96,26 +116,38 @@ export async function POST(req: NextRequest) {
 
     const passwordHash = await bcrypt.hash(password, 12);
     const defaultPrefGender = getDefaultPrefGender(gender);
-
-    // 🎁 Générer un code de parrainage unique pour ce nouveau user
     const newReferralCode = await generateUniqueReferralCode(firstName);
 
-    // 🎁 Vérifier si un code de parrainage a été fourni
     let referrer = null;
     if (providedReferralCode && providedReferralCode.trim() !== "") {
       referrer = await findUserByReferralCode(providedReferralCode);
     }
 
-    // Créer le nouveau user
+    const validLookingFor = [
+      "relationship",
+      "friendship",
+      "casual",
+      "marriage",
+    ] as const;
+    const safeLookingFor = validLookingFor.includes(lookingFor)
+      ? lookingFor
+      : "relationship";
+
     const [newUser] = await db
       .insert(users)
       .values({
-        email,
+        email: email.toLowerCase().trim(),
         passwordHash,
-        firstName,
-        lastName,
+        firstName: firstName.trim(),
+        lastName: (lastName || "").trim(),
         birthDate,
         gender,
+        lookingFor: safeLookingFor,
+        city: city?.trim() || "",
+        country: country?.trim() || "",
+        occupation: occupation?.trim() || "",
+        maritalStatus: maritalStatus?.trim() || "",
+        discoverySource: discoverySource?.trim() || "",
         prefGender: defaultPrefGender,
         prefAgeMin: 18,
         prefAgeMax: 99,
@@ -126,46 +158,45 @@ export async function POST(req: NextRequest) {
 
     const token = await createToken(newUser.id);
 
-    // 🎁 Si parrainé : appliquer la récompense (Premium 7 jours aux 2)
     if (referrer) {
       applyReferralReward(referrer.id, newUser.id).catch((err) => {
         console.error("Erreur applyReferralReward:", err);
       });
     }
 
-    // 📧 Email de bienvenue (async, ne bloque pas)
     sendWelcomeEmail(email, firstName).catch((err) => {
       console.error("Erreur envoi email bienvenue:", err);
     });
 
-    // 🔥 META CAPI - CompleteRegistration
     const metaEventId = clientEventId || generateEventId();
-    
+
     try {
       const clientIp = getClientIp(req as any);
-      const capiUserAgent = req.headers.get('user-agent') || undefined;
-      const fbp = req.cookies.get('_fbp')?.value;
-      const fbc = req.cookies.get('_fbc')?.value;
-      const referer = req.headers.get('referer');
-      const eventSourceUrl = referer || `${process.env.NEXT_PUBLIC_SITE_URL || 'https://lovelink237.com'}/register`;
+      const capiUserAgent = req.headers.get("user-agent") || undefined;
+      const fbp = req.cookies.get("_fbp")?.value;
+      const fbc = req.cookies.get("_fbc")?.value;
+      const referer = req.headers.get("referer");
+      const eventSourceUrl =
+        referer ||
+        `${process.env.NEXT_PUBLIC_SITE_URL || "https://lovelink237.com"}/register`;
 
       await sendMetaEvent({
-        eventName: 'CompleteRegistration',
+        eventName: "CompleteRegistration",
         eventId: metaEventId,
         eventSourceUrl,
         userData: {
-          email: email,
-          firstName: firstName,
-          lastName: lastName,
-          country: 'sn',
+          email,
+          firstName,
+          lastName,
+          country: "sn",
           clientIpAddress: clientIp,
           clientUserAgent: capiUserAgent,
-          fbp: fbp,
-          fbc: fbc,
+          fbp,
+          fbc,
         },
         customData: {
-          content_name: 'Inscription LoveLink',
-        }
+          content_name: "Inscription LoveLink",
+        },
       });
     } catch (capiError) {
       console.error("[Meta CAPI] Erreur CompleteRegistration:", capiError);
@@ -191,16 +222,15 @@ export async function POST(req: NextRequest) {
       path: "/",
     });
 
-    // ✅ LOG : Succès 200 - inscription réussie
     logApiCall({
       endpoint,
       method,
       statusCode: 200,
       durationMs: Date.now() - startTime,
       userId: newUser.id,
-      errorMessage: referrer 
-        ? `Inscription réussie (parrainage: ${providedReferralCode})` 
-        : "Inscription réussie",
+      errorMessage: referrer
+        ? `Inscription tunnel OK (parrainage: ${providedReferralCode})`
+        : "Inscription tunnel OK",
       userAgent,
       ipAddress,
     });
@@ -210,7 +240,6 @@ export async function POST(req: NextRequest) {
     console.error("Registration error:", error);
     const errorMessage = error instanceof Error ? error.message : String(error);
 
-    // ✅ LOG : Erreur 500 - erreur serveur
     logApiCall({
       endpoint,
       method,
