@@ -186,46 +186,40 @@ export function getPaymentUrls(merchantTransactionId: string) {
 }
 
 // ============================================
-// 💰 TARIFS PREMIUM (Option B)
+// 💰 TARIFS PREMIUM & BOOSTS
 // ============================================
 export const PREMIUM_PRICING = {
   premium: {
     monthly: 2500,   // 2 500 FCFA/mois
-    yearly: 21000,   // 21 000 FCFA/an (-30%)
+    yearly: 21000,   // 21 000 FCFA/an
   },
   gold: {
     monthly: 5000,   // 5 000 FCFA/mois
-    yearly: 42000,   // 42 000 FCFA/an (-30%)
+    yearly: 42000,   // 42 000 FCFA/an
   },
 } as const;
 
-export type PremiumPlan = "premium" | "gold";
-export type BillingPeriod = "monthly" | "yearly";
+export const BOOST_PRICING = {
+  "24h": 1500, // 1 500 FCFA
+  "3d": 3000,  // 3 000 FCFA
+  "7d": 5000,  // 5 000 FCFA
+} as const;
 
-/**
- * Retourne le montant en FCFA pour un plan + période
- */
+export type PremiumPlan = "premium" | "gold" | "boost"; // ✅ On ajoute "boost"
+export type BillingPeriod = "monthly" | "yearly" | "24h" | "3d" | "7d";
+
 export function getPremiumPrice(plan: PremiumPlan, period: BillingPeriod): number {
-  return PREMIUM_PRICING[plan][period];
-}
-
-/**
- * Calcule la date d'expiration à partir d'aujourd'hui
- */
-export function getSubscriptionExpiryDate(period: BillingPeriod): Date {
-  const now = new Date();
-  if (period === "monthly") {
-    now.setMonth(now.getMonth() + 1);
-  } else {
-    now.setFullYear(now.getFullYear() + 1);
+  if (plan === "boost") {
+    return BOOST_PRICING[period as keyof typeof BOOST_PRICING];
   }
-  return now;
+  return PREMIUM_PRICING[plan as "premium" | "gold"][period as "monthly" | "yearly"];
 }
 
-/**
- * Retourne un libellé pour la désignation PayDunya
- */
 export function getPaymentDesignation(plan: PremiumPlan, period: BillingPeriod): string {
+  if (plan === "boost") {
+    const labels = { "24h": "24 heures", "3d": "3 jours", "7d": "7 jours" };
+    return `LoveLink Boost - ${labels[period as keyof typeof labels]}`;
+  }
   const planLabel = plan === "premium" ? "Premium" : "Gold";
   const periodLabel = period === "monthly" ? "1 mois" : "1 an";
   return `LoveLink ${planLabel} - ${periodLabel}`;
