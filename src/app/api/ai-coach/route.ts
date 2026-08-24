@@ -1,6 +1,39 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUserId } from "@/lib/auth";
 
+const GROQ_API_KEY = process.env.GROQ_API_KEY || "";
+
+async function callGroqAI(messages: { role: string; content: string }[]) {
+  if (!GROQ_API_KEY) return null;
+
+  try {
+    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${GROQ_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: "llama-3.3-70b-versatile",
+        messages,
+        temperature: 0.7,
+        max_tokens: 300,
+      }),
+    });
+
+    if (!res.ok) {
+      console.error("Groq API error status:", res.status);
+      return null;
+    }
+
+    const data = await res.json();
+    return data.choices?.[0]?.message?.content || null;
+  } catch (err) {
+    console.error("Groq API fetch error:", err);
+    return null;
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const userId = await getCurrentUserId();
@@ -9,70 +42,101 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { action, targetName, targetCity, userGender } = body as {
-      action: "bio" | "icebreaker" | "advice";
+    const { action, targetName, targetCity, userGender, userPrompt } = body as {
+      action: "bio" | "icebreaker" | "advice" | "chat";
       targetName?: string;
       targetCity?: string;
       userGender?: string;
+      userPrompt?: string;
     };
 
     const name = targetName?.trim() || "la personne";
-    const city = targetCity?.trim() || "ta ville";
+    const city = targetCity?.trim() || "Cameroun";
 
-    // 1. 💬 SUGGESTIONS D'ACCROCHE DÉCONTRACTÉES PAR Gabi  AI
+    // SYSTEM PROMPT GLOBAL DE GABI AI
+    const systemPrompt = `Tu es Gabi AI, le coach virtuel officiel en séduction de l'application de rencontre LoveLink au Cameroun et en Afrique francophone.
+Ton rôle est de donner des conseils de drague drôles, bienveillants, polis et ultra efficaces adaptés à la culture locale (Yaoundé, Douala, Dakar, Abidjan).
+Réponds en français, avec un ton dynamique, chaleureux et complice (utilise des émojis). Sois concis (maximum 3 phrases courtes).`;
+
+    // 💬 1. DISCUSSION LIBRE AVEC GABI AI (POUR LA MODALE FLOTTANTE)
+    if (action === "chat" || userPrompt) {
+      const messages = [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt || "Donne-moi un conseil de drague rapide." },
+      ];
+
+      const aiResponse = await callGroqAI(messages);
+
+      if (aiResponse) {
+        return NextResponse.json({ coachName: "Gabi AI", advice: aiResponse });
+      }
+    }
+
+    // 💬 2. ACCROCHES POUR MESSAGERIE
     if (action === "icebreaker") {
-      const icebreakers = [
-        `Salut ${name} ! J'ai vu que tu es à ${city}. C'est quoi ton coin préféré pour prendre un bon verre tranquilement ? 😊`,
-        `Coucou ${name} ! Ton sourire sur ta photo m'a direct tapé dans l'œil ! Tu fais quoi de beau aujourd'hui ? ✨`,
-        `Salut ${name} ! Si on devait organiser notre premier date idéal à ${city}, tu choisirais quoi : resto, glace ou balade ? 🍕🍦`,
-        `Franchement ${name}, ton profil a trop de charme. On parie que j'arrive à te faire rire en moins de 3 messages ? 😉`,
+      const messages = [
+        { role: "system", content: systemPrompt },
+        {
+          role: "user",
+          content: `Propose-moi 3 phrases d'accroche originales et séduisantes pour engager la conversation avec ${name} qui vit à ${city}. Renvoie uniquement les 3 phrases séparées par une ligne.`,
+        },
       ];
 
-      // Choisir 3 suggestions aléatoires
-      const shuffled = icebreakers.sort(() => 0.5 - Math.random());
-      return NextResponse.json({
-        coachName: "Gabi  AI",
-        suggestions: shuffled.slice(0, 3)
-      });
+      const aiResponse = await callGroqAI(messages);
+
+      if (aiResponse) {
+        const suggestions = aiResponse
+          .split("\n")
+          .map((s) => s.replace(/^[0-9.-]+\s*/, "").trim())
+          .filter((s) => s.length > 5)
+          .slice(0, 3);
+
+        if (suggestions.length > 0) {
+          return NextResponse.json({ coachName: "Gabi AI", suggestions });
+        }
+      }
+
+      // Fallback si pas de clé Groq
+      const fallbackSuggestions = [
+        `Salut ${name} ! J'ai vu que tu es à ${city}. C'est quoi ton endroit préféré pour prendre un verre au calme ? 😊`,
+        `Coucou ${name} ! Ton profil m'a direct fait sourire ! Tu fais quoi de beau dans la vie ? ✨`,
+        `Salut ${name} ! Si on devait organiser notre premier date idéal, tu choisirais quoi ? 🍕☕`,
+      ];
+      return NextResponse.json({ coachName: "Gabi AI", suggestions: fallbackSuggestions });
     }
 
-    // 2. 🪄 GÉNÉRATEUR DE BIO IRRESTISTIBLE PAR Gabi  AI
+    // 🪄 3. GÉNÉRATEUR DE BIO
     if (action === "bio") {
-      const isMale = userGender === "male";
-      const maleBios = [
-        `Un bon équilibre entre ambition, humour et simplicité. Basé à ${city}, j'aime les discussions vraies et les bons moments. On se capte autour d'un verre ? ☕✨`,
-        `Souriant, passionné et respectueux. Ici pour faire une belle rencontre sincère. Si tu aimes rire et partager de bons plats, fais-moi signe ! 😊`,
+      const messages = [
+        { role: "system", content: systemPrompt },
+        {
+          role: "user",
+          content: `Rédige une bio de profil de rencontre courte, attirante et drôle pour un/une célibataire ${userGender === "male" ? "homme" : "femme"} à ${city}. Maximum 2 phrases avec émojis.`,
+        },
       ];
 
-      const femaleBios = [
-        `Simple, pétillante et avec une bonne dose de positivité. Basée à ${city}, je cherche une belle complicité sincère, sans prise de tête. 💕`,
-        `Une touche d'humour, un grand cœur et de beaux projets. Viens me dire bonjour, je ne mords pas ! 😉✨`,
-      ];
-
-      const bios = isMale ? maleBios : femaleBios;
-      const randomBio = bios[Math.floor(Math.random() * bios.length)];
-
-      return NextResponse.json({
-        coachName: "Gabi  AI",
-        bio: randomBio
-      });
+      const aiResponse = await callGroqAI(messages);
+      if (aiResponse) {
+        return NextResponse.json({ coachName: "Gabi AI", bio: aiResponse });
+      }
     }
 
-    // 3. 💡 CONSEILS DE DRAGUE PAR Gabi  AI
-    const adviceList = [
-      "💡 **Conseil de Gabi  AI :** Évite le simple 'Cc ça va ?'. Relance sur sa ville ou sa photo pour te démarquer !",
-      "💡 **Conseil de Gabi  AI :** L'humour et la politesse sont tes meilleurs atouts pour obtenir une réponse rapide.",
-      "💡 **Conseil de Gabi  AI :** N'attends pas 2 semaines ! Propose un vocal ou un appel court dès que le feeling passe bien.",
+    // 💡 4. CONSEILS PAR DÉFAUT
+    const messages = [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: "Donne-moi un conseil du jour original pour réussir sur l'application de rencontre." },
     ];
 
-    const randomAdvice = adviceList[Math.floor(Math.random() * adviceList.length)];
-    return NextResponse.json({
-      coachName: "Gabi  AI",
-      advice: randomAdvice
-    });
+    const aiAdvice = await callGroqAI(messages);
 
+    return NextResponse.json({
+      coachName: "Gabi AI",
+      advice:
+        aiAdvice ||
+        "💡 **Conseil de Gabi AI :** La spontanéité est la meilleure clé ! Ne tarde pas trop avant d'envoyer une note vocale ou de proposer un date.",
+    });
   } catch (error) {
-    console.error("Gabi  AI error:", error);
-    return NextResponse.json({ error: "Erreur Gabi  AI" }, { status: 500 });
+    console.error("Gabi AI error:", error);
+    return NextResponse.json({ error: "Erreur Gabi AI" }, { status: 500 });
   }
 }
