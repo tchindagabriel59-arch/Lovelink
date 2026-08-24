@@ -273,7 +273,7 @@ function MessagesContent() {
       }
     } catch {
       // silent
-    } flex-shrink-0 {
+    } finally {
       setLoadingMatches(false);
     }
   }, []);
