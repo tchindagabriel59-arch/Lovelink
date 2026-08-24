@@ -227,10 +227,10 @@ function MessagesContent() {
   const [filterTab, setFilterTab] = useState<FilterTab>("all");
   const [searchQuery, setSearchQuery] = useState("");
 
-  // 🤖 Gabi AI
-  const [showGabiModal, setShowGabiModal] = useState(false);
-  const [GabiSuggestions, setGabiSuggestions] = useState<string[]>([]);
-  const [loadingGabi, setLoadingGabi] = useState(false);
+  // 🤖 GABI AI
+  const [showNdoloModal, setShowNdoloModal] = useState(false);
+  const [ndoloSuggestions, setNdoloSuggestions] = useState<string[]>([]);
+  const [loadingNdolo, setLoadingNdolo] = useState(false);
 
   // 🎙️ VOCAUX
   const [isRecording, setIsRecording] = useState(false);
@@ -345,11 +345,11 @@ function MessagesContent() {
     }
   }, [chatMessages, scrollToBottom]);
 
-  // 🤖 DEMANDER ACCROCHES À Gabi AI
-  const getGabiSuggestions = async () => {
+  // 🤖 DEMANDER ACCROCHES À GABI AI
+  const getNdoloSuggestions = async () => {
     if (!otherUser) return;
-    setLoadingGabi(true);
-    setShowGabiModal(true);
+    setLoadingNdolo(true);
+    setShowNdoloModal(true);
 
     try {
       const res = await fetch("/api/ai-coach", {
@@ -364,18 +364,18 @@ function MessagesContent() {
 
       if (res.ok) {
         const data = await res.json();
-        setGabiSuggestions(data.suggestions || []);
+        setNdoloSuggestions(data.suggestions || []);
       }
     } catch (err) {
       console.error(err);
     } finally {
-      setLoadingGabi(false);
+      setLoadingNdolo(false);
     }
   };
 
-  const applyGabiSuggestion = (text: string) => {
+  const applyNdoloSuggestion = (text: string) => {
     setNewMessage(text);
-    setShowGabiModal(false);
+    setShowNdoloModal(false);
   };
 
   // 🎙️ RECORDING VOCAL
@@ -760,8 +760,8 @@ function MessagesContent() {
             <div ref={messagesEndRef} />
           </div>
 
-          {/* 🤖 PANNEAU DE SUGGESTIONS Gabi AI */}
-          {showGabiModal && (
+          {/* 🤖 PANNEAU DE SUGGESTIONS GABI AI */}
+          {showNdoloModal && (
             <div className="p-4 bg-gradient-to-r from-purple-900 to-indigo-900 text-white border-t border-purple-700/50 rounded-t-3xl shadow-2xl relative animate-in slide-in-from-bottom duration-200 z-20">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
@@ -770,24 +770,24 @@ function MessagesContent() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => setShowGabiModal(false)}
+                  onClick={() => setShowNdoloModal(false)}
                   className="text-slate-400 hover:text-white text-xs font-bold"
                 >
                   ✖
                 </button>
               </div>
 
-              {loadingGabi ? (
+              {loadingNdolo ? (
                 <p className="text-xs text-slate-300 animate-pulse py-3 text-center">
                   ✨ Gabi AI cherche une superbe accroche pour {otherUser?.firstName}...
                 </p>
               ) : (
                 <div className="space-y-2">
-                  {GabiSuggestions.map((suggestion, idx) => (
+                  {ndoloSuggestions.map((suggestion, idx) => (
                     <button
                       key={idx}
                       type="button"
-                      onClick={() => applyGabiSuggestion(suggestion)}
+                      onClick={() => applyNdoloSuggestion(suggestion)}
                       className="w-full text-left p-3 rounded-2xl bg-white/10 hover:bg-white/20 border border-white/10 text-xs text-slate-100 transition flex items-center justify-between group"
                     >
                       <span>{suggestion}</span>
@@ -848,34 +848,35 @@ function MessagesContent() {
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={uploadingImage}
-                  className="p-2.5 rounded-full text-slate-400 hover:bg-slate-100 transition disabled:opacity-50"
+                  className="p-2.5 rounded-full text-slate-400 hover:bg-slate-100 transition disabled:opacity-50 flex-shrink-0"
                 >
                   <ImageIcon className="w-5 h-5" />
                 </button>
 
-                {/* 🤖 BOUTON Gabi AI */}
+                {/* 🤖 BOUTON GABI AI */}
                 <button
                   type="button"
-                  onClick={getGabiSuggestions}
-                  className="p-2.5 rounded-full bg-gradient-to-r from-purple-600 to-indigo-600 text-amber-300 hover:scale-105 transition shadow-md flex items-center gap-1 text-xs font-bold"
+                  onClick={getNdoloSuggestions}
+                  className="p-2.5 rounded-full bg-gradient-to-r from-purple-600 to-indigo-600 text-amber-300 hover:scale-105 transition shadow-md flex items-center gap-1 text-xs font-bold flex-shrink-0"
                   title="Conseils Gabi AI"
                 >
                   <Sparkles className="w-4 h-4 text-amber-300" />
                   <span className="hidden sm:inline">Gabi AI</span>
                 </button>
 
-                <div className="flex-1 flex items-center bg-slate-100 rounded-full px-2">
+                {/* ZONE DE TEXTE */}
+                <div className="flex-1 flex items-center bg-slate-100 rounded-full px-2 min-w-0">
                   <input
                     type="text"
                     value={newMessage}
                     onChange={(e) => setNewMessage(e.target.value)}
                     placeholder="Écris ton message..."
-                    className="flex-1 px-3 py-3 bg-transparent text-sm outline-none placeholder:text-slate-400"
+                    className="flex-1 px-3 py-3 bg-transparent text-sm outline-none placeholder:text-slate-400 min-w-0"
                   />
                   <button
                     type="button"
                     onClick={() => setShowEmojis(!showEmojis)}
-                    className="p-2 text-slate-400 hover:text-slate-600"
+                    className="p-2 text-slate-400 hover:text-slate-600 flex-shrink-0"
                   >
                     <Smile className="w-5 h-5" />
                   </button>
@@ -885,7 +886,7 @@ function MessagesContent() {
                 <button
                   type="button"
                   onClick={startRecording}
-                  className={`p-3 rounded-full transition shadow-md ${
+                  className={`p-3 rounded-full transition shadow-md flex-shrink-0 ${
                     user?.isPremium
                       ? "bg-gradient-to-r from-rose-500 to-purple-600 text-white hover:scale-105"
                       : "bg-slate-200 text-slate-400"
@@ -895,15 +896,15 @@ function MessagesContent() {
                   <Mic className="w-5 h-5" />
                 </button>
 
-                {newMessage.trim() && (
-                  <button
-                    type="submit"
-                    disabled={sending}
-                    className="w-11 h-11 rounded-full flex items-center justify-center text-white bg-gradient-to-r from-rose-500 to-purple-600 hover:scale-105 transition shadow-md"
-                  >
-                    <Send className="w-4 h-4" />
-                  </button>
-                )}
+                {/* ✈️ BOUTON ENVOYER (TOUJOURS VISIBLE) */}
+                <button
+                  type="submit"
+                  disabled={!newMessage.trim() || sending}
+                  className="w-11 h-11 rounded-full flex items-center justify-center text-white bg-gradient-to-r from-rose-500 to-purple-600 hover:scale-105 transition shadow-md flex-shrink-0 disabled:opacity-40 disabled:hover:scale-100"
+                  title="Envoyer le message"
+                >
+                  <Send className="w-4 h-4" />
+                </button>
               </div>
             )}
           </form>
