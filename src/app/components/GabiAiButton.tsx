@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { usePathname } from "next/navigation";
 import { Sparkles, X, Send, Bot } from "lucide-react";
 
@@ -16,10 +16,75 @@ export default function GabiAiButton() {
   ]);
   const [inputPrompt, setInputPrompt] = useState("");
 
-  // 🙈 MASQUER LE BOUTON SUR LA PAGE DISCOVER
-  if (pathname === "/discover") {
+  // 📍 ÉTATS POUR RENDRE LE BOUTON DÉPLAÇABLE (DRAGGABLE)
+  const [position, setPosition] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const posStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const hasDraggedRef = useRef(false);
+
+  // 🙈 MASQUER SUR /discover ET /messages (car /messages a déjà le bouton dans la barre)
+  if (pathname === "/discover" || pathname === "/messages") {
     return null;
   }
+
+  // GESTION DU GLISSER SUR MOBILE (TOUCH)
+  const handleTouchStart = (e: React.TouchEvent) => {
+    const touch = e.touches[0];
+    setIsDragging(true);
+    hasDraggedRef.current = false;
+    dragStartRef.current = { x: touch.clientX, y: touch.clientY };
+    posStartRef.current = { ...position };
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!isDragging) return;
+    const touch = e.touches[0];
+    const dx = touch.clientX - dragStartRef.current.x;
+    const dy = touch.clientY - dragStartRef.current.y;
+    if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
+      hasDraggedRef.current = true;
+    }
+    setPosition({
+      x: posStartRef.current.x + dx,
+      y: posStartRef.current.y + dy,
+    });
+  };
+
+  const handleTouchEnd = () => {
+    setIsDragging(false);
+  };
+
+  // GESTION DU GLISSER SUR PC (SOURIS)
+  const handleMouseDown = (e: React.MouseEvent) => {
+    setIsDragging(true);
+    hasDraggedRef.current = false;
+    dragStartRef.current = { x: e.clientX, y: e.clientY };
+    posStartRef.current = { ...position };
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging) return;
+    const dx = e.clientX - dragStartRef.current.x;
+    const dy = e.clientY - dragStartRef.current.y;
+    if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
+      hasDraggedRef.current = true;
+    }
+    setPosition({
+      x: posStartRef.current.x + dx,
+      y: posStartRef.current.y + dy,
+    });
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  const handleButtonClick = () => {
+    if (!hasDraggedRef.current) {
+      setIsOpen(true);
+    }
+  };
 
   const handleSendMessage = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -58,16 +123,32 @@ export default function GabiAiButton() {
 
   return (
     <>
-      {/* 🤖 BOUTON FLOTTANT (Caché sur /discover, visible au scroll sur le reste) */}
-      <button
-        type="button"
-        onClick={() => setIsOpen(true)}
-        className="fixed bottom-20 right-4 lg:bottom-8 lg:right-8 z-[60] bg-gradient-to-r from-purple-600 via-rose-500 to-indigo-600 text-amber-300 p-3.5 rounded-full shadow-2xl hover:scale-110 hover:shadow-purple-500/40 transition-all duration-300 flex items-center gap-2 border-2 border-amber-300/50 group"
-        title="Discuter avec Gabi AI"
+      {/* 🤖 BOUTON FLOTTANT DÉPLAÇABLE À LA MAIN / SOURIS */}
+      <div
+        style={{
+          transform: `translate(${position.x}px, ${position.y}px)`,
+          touchAction: "none",
+        }}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        className="fixed bottom-24 right-4 lg:bottom-8 lg:right-8 z-[60] cursor-grab active:cursor-grabbing select-none"
       >
-        <Sparkles className="w-6 h-6 text-amber-300 group-hover:rotate-12 transition" />
-        <span className="text-xs font-black text-white pr-1 hidden sm:inline">Gabi AI</span>
-      </button>
+        <button
+          type="button"
+          onClick={handleButtonClick}
+          className="bg-gradient-to-r from-purple-600 via-rose-500 to-indigo-600 text-amber-300 p-3.5 rounded-full shadow-2xl hover:scale-110 transition-transform flex items-center gap-2 border-2 border-amber-300/50 group"
+          title="Glisse-moi pour me déplacer !"
+        >
+          <Sparkles className="w-6 h-6 text-amber-300 pointer-events-none" />
+          <span className="text-xs font-black text-white pr-1 hidden sm:inline pointer-events-none">
+            Gabi AI
+          </span>
+        </button>
+      </div>
 
       {/* 💬 CHAT MODAL GABI AI */}
       {isOpen && (
@@ -123,7 +204,7 @@ export default function GabiAiButton() {
                 <div className="flex justify-start">
                   <div className="bg-slate-800 px-4 py-3 rounded-2xl rounded-bl-none border border-slate-700/80 text-xs text-amber-300 flex items-center gap-2">
                     <Sparkles className="w-4 h-4 animate-spin" />
-                    <span>Gabi AI tape sa réponse...</span>
+                    <span>Gabi AI réfléchit...</span>
                   </div>
                 </div>
               )}
