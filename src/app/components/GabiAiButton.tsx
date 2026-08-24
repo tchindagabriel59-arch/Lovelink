@@ -18,10 +18,12 @@ export default function GabiAiButton() {
       });
       const data = await res.json();
       if (res.ok) {
-        setAdvice(data.advice);
+        setAdvice(data.advice || data.message || "Voici mon conseil !");
+      } else {
+        setAdvice("Gabi AI est un peu occupé. Réessaie dans un instant ✨");
       }
-    } catch (err) {
-      console.error(err);
+    } catch {
+      setAdvice("Impossible de joindre Gabi AI pour le moment.");
     } finally {
       setLoading(false);
     }
@@ -34,21 +36,21 @@ export default function GabiAiButton() {
 
   return (
     <>
-      {/* 🤖 BOUTON FLOTTANT GABI AI */}
+      {/* Bouton flottant — reste visible au scroll */}
       <button
+        type="button"
         onClick={handleOpen}
-        className="fixed bottom-24 right-6 lg:bottom-8 lg:right-8 z-50 bg-gradient-to-r from-purple-600 to-indigo-600 text-amber-300 p-4 rounded-full shadow-2xl hover:scale-110 hover:shadow-purple-500/50 transition-all duration-300 flex items-center justify-center animate-bounce-slow"
-        style={{ animationDuration: '3s' }}
+        className="fixed bottom-24 right-5 lg:bottom-8 lg:right-8 z-[60] bg-gradient-to-r from-purple-600 to-indigo-600 text-amber-300 p-4 rounded-full shadow-2xl hover:scale-110 hover:shadow-purple-500/40 transition-all duration-300 flex items-center justify-center"
         title="Demander conseil à Gabi AI"
       >
         <Sparkles className="w-6 h-6" />
       </button>
 
-      {/* 🤖 MODALE GABI AI */}
       {isOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-slate-900 border border-purple-500/30 rounded-3xl p-6 max-w-sm w-full shadow-2xl relative animate-in zoom-in-95">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="bg-slate-900 border border-purple-500/30 rounded-3xl p-6 max-w-sm w-full shadow-2xl relative">
             <button
+              type="button"
               onClick={() => setIsOpen(false)}
               className="absolute top-4 right-4 text-slate-400 hover:text-white transition"
             >
@@ -61,7 +63,9 @@ export default function GabiAiButton() {
               </div>
               <div>
                 <h3 className="font-black text-xl text-white">Gabi AI</h3>
-                <p className="text-xs text-purple-300 font-bold">Ton coach en séduction</p>
+                <p className="text-xs text-purple-300 font-bold">
+                  Ton coach en séduction
+                </p>
               </div>
             </div>
 
@@ -72,15 +76,18 @@ export default function GabiAiButton() {
                   <span className="text-slate-400">Gabi AI réfléchit...</span>
                 </div>
               ) : (
-                <p className="leading-relaxed">{advice || "Impossible de joindre Gabi AI pour le moment."}</p>
+                <p className="leading-relaxed text-center">
+                  {advice || "Clique sur « Autre conseil » pour commencer ✨"}
+                </p>
               )}
             </div>
 
-            <div className="mt-6 flex gap-3">
+            <div className="mt-6">
               <button
+                type="button"
                 onClick={getAdvice}
                 disabled={loading}
-                className="flex-1 bg-white/10 hover:bg-white/20 text-white font-bold py-3 px-4 rounded-xl transition flex items-center justify-center gap-2 text-sm"
+                className="w-full bg-white/10 hover:bg-white/20 text-white font-bold py-3 px-4 rounded-xl transition flex items-center justify-center gap-2 text-sm disabled:opacity-50"
               >
                 <MessageCircle className="w-4 h-4" />
                 Autre conseil
