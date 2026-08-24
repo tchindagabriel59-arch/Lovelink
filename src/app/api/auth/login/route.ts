@@ -3,39 +3,59 @@ import { db } from "@/db";
 import { users } from "@/db/schema";
 import { eq, or } from "drizzle-orm";
 import bcrypt from "bcryptjs";
-import { setAuthCookie } from "@/lib/auth";
+import { createToken } from "@/lib/auth";
 import { logApiCall } from "@/lib/api-logger";
 
 export async function POST(req: NextRequest) {
   const startTime = Date.now();
   const endpoint = "/api/auth/login";
   const method = "POST";
+  const userAgent = req.headers.get("user-agent") || undefined;
+  const ipAddress =
+    req.headers.get("x-forwarded-for")?.split(",")[0].trim() ||
+    req.headers.get("x-real-ip") ||
+    undefined;
 
   try {
     const body = await req.json();
-    const { email: identifierInput, password } = body;
+    const { email: rawEmail, phone: rawPhone, identifier, password } = body;
 
-    if (!identifierInput || !password) {
+    const inputIdentifier = (rawEmail || rawPhone || identifier || "").trim();
+
+    if (!inputIdentifier || !password) {
+      logApiCall({
+        endpoint,
+        method,
+        statusCode: 400,
+        durationMs: Date.now() - startTime,
+        errorMessage: "Identifiant ou mot de passe manquant",
+        userAgent,
+        ipAddress,
+      });
+
       return NextResponse.json(
         { error: "Identifiant et mot de passe requis" },
         { status: 400 }
       );
     }
 
-    const cleanInput = identifierInput.trim().toLowerCase();
-    // Nettoyage du numéro de téléphone (enlève les espaces, tirets)
-    const cleanPhone = identifierInput.replace(/[\s\-\+\(\)]/g, "");
+    const cleanInput = inputIdentifier.toLowerCase();
+    const cleanPhoneDigits = inputIdentifier.replace(/[\s\-\+\(\)]/g, "");
+    const formattedPhone = cleanPhoneDigits.startsWith("237")
+      ? cleanPhoneDigits
+      : `237${cleanPhoneDigits}`;
 
-    // Recherche de l'utilisateur par EMAIL OU par NUMÉRO DE TÉLÉPHONE
+    // Recherche de l'utilisateur par EMAIL OU par TÉLÉPHONE (formats variés)
     const [user] = await db
       .select()
       .from(users)
       .where(
         or(
           eq(users.email, cleanInput),
-          eq(users.phone, cleanInput),
-          eq(users.phone, cleanPhone),
-          eq(users.phone, `+${cleanPhone}`)
+          eq(users.phone, inputIdentifier),
+          eq(users.phone, cleanPhoneDigits),
+          eq(users.phone, formattedPhone),
+          eq(users.email, `phone_${cleanPhoneDigits}@phone.lovelink237.com`)
         )
       )
       .limit(1);
@@ -47,6 +67,8 @@ export async function POST(req: NextRequest) {
         statusCode: 401,
         durationMs: Date.now() - startTime,
         errorMessage: `Identifiant introuvable : ${cleanInput}`,
+        userAgent,
+        ipAddress,
       });
 
       return NextResponse.json(
@@ -66,6 +88,8 @@ export async function POST(req: NextRequest) {
         durationMs: Date.now() - startTime,
         userId: user.id,
         errorMessage: `Mot de passe incorrect pour user ${user.id}`,
+        userAgent,
+        ipAddress,
       });
 
       return NextResponse.json(
@@ -74,14 +98,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Mettre à jour l'état "En ligne"
+    // Mettre à jour le statut "En ligne"
     await db
       .update(users)
       .set({ isOnline: true, lastSeen: new Date() })
       .where(eq(users.id, user.id));
 
-    // Créer le cookie de session
-    await setAuthCookie(user.id);
+    // Création du Token de session
+    const token = await createToken(user.id);
 
     logApiCall({
       endpoint,
@@ -90,9 +114,11 @@ export async function POST(req: NextRequest) {
       durationMs: Date.now() - startTime,
       userId: user.id,
       errorMessage: `Connexion réussie user ${user.id}`,
+      userAgent,
+      ipAddress,
     });
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       user: {
         id: user.id,
@@ -101,8 +127,31 @@ export async function POST(req: NextRequest) {
         phone: user.phone,
       },
     });
+
+    // Sauvegarde du cookie de session auth_token
+    response.cookies.set("auth_token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 60 * 60 * 24 * 7,
+      path: "/",
+    });
+
+    return response;
   } catch (error) {
     console.error("Login error:", error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+
+    logApiCall({
+      endpoint,
+      method,
+      statusCode: 500,
+      durationMs: Date.now() - startTime,
+      errorMessage,
+      userAgent,
+      ipAddress,
+    });
+
     return NextResponse.json(
       { error: "Erreur lors de la connexion" },
       { status: 500 }
