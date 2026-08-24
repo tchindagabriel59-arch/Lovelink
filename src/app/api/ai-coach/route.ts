@@ -11,11 +11,11 @@ async function callGroqAI(messages: { role: string; content: string }[]) {
     throw new Error("La clé GROQ_API_KEY n'est pas configurée dans les variables Vercel.");
   }
 
-  // Modèles officiels et actifs sur Groq Cloud
+  // 🎯 MODÈLES VALIDES ET ACTIFS SUR GROQ (TOUS LES ANCIENS MODÈLES SUPPRIMÉS ONT ÉTÉ RETIRÉS)
   const models = [
+    "llama-3.3-70b-versatile",
     "llama-3.1-8b-instant",
-    "llama3-70b-8192",
-    "mixtral-8x7b-32768",
+    "gemma2-9b-it",
   ];
 
   let lastErr = "";
