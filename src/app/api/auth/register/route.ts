@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { users } from "@/db/schema";
-import { eq, or } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { createToken } from "@/lib/auth";
 import { sendWelcomeEmail } from "@/lib/emails";
@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
     const { 
       email: rawEmail, 
       phone: rawPhone,
-      identifier, // Champ unifié optionnel
+      identifier,
       password, 
       firstName, 
       lastName, 
@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
       referralCode: providedReferralCode,
     } = body;
 
-    // 1. Déterminer si l'entrée est un Email ou un Numéro de téléphone
+    // 1. Identification de l'identifiant (Email ou Numéro de téléphone)
     const inputIdentifier = (rawEmail || rawPhone || identifier || "").trim();
 
     if (!inputIdentifier || !password || !firstName || !birthDate || !gender) {
@@ -80,7 +80,7 @@ export async function POST(req: NextRequest) {
       });
 
       return NextResponse.json(
-        { error: "Tous les champs obligatoires sont requis (Email/Téléphone, Mot de passe, Prénom, Date de naissance, Genre)" },
+        { error: "Tous les champs obligatoires sont requis" },
         { status: 400 }
       );
     }
@@ -92,10 +92,9 @@ export async function POST(req: NextRequest) {
     if (isEmail) {
       finalEmail = inputIdentifier.toLowerCase().trim();
     } else {
-      // Nettoyage du numéro de téléphone
       const cleanPhoneDigits = inputIdentifier.replace(/[\s\-\+\(\)]/g, "");
       finalPhone = cleanPhoneDigits.startsWith("237") ? cleanPhoneDigits : `237${cleanPhoneDigits}`;
-      // Fallback Email interne pour respecter la contrainte UNIQUE / NOT NULL PostgreSQL
+      // Format d'e-mail interne dérivé du numéro de téléphone
       finalEmail = `phone_${cleanPhoneDigits}@phone.lovelink237.com`;
     }
 
@@ -111,34 +110,26 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Genre invalide" }, { status: 400 });
     }
 
-    // 2. Vérification des doublons (Email OU Téléphone)
-    const existingChecks = [eq(users.email, finalEmail)];
-    if (finalPhone) {
-      existingChecks.push(eq(users.phone, finalPhone));
-    }
-
+    // 2. Vérification des doublons via l'email (réel ou dérivé du numéro)
     const existing = await db
       .select()
       .from(users)
-      .where(or(...existingChecks))
+      .where(eq(users.email, finalEmail))
       .limit(1);
 
     if (existing.length > 0) {
-      const match = existing[0];
-      const isPhoneMatch = finalPhone && match.phone === finalPhone;
-      
       logApiCall({
         endpoint,
         method,
         statusCode: 409,
         durationMs: Date.now() - startTime,
-        errorMessage: isPhoneMatch ? `Téléphone déjà utilisé : ${finalPhone}` : `Email déjà utilisé : ${finalEmail}`,
+        errorMessage: isEmail ? `Email déjà utilisé : ${finalEmail}` : `Téléphone déjà utilisé : ${finalPhone}`,
         userAgent,
         ipAddress,
       });
 
       return NextResponse.json(
-        { error: isPhoneMatch ? "Ce numéro de téléphone est déjà utilisé" : "Cet email est déjà utilisé" },
+        { error: isEmail ? "Cet email est déjà utilisé" : "Ce numéro de téléphone est déjà utilisé" },
         { status: 409 }
       );
     }
@@ -155,12 +146,11 @@ export async function POST(req: NextRequest) {
     const validLookingFor = ["relationship", "friendship", "casual", "marriage"] as const;
     const safeLookingFor = validLookingFor.includes(lookingFor) ? lookingFor : "relationship";
 
-    // 3. Insertion en base de données
+    // 3. Insertion de l'utilisateur
     const [newUser] = await db
       .insert(users)
       .values({
         email: finalEmail,
-        phone: finalPhone || null,
         passwordHash,
         firstName: firstName.trim(),
         lastName: (lastName || "").trim(),
@@ -189,7 +179,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // N'envoyer le mail de bienvenue que si c'est un vrai e-mail
+    // Envoyer l'email de bienvenue seulement aux vrais emails
     if (isEmail && !finalEmail.includes("@phone.lovelink237.com")) {
       sendWelcomeEmail(finalEmail, firstName).catch((err) => {
         console.error("Erreur envoi email bienvenue:", err);
@@ -212,7 +202,6 @@ export async function POST(req: NextRequest) {
         eventSourceUrl,
         userData: {
           email: isEmail ? finalEmail : undefined,
-          phone: finalPhone || undefined,
           firstName,
           lastName,
           country: 'cm',
@@ -233,7 +222,6 @@ export async function POST(req: NextRequest) {
       user: {
         id: newUser.id,
         email: newUser.email,
-        phone: newUser.phone,
         firstName: newUser.firstName,
         lastName: newUser.lastName,
         referralCode: newUser.referralCode,
