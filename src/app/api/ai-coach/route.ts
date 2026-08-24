@@ -3,40 +3,63 @@ import { getCurrentUserId } from "@/lib/auth";
 
 const GROQ_API_KEY = process.env.GROQ_API_KEY || "";
 
+// 🤖 APPEL DE L'API GROQ (MODÈLES ACTIFS & ULTRA RAPIDES)
 async function callGroqAI(messages: { role: string; content: string }[]) {
-  if (!GROQ_API_KEY) return null;
-
-  try {
-    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${GROQ_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: "llama-3.3-70b-versatile",
-        messages,
-        temperature: 0.7,
-        max_tokens: 300,
-      }),
-    });
-
-    if (!res.ok) {
-      console.error("Groq API error status:", res.status);
-      return null;
-    }
-
-    const data = await res.json();
-    return data.choices?.[0]?.message?.content || null;
-  } catch (err) {
-    console.error("Groq API fetch error:", err);
+  if (!GROQ_API_KEY) {
+    console.warn("⚠️ GROQ_API_KEY non trouvée dans les variables d'environnement.");
     return null;
   }
+
+  // Liste des modèles actifs sur Groq Cloud (du plus rapide au plus puissant)
+  const activeModels = [
+    "llama-3.1-8b-instant",
+    "llama3-70b-8192",
+    "mixtral-8x7b-32768",
+  ];
+
+  for (const model of activeModels) {
+    try {
+      const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${GROQ_API_KEY.trim()}`,
+        },
+        body: JSON.stringify({
+          model,
+          messages,
+          temperature: 0.7,
+          max_tokens: 300,
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const content = data.choices?.[0]?.message?.content;
+        if (content) return content;
+      } else {
+        const errText = await res.text();
+        console.error(`Groq error for model ${model}:`, res.status, errText);
+      }
+    } catch (err) {
+      console.error(`Fetch error for Groq model ${model}:`, err);
+    }
+  }
+
+  return null;
 }
 
-// 🧠 FALLBACK INTELLIGENT (Si Groq n'est pas encore configuré)
+// 🧠 RÉPONSES INTELLIGENTES DE SECOURS (Si hors-ligne ou clé manquante)
 function getSmartFallback(prompt: string, userGender?: string): string {
-  const p = prompt.toLowerCase();
+  const p = prompt.toLowerCase().trim();
+
+  if (p.includes("bonjour") || p.includes("salut") || p.includes("coucou") || p === "hello") {
+    return "Salut ! 👋 Je suis Gabi AI, ton assistant séduction LoveLink. Dis-moi ce dont tu as besoin : une idée de bio, une phrase d'accroche pour ton match, ou des conseils pour trouver la bonne personne ! ✨";
+  }
+
+  if (p.includes("comment") || p.includes("trouver") || p.includes("bonne personne") || p.includes("match")) {
+    return "💡 **Le secret de Gabi AI pour trouver la bonne personne :**\n1. Complète ton profil avec au moins 3 belles photos.\n2. Sois authentique et réponds rapidement à tes matchs.\n3. N'hésite pas à envoyer une note vocale 🎙️ dès que le feeling passe bien !";
+  }
 
   if (p.includes("bio") || p.includes("biographie") || p.includes("présentation")) {
     return userGender === "male"
@@ -48,11 +71,7 @@ function getSmartFallback(prompt: string, userGender?: string): string {
     return "💡 **Conseil d'accroche par Gabi AI :**\nEssaye ceci : *'Salut ! J'ai vu ta photo, ton sourire m'a direct tapé dans l'œil ! C'est quoi ton endroit préféré pour prendre un verre au calme ? 😊'*";
   }
 
-  if (p.includes("date") || p.includes("rencontre") || p.includes("resto")) {
-    return "📍 **Conseil premier Date par Gabi AI :**\nChoisis un endroit neutre et chaleureux (un bon salon de thé ou un lounge calme). L'objectif est de pouvoir discuter sans devoir hurler à cause de la musique ! ☕🍹";
-  }
-
-  return "💡 **Conseil de Gabi AI :**\nLa clé sur LoveLink, c'est la spontanéité et le respect. N'hésite pas à envoyer une note vocale pour créer une vraie connexion ! 🎙️✨";
+  return "💡 **Conseil de Gabi AI :**\nSois toujours courtois, drôle et spontané. Un compliment sincère sur une photo ou un centre d'intérêt marche 10x mieux qu'un texte banal ! 😉✨";
 }
 
 export async function POST(req: NextRequest) {
@@ -77,10 +96,9 @@ export async function POST(req: NextRequest) {
 
     const systemPrompt = `Tu es Gabi AI, le coach virtuel officiel en séduction de l'application de rencontre LoveLink au Cameroun et en Afrique francophone.
 Ton rôle est de donner des conseils de drague drôles, bienveillants, polis et ultra efficaces adaptés à la culture locale (Yaoundé, Douala, Dakar, Abidjan).
-Si l'utilisateur te demande une biographie, rédige-lui une super biographie prête à copier-coller.
-Réponds en français, avec un ton dynamique, chaleureux et complice (utilise des émojis). Sois concis (maximum 3 phrases courtes).`;
+Réponds toujours en français, avec un ton dynamique, chaleureux et complice (utilise des émojis). Sois concis (maximum 3 phrases courtes).`;
 
-    // 💬 1. CHAT LIBRE AVEC L'IA
+    // 💬 1. CHAT LIBRE
     if (action === "chat" || promptText) {
       const messages = [
         { role: "system", content: systemPrompt },
@@ -93,7 +111,6 @@ Réponds en français, avec un ton dynamique, chaleureux et complice (utilise de
         return NextResponse.json({ coachName: "Gabi AI", advice: aiResponse });
       }
 
-      // Fallback si pas de clé Groq
       return NextResponse.json({
         coachName: "Gabi AI",
         advice: getSmartFallback(promptText, userGender),
