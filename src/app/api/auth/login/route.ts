@@ -40,22 +40,24 @@ export async function POST(req: NextRequest) {
     }
 
     const cleanInput = inputIdentifier.toLowerCase();
-    const cleanPhoneDigits = inputIdentifier.replace(/[\s\-\+\(\)]/g, "");
-    const formattedPhone = cleanPhoneDigits.startsWith("237")
-      ? cleanPhoneDigits
-      : `237${cleanPhoneDigits}`;
+    const cleanDigits = inputIdentifier.replace(/[\s\-\+\(\)]/g, "");
 
-    // Recherche de l'utilisateur par EMAIL OU par TÉLÉPHONE (formats variés)
+    // Adresses e-mails synthétiques générées pour les numéros de téléphone
+    const phoneEmailRaw = `phone_${cleanDigits}@phone.lovelink237.com`;
+    const cleanNo237 = cleanDigits.replace(/^237/, "");
+    const phoneEmailNo237 = `phone_${cleanNo237}@phone.lovelink237.com`;
+    const phoneEmailWith237 = `phone_237${cleanNo237}@phone.lovelink237.com`;
+
+    // Recherche de l'utilisateur par EMAIL (réel ou dérivé du téléphone)
     const [user] = await db
       .select()
       .from(users)
       .where(
         or(
           eq(users.email, cleanInput),
-          eq(users.phone, inputIdentifier),
-          eq(users.phone, cleanPhoneDigits),
-          eq(users.phone, formattedPhone),
-          eq(users.email, `phone_${cleanPhoneDigits}@phone.lovelink237.com`)
+          eq(users.email, phoneEmailRaw),
+          eq(users.email, phoneEmailNo237),
+          eq(users.email, phoneEmailWith237)
         )
       )
       .limit(1);
@@ -124,7 +126,6 @@ export async function POST(req: NextRequest) {
         id: user.id,
         firstName: user.firstName,
         email: user.email,
-        phone: user.phone,
       },
     });
 
