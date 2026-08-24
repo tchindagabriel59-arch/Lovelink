@@ -16,19 +16,16 @@ export default function GabiAiButton() {
   ]);
   const [inputPrompt, setInputPrompt] = useState("");
 
-  // 📍 ÉTATS POUR RENDRE LE BOUTON DÉPLAÇABLE (DRAGGABLE)
   const [position, setPosition] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const dragStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const posStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const hasDraggedRef = useRef(false);
 
-  // 🙈 MASQUER SUR /discover ET /messages (car /messages a déjà le bouton dans la barre)
   if (pathname === "/discover" || pathname === "/messages") {
     return null;
   }
 
-  // GESTION DU GLISSER SUR MOBILE (TOUCH)
   const handleTouchStart = (e: React.TouchEvent) => {
     const touch = e.touches[0];
     setIsDragging(true);
@@ -55,7 +52,6 @@ export default function GabiAiButton() {
     setIsDragging(false);
   };
 
-  // GESTION DU GLISSER SUR PC (SOURIS)
   const handleMouseDown = (e: React.MouseEvent) => {
     setIsDragging(true);
     hasDraggedRef.current = false;
@@ -106,15 +102,16 @@ export default function GabiAiButton() {
       if (res.ok && data.advice) {
         setMessages((prev) => [...prev, { sender: "gabi", text: data.advice }]);
       } else {
+        const errorDetails = data.error || "Erreur inconnue";
         setMessages((prev) => [
           ...prev,
-          { sender: "gabi", text: "Oups, petit bug réseau ! Réessaie ta question ✨" },
+          { sender: "gabi", text: `⚠️ ${errorDetails}` },
         ]);
       }
-    } catch {
+    } catch (err: any) {
       setMessages((prev) => [
         ...prev,
-        { sender: "gabi", text: "Impossible de joindre Gabi AI pour le moment." },
+        { sender: "gabi", text: `⚠️ Erreur réseau : ${err?.message || "Impossible de joindre le serveur"}` },
       ]);
     } finally {
       setLoading(false);
@@ -123,7 +120,6 @@ export default function GabiAiButton() {
 
   return (
     <>
-      {/* 🤖 BOUTON FLOTTANT DÉPLAÇABLE À LA MAIN / SOURIS */}
       <div
         style={{
           transform: `translate(${position.x}px, ${position.y}px)`,
@@ -150,12 +146,9 @@ export default function GabiAiButton() {
         </button>
       </div>
 
-      {/* 💬 CHAT MODAL GABI AI */}
       {isOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm animate-in fade-in">
           <div className="bg-slate-900 border border-purple-500/30 rounded-3xl w-full max-w-md h-[500px] flex flex-col shadow-2xl relative overflow-hidden animate-in zoom-in-95">
-            
-            {/* Header */}
             <div className="p-4 bg-gradient-to-r from-purple-900 via-indigo-900 to-slate-900 border-b border-purple-800/50 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-purple-600 to-indigo-600 flex items-center justify-center shadow-lg border border-amber-300">
@@ -182,7 +175,6 @@ export default function GabiAiButton() {
               </button>
             </div>
 
-            {/* Zone de discussion */}
             <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-950/50">
               {messages.map((msg, idx) => (
                 <div
@@ -210,7 +202,6 @@ export default function GabiAiButton() {
               )}
             </div>
 
-            {/* Formulaire de saisie */}
             <form onSubmit={handleSendMessage} className="p-3 bg-slate-900 border-t border-slate-800 flex gap-2">
               <input
                 type="text"
@@ -227,7 +218,6 @@ export default function GabiAiButton() {
                 <Send className="w-4 h-4" />
               </button>
             </form>
-
           </div>
         </div>
       )}
