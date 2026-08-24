@@ -299,8 +299,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               <Heart className="w-8 h-8 text-rose-500 fill-rose-500" />
               <span className="text-2xl font-bold gradient-text">LoveLink</span>
             </Link>
-
-            {/* Une seule cloche de notifications */}
             <Notifications />
           </div>
 
@@ -432,9 +430,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             </Link>
 
             <div className="flex items-center gap-2">
-              {/* Une seule cloche unique de notifications */}
               <Notifications />
-
               <button
                 onClick={() => setMenuOpen(!menuOpen)}
                 className="p-2 text-slate-600"
@@ -571,23 +567,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </div>
         </div>
 
-        {/* ========== MAIN CONTENT ========== */}
-        <main className="flex-1 lg:ml-72 pt-16 pb-20 lg:pt-0 lg:pb-0 min-h-screen">
-          {user?.isIncognito && (
-            <div className="bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-600 text-white text-center py-1.5 px-4 text-xs font-black tracking-wider flex items-center justify-center gap-2 shadow-md">
-              <EyeOff className="w-3.5 h-3.5" />
-              MODE INCOGNITO ACTIVÉ • TU ES INVISIBLE DANS DISCOVER
-              <Link
-                href="/preferences"
-                className="ml-2 underline hover:no-underline"
-              >
-                Gérer
-              </Link>
-            </div>
-          )}
-          {children}
-        </main>
-        {/* ========== MAIN CONTENT ========== */}
+        {/* ========== MAIN CONTENT (UNE SEULE FOIS) ========== */}
         <main className="flex-1 lg:ml-72 pt-16 pb-20 lg:pt-0 lg:pb-0 min-h-screen">
           {user?.isIncognito && (
             <div className="bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-600 text-white text-center py-1.5 px-4 text-xs font-black tracking-wider flex items-center justify-center gap-2 shadow-md">
@@ -604,14 +584,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           {children}
         </main>
 
-        {/* 🤖 LE BOUTON FLOTTANT GABI AI APPARAÎT PARTOUT ! */}
+        {/* 🤖 Gabi AI flottant partout (Accueil, Profil, Préférences, etc.) */}
         <GabiAiButton />
 
-        <InstallAppButton />
-      </div>
-    </UserContext.Provider>
-  );
-}
         <InstallAppButton />
       </div>
     </UserContext.Provider>
