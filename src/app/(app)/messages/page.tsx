@@ -345,11 +345,12 @@ function MessagesContent() {
     }
   }, [chatMessages, scrollToBottom]);
 
-  // 🤖 DEMANDER ACCROCHES À GABI AI
+    // 🤖 DEMANDER ACCROCHES À GABI AI (SÉCURISÉ)
   const getNdoloSuggestions = async () => {
     if (!otherUser) return;
     setLoadingNdolo(true);
     setShowNdoloModal(true);
+    setNdoloSuggestions([]); // Reset de la liste
 
     try {
       const res = await fetch("/api/ai-coach", {
@@ -358,24 +359,36 @@ function MessagesContent() {
         body: JSON.stringify({
           action: "icebreaker",
           targetName: otherUser.firstName,
-          targetCity: "Cameroun",
+          targetCity: otherUser.city || "Cameroun",
         }),
       });
 
       if (res.ok) {
         const data = await res.json();
-        setNdoloSuggestions(data.suggestions || []);
+        if (data.suggestions && data.suggestions.length > 0) {
+          setNdoloSuggestions(data.suggestions);
+        } else {
+          setNdoloSuggestions([
+            `Salut ${otherUser.firstName} ! Ton profil m'a beaucoup plu 😊`,
+            `Coucou ${otherUser.firstName} ! Ravi de matcher avec toi ✨`,
+            `Salut ${otherUser.firstName} ! Comment se passe ta journée ? 😉`,
+          ]);
+        }
+      } else {
+        setNdoloSuggestions([
+          `Salut ${otherUser.firstName} ! Ravi de te rencontrer 😊`,
+          `Coucou ${otherUser.firstName} ! Quoi de neuf ? ✨`,
+          `Salut ${otherUser.firstName} ! J'aime beaucoup tes photos 😉`,
+        ]);
       }
     } catch (err) {
       console.error(err);
+      setNdoloSuggestions([
+        `Salut ${otherUser.firstName} ! Enchanté(e) 😊`,
+      ]);
     } finally {
       setLoadingNdolo(false);
     }
-  };
-
-  const applyNdoloSuggestion = (text: string) => {
-    setNewMessage(text);
-    setShowNdoloModal(false);
   };
 
   // 🎙️ RECORDING VOCAL
