@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { users } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, or } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { createToken } from "@/lib/auth";
 import { sendWelcomeEmail } from "@/lib/emails";
@@ -46,7 +46,9 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const { 
-      email, 
+      email: rawEmail, 
+      phone: rawPhone,
+      identifier, // Champ unifié optionnel
       password, 
       firstName, 
       lastName, 
@@ -63,7 +65,10 @@ export async function POST(req: NextRequest) {
       referralCode: providedReferralCode,
     } = body;
 
-    if (!email || !password || !firstName || !lastName || !birthDate || !gender) {
+    // 1. Déterminer si l'entrée est un Email ou un Numéro de téléphone
+    const inputIdentifier = (rawEmail || rawPhone || identifier || "").trim();
+
+    if (!inputIdentifier || !password || !firstName || !birthDate || !gender) {
       logApiCall({
         endpoint,
         method,
@@ -75,9 +80,23 @@ export async function POST(req: NextRequest) {
       });
 
       return NextResponse.json(
-        { error: "Tous les champs obligatoires sont requis" },
+        { error: "Tous les champs obligatoires sont requis (Email/Téléphone, Mot de passe, Prénom, Date de naissance, Genre)" },
         { status: 400 }
       );
+    }
+
+    const isEmail = inputIdentifier.includes("@");
+    let finalEmail = "";
+    let finalPhone = "";
+
+    if (isEmail) {
+      finalEmail = inputIdentifier.toLowerCase().trim();
+    } else {
+      // Nettoyage du numéro de téléphone
+      const cleanPhoneDigits = inputIdentifier.replace(/[\s\-\+\(\)]/g, "");
+      finalPhone = cleanPhoneDigits.startsWith("237") ? cleanPhoneDigits : `237${cleanPhoneDigits}`;
+      // Fallback Email interne pour respecter la contrainte UNIQUE / NOT NULL PostgreSQL
+      finalEmail = `phone_${cleanPhoneDigits}@phone.lovelink237.com`;
     }
 
     if (calculateAge(birthDate) < 18) {
@@ -92,25 +111,34 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Genre invalide" }, { status: 400 });
     }
 
+    // 2. Vérification des doublons (Email OU Téléphone)
+    const existingChecks = [eq(users.email, finalEmail)];
+    if (finalPhone) {
+      existingChecks.push(eq(users.phone, finalPhone));
+    }
+
     const existing = await db
       .select()
       .from(users)
-      .where(eq(users.email, email.toLowerCase().trim()))
+      .where(or(...existingChecks))
       .limit(1);
 
     if (existing.length > 0) {
+      const match = existing[0];
+      const isPhoneMatch = finalPhone && match.phone === finalPhone;
+      
       logApiCall({
         endpoint,
         method,
         statusCode: 409,
         durationMs: Date.now() - startTime,
-        errorMessage: `Email déjà utilisé : ${email}`,
+        errorMessage: isPhoneMatch ? `Téléphone déjà utilisé : ${finalPhone}` : `Email déjà utilisé : ${finalEmail}`,
         userAgent,
         ipAddress,
       });
 
       return NextResponse.json(
-        { error: "Cet email est déjà utilisé" },
+        { error: isPhoneMatch ? "Ce numéro de téléphone est déjà utilisé" : "Cet email est déjà utilisé" },
         { status: 409 }
       );
     }
@@ -127,10 +155,12 @@ export async function POST(req: NextRequest) {
     const validLookingFor = ["relationship", "friendship", "casual", "marriage"] as const;
     const safeLookingFor = validLookingFor.includes(lookingFor) ? lookingFor : "relationship";
 
+    // 3. Insertion en base de données
     const [newUser] = await db
       .insert(users)
       .values({
-        email: email.toLowerCase().trim(),
+        email: finalEmail,
+        phone: finalPhone || null,
         passwordHash,
         firstName: firstName.trim(),
         lastName: (lastName || "").trim(),
@@ -138,7 +168,7 @@ export async function POST(req: NextRequest) {
         gender,
         lookingFor: safeLookingFor,
         city: city?.trim() || "",
-        country: country?.trim() || "",
+        country: country?.trim() || "Cameroun",
         occupation: occupation?.trim() || "",
         maritalStatus: maritalStatus?.trim() || "",
         discoverySource: discoverySource?.trim() || "",
@@ -148,7 +178,7 @@ export async function POST(req: NextRequest) {
         prefAgeMax: 99,
         referralCode: newReferralCode,
         referredBy: referrer?.id || null,
-      })
+      } as any)
       .returning();
 
     const token = await createToken(newUser.id);
@@ -159,9 +189,12 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    sendWelcomeEmail(email, firstName).catch((err) => {
-      console.error("Erreur envoi email bienvenue:", err);
-    });
+    // N'envoyer le mail de bienvenue que si c'est un vrai e-mail
+    if (isEmail && !finalEmail.includes("@phone.lovelink237.com")) {
+      sendWelcomeEmail(finalEmail, firstName).catch((err) => {
+        console.error("Erreur envoi email bienvenue:", err);
+      });
+    }
 
     const metaEventId = clientEventId || generateEventId();
     
@@ -178,10 +211,11 @@ export async function POST(req: NextRequest) {
         eventId: metaEventId,
         eventSourceUrl,
         userData: {
-          email,
+          email: isEmail ? finalEmail : undefined,
+          phone: finalPhone || undefined,
           firstName,
           lastName,
-          country: 'sn',
+          country: 'cm',
           clientIpAddress: clientIp,
           clientUserAgent: capiUserAgent,
           fbp,
@@ -199,6 +233,7 @@ export async function POST(req: NextRequest) {
       user: {
         id: newUser.id,
         email: newUser.email,
+        phone: newUser.phone,
         firstName: newUser.firstName,
         lastName: newUser.lastName,
         referralCode: newUser.referralCode,
@@ -222,8 +257,8 @@ export async function POST(req: NextRequest) {
       durationMs: Date.now() - startTime,
       userId: newUser.id,
       errorMessage: referrer 
-        ? `Inscription tunnel OK (parrainage: ${providedReferralCode})` 
-        : "Inscription tunnel OK",
+        ? `Inscription OK (${isEmail ? "Email" : "Téléphone"}, parrainage: ${providedReferralCode})` 
+        : `Inscription OK (${isEmail ? "Email" : "Téléphone"})`,
       userAgent,
       ipAddress,
     });
