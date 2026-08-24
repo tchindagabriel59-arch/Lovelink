@@ -227,7 +227,12 @@ function MessagesContent() {
   const [filterTab, setFilterTab] = useState<FilterTab>("all");
   const [searchQuery, setSearchQuery] = useState("");
 
-  // 🎙️ ENREGISTREMENT VOCAL
+  // 🤖 Gabi AI
+  const [showGabiModal, setShowGabiModal] = useState(false);
+  const [GabiSuggestions, setGabiSuggestions] = useState<string[]>([]);
+  const [loadingGabi, setLoadingGabi] = useState(false);
+
+  // 🎙️ VOCAUX
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [sendingAudio, setSendingAudio] = useState(false);
@@ -267,8 +272,8 @@ function MessagesContent() {
         }
       }
     } catch {
-      // silently fail
-    } finally {
+      // silent
+    } flex-shrink-0 {
       setLoadingMatches(false);
     }
   }, []);
@@ -318,7 +323,7 @@ function MessagesContent() {
           }
         }
       } catch {
-        // silently fail
+        // silent
       } finally {
         if (isInitial) setLoadingMessages(false);
       }
@@ -340,7 +345,40 @@ function MessagesContent() {
     }
   }, [chatMessages, scrollToBottom]);
 
-  // 🎙️ DÉMARRER ENREGISTREMENT VOCAL (Support iOS + Android + PC)
+  // 🤖 DEMANDER ACCROCHES À Gabi AI
+  const getGabiSuggestions = async () => {
+    if (!otherUser) return;
+    setLoadingGabi(true);
+    setShowGabiModal(true);
+
+    try {
+      const res = await fetch("/api/ai-coach", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "icebreaker",
+          targetName: otherUser.firstName,
+          targetCity: "Cameroun",
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setGabiSuggestions(data.suggestions || []);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingGabi(false);
+    }
+  };
+
+  const applyGabiSuggestion = (text: string) => {
+    setNewMessage(text);
+    setShowGabiModal(false);
+  };
+
+  // 🎙️ RECORDING VOCAL
   const startRecording = async () => {
     if (!user?.isPremium) {
       alert("🎙️ Les messages vocaux sont réservés aux membres Premium ! Passe Premium pour faire entendre ta voix.");
@@ -349,15 +387,10 @@ function MessagesContent() {
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-
       let mimeType = "audio/webm";
       if (typeof MediaRecorder !== "undefined") {
         if (!MediaRecorder.isTypeSupported("audio/webm")) {
-          if (MediaRecorder.isTypeSupported("audio/mp4")) {
-            mimeType = "audio/mp4";
-          } else {
-            mimeType = "";
-          }
+          mimeType = MediaRecorder.isTypeSupported("audio/mp4") ? "audio/mp4" : "";
         }
       }
 
@@ -368,10 +401,8 @@ function MessagesContent() {
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
 
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          audioChunksRef.current.push(event.data);
-        }
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data);
       };
 
       mediaRecorder.start(100);
@@ -379,18 +410,15 @@ function MessagesContent() {
       setRecordingTime(0);
 
       timerRef.current = setInterval(() => {
-        setRecordingTime((prev) => prev + 1);
+        setRecordingTime((p) => p + 1);
       }, 1000);
-    } catch (err) {
-      console.error("Microphone access error:", err);
+    } catch {
       alert("Accès au micro refusé ou non supporté.");
     }
   };
 
-  // 🎙️ ENVOYER LE VOCAL (Converti direct en Base64 sans bug serveur !)
   const stopAndSendRecording = async () => {
     if (!mediaRecorderRef.current || !selectedMatch) return;
-
     setSendingAudio(true);
     const recorder = mediaRecorderRef.current;
 
@@ -398,31 +426,26 @@ function MessagesContent() {
       const audioBlob = new Blob(audioChunksRef.current, { type: recorder.mimeType || "audio/webm" });
       recorder.stream.getTracks().forEach((track) => track.stop());
 
-      // Conversion en Base64 ultra fiable
       const reader = new FileReader();
       reader.readAsDataURL(audioBlob);
       reader.onloadend = async () => {
         try {
           const base64Audio = reader.result as string;
-
           const res = await fetch(`/api/messages/${selectedMatch}`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ content: `[AUDIO]${base64Audio}` }),
           });
 
-          if (!res.ok) {
-            throw new Error("Erreur envoi message vocal");
+          if (res.ok) {
+            const data = await res.json();
+            setChatMessages((prev) => [...prev, data.message]);
+            lastMessageIdRef.current = data.message.id;
+            shouldScrollRef.current = true;
+            fetchMatchesList();
           }
-
-          const data = await res.json();
-          setChatMessages((prev) => [...prev, data.message]);
-          lastMessageIdRef.current = data.message.id;
-          shouldScrollRef.current = true;
-          fetchMatchesList();
-        } catch (err) {
-          console.error("Vocal send error:", err);
-          alert("Erreur d'envoi du vocal. Recommence.");
+        } catch {
+          alert("Erreur envoi vocal");
         } finally {
           setIsRecording(false);
           setSendingAudio(false);
@@ -434,7 +457,6 @@ function MessagesContent() {
     recorder.stop();
   };
 
-  // 🎙️ ANNULER LE VOCAL
   const cancelRecording = () => {
     if (mediaRecorderRef.current) {
       mediaRecorderRef.current.stream.getTracks().forEach((track) => track.stop());
@@ -472,28 +494,6 @@ function MessagesContent() {
       }
     } catch {
       setNewMessage(messageToSend);
-    } finally {
-      setSending(false);
-    }
-  }
-
-  async function handleSendEmoji(emoji: string) {
-    if (!selectedMatch || sending) return;
-    setSending(true);
-    try {
-      const res = await fetch(`/api/messages/${selectedMatch}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: emoji }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setChatMessages((prev) => [...prev, data.message]);
-        lastMessageIdRef.current = data.message.id;
-        shouldScrollRef.current = true;
-        fetchMatchesList();
-      }
-    } catch {
     } finally {
       setSending(false);
     }
@@ -606,53 +606,6 @@ function MessagesContent() {
           <p className="text-xs text-slate-400 mt-0.5 font-medium">
             {matchesList.length} conversation{matchesList.length > 1 ? "s" : ""}
           </p>
-        </div>
-
-        {/* Card Vocaux Premium */}
-        <div className="px-4 mb-3">
-          {user?.isPremium ? (
-            <div className="flex items-center justify-between rounded-2xl bg-gradient-to-r from-purple-600 via-rose-500 to-pink-500 p-3.5 shadow-sm text-white">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-white/20 backdrop-blur flex items-center justify-center">
-                  <Mic className="w-5 h-5 text-white" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <p className="text-sm font-black text-white">Messages vocaux activés</p>
-                    <span className="text-[9px] font-black uppercase tracking-wider bg-white/30 text-white px-1.5 py-0.5 rounded-md">
-                      👑 Premium
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-white/80 font-medium">
-                    Clique sur le micro en bas pour parler ! ✨
-                  </p>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <Link
-              href="/premium"
-              className="flex items-center justify-between rounded-2xl bg-gradient-to-r from-amber-300 via-yellow-300 to-amber-200 p-3.5 shadow-sm border border-amber-200/80"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-white/70 flex items-center justify-center">
-                  <Mic className="w-5 h-5 text-amber-700" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <p className="text-sm font-black text-amber-950">Messages vocaux</p>
-                    <span className="text-[9px] font-black uppercase tracking-wider bg-white/80 text-amber-700 px-1.5 py-0.5 rounded-md">
-                      Nouveau
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-amber-900/70 font-medium">
-                    Fais entendre ta voix · Exclusif Premium ✨
-                  </p>
-                </div>
-              </div>
-              <span className="text-amber-800 text-lg">›</span>
-            </Link>
-          )}
         </div>
 
         {/* Filter Tabs */}
@@ -807,13 +760,53 @@ function MessagesContent() {
             <div ref={messagesEndRef} />
           </div>
 
+          {/* 🤖 PANNEAU DE SUGGESTIONS Gabi AI */}
+          {showGabiModal && (
+            <div className="p-4 bg-gradient-to-r from-purple-900 to-indigo-900 text-white border-t border-purple-700/50 rounded-t-3xl shadow-2xl relative animate-in slide-in-from-bottom duration-200 z-20">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-5 h-5 text-amber-400 animate-pulse" />
+                  <h4 className="font-bold text-sm text-amber-300">Gabi AI — Accroches séduction</h4>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowGabiModal(false)}
+                  className="text-slate-400 hover:text-white text-xs font-bold"
+                >
+                  ✖
+                </button>
+              </div>
+
+              {loadingGabi ? (
+                <p className="text-xs text-slate-300 animate-pulse py-3 text-center">
+                  ✨ Gabi AI cherche une superbe accroche pour {otherUser?.firstName}...
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {GabiSuggestions.map((suggestion, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => applyGabiSuggestion(suggestion)}
+                      className="w-full text-left p-3 rounded-2xl bg-white/10 hover:bg-white/20 border border-white/10 text-xs text-slate-100 transition flex items-center justify-between group"
+                    >
+                      <span>{suggestion}</span>
+                      <span className="text-[10px] bg-amber-400 text-slate-900 font-bold px-2 py-0.5 rounded-full ml-2 opacity-0 group-hover:opacity-100 transition">
+                        Choisir
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Form / Enregistreur vocal */}
           <form
             onSubmit={handleSend}
             className="relative z-10 p-3 bg-white/95 backdrop-blur border-t border-slate-100"
           >
             {isRecording ? (
-              /* ENREGISTREUR VOCAL ACTIF */
               <div className="flex items-center justify-between bg-rose-50 border border-rose-200 rounded-full px-4 py-2">
                 <button
                   type="button"
@@ -842,7 +835,6 @@ function MessagesContent() {
                 </button>
               </div>
             ) : (
-              /* BARRE NORMALE DE MESSAGE */
               <div className="flex items-center gap-2">
                 <input
                   type="file"
@@ -859,6 +851,17 @@ function MessagesContent() {
                   className="p-2.5 rounded-full text-slate-400 hover:bg-slate-100 transition disabled:opacity-50"
                 >
                   <ImageIcon className="w-5 h-5" />
+                </button>
+
+                {/* 🤖 BOUTON Gabi AI */}
+                <button
+                  type="button"
+                  onClick={getGabiSuggestions}
+                  className="p-2.5 rounded-full bg-gradient-to-r from-purple-600 to-indigo-600 text-amber-300 hover:scale-105 transition shadow-md flex items-center gap-1 text-xs font-bold"
+                  title="Conseils Gabi AI"
+                >
+                  <Sparkles className="w-4 h-4 text-amber-300" />
+                  <span className="hidden sm:inline">Gabi AI</span>
                 </button>
 
                 <div className="flex-1 flex items-center bg-slate-100 rounded-full px-2">
