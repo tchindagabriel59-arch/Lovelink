@@ -64,6 +64,7 @@ interface OtherUser {
   isPremium: boolean;
   isVerified: boolean;
   lastSeen: string | null;
+  city?: string | null;
 }
 
 type FilterTab = "all" | "unread" | "read";
@@ -345,12 +346,12 @@ function MessagesContent() {
     }
   }, [chatMessages, scrollToBottom]);
 
-    // 🤖 DEMANDER ACCROCHES À GABI AI (SÉCURISÉ)
+  // 🤖 DEMANDER ACCROCHES À GABI AI
   const getNdoloSuggestions = async () => {
     if (!otherUser) return;
     setLoadingNdolo(true);
     setShowNdoloModal(true);
-    setNdoloSuggestions([]); // Reset de la liste
+    setNdoloSuggestions([]);
 
     try {
       const res = await fetch("/api/ai-coach", {
@@ -359,7 +360,7 @@ function MessagesContent() {
         body: JSON.stringify({
           action: "icebreaker",
           targetName: otherUser.firstName,
-          targetCity: otherUser.city || "Cameroun",
+          targetCity: (otherUser as any).city || "Cameroun",
         }),
       });
 
@@ -389,6 +390,11 @@ function MessagesContent() {
     } finally {
       setLoadingNdolo(false);
     }
+  };
+
+  const applyNdoloSuggestion = (text: string) => {
+    setNewMessage(text);
+    setShowNdoloModal(false);
   };
 
   // 🎙️ RECORDING VOCAL
