@@ -10,6 +10,7 @@ import {
   Phone,
   Eye,
   EyeOff,
+  HelpCircle,
 } from "lucide-react";
 
 export default function LoginPage() {
@@ -35,7 +36,7 @@ export default function LoginPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          email: identifier.trim(), // téléphone OU email — l’API gère les deux
+          email: identifier.trim(),
           password,
         }),
       });
