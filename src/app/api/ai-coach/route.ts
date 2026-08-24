@@ -8,14 +8,15 @@ async function callGroqAI(messages: { role: string; content: string }[]) {
   const apiKey = (process.env.GROQ_API_KEY || "").trim();
 
   if (!apiKey) {
-    throw new Error("La clé GROQ_API_KEY n'est pas configurée dans les variables Vercel.");
+    throw new Error("La clé GROQ_API_KEY est manquante sur Vercel.");
   }
 
-  // 🎯 MODÈLES VALIDES ET ACTIFS SUR GROQ (TOUS LES ANCIENS MODÈLES SUPPRIMÉS ONT ÉTÉ RETIRÉS)
+  // 🎯 NOUVEAUX MODÈLES RECOMMANDÉS PAR TON MAIL (Post-Août 2026)
+  // On utilise les IDs officiels de Groq pour ces modèles
   const models = [
-    "llama-3.3-70b-versatile",
-    "llama-3.1-8b-instant",
-    "gemma2-9b-it",
+    "llama-3.1-70b-versatile", // Le remplaçant direct et stable
+    "qwen-2.5-7b-chat",        // Recommandé explicitement dans ton mail
+    "llama-3.1-8b-instant"     // Modèle de secours rapide
   ];
 
   let lastErr = "";
@@ -31,8 +32,8 @@ async function callGroqAI(messages: { role: string; content: string }[]) {
         body: JSON.stringify({
           model,
           messages,
-          temperature: 0.7,
-          max_tokens: 350,
+          temperature: 0.8,
+          max_tokens: 500,
         }),
       });
 
@@ -42,66 +43,57 @@ async function callGroqAI(messages: { role: string; content: string }[]) {
         if (text) return text;
       } else {
         const errJson = await res.json().catch(() => ({}));
-        lastErr = `Groq (${model}) [${res.status}]: ${errJson.error?.message || res.statusText}`;
-        console.error(lastErr);
+        lastErr = `Erreur Groq sur ${model} : ${errJson.error?.message || res.statusText}`;
       }
     } catch (e: any) {
-      lastErr = `Erreur réseau Groq (${model}): ${e?.message || String(e)}`;
-      console.error(lastErr);
+      lastErr = `Erreur réseau sur ${model} : ${e?.message}`;
     }
   }
 
-  throw new Error(lastErr || "Aucun modèle Groq n'a répondu.");
+  throw new Error(lastErr || "Aucun modèle IA n'est disponible pour le moment.");
 }
 
 export async function POST(req: NextRequest) {
   try {
     const userId = await getCurrentUserId();
     if (!userId) {
-      return NextResponse.json({ error: "Non autorisé (session expirée)" }, { status: 401 });
+      return NextResponse.json({ error: "Session expirée" }, { status: 401 });
     }
 
-    let u: any = null;
-    try {
-      const [userRecord] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
-      u = userRecord;
-    } catch (dbErr) {
-      console.error("DB Error in ai-coach:", dbErr);
-    }
+    // Charger les infos de l'utilisateur pour personnaliser l'IA
+    const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+    const u = user as any;
 
     const body = await req.json();
-    const { action, targetName, targetCity, userPrompt } = body as {
-      action?: string;
-      targetName?: string;
-      targetCity?: string;
-      userPrompt?: string;
-    };
+    const { userPrompt } = body;
 
-    const userName = u?.firstName || "Utilisateur";
-    const userGender = u?.gender === "male" ? "un Homme" : u?.gender === "female" ? "une Femme" : "Non précisé";
-    const userCity = u?.city || targetCity || "Cameroun";
+    const userName = u?.firstName || "Gabriel";
+    const userGender = u?.gender === "male" ? "Homme" : "Femme";
+    const userCity = u?.city || "Cameroun";
 
-    const systemPrompt = `Tu es Gabi AI, le coach virtuel officiel de séduction sur LoveLink au Cameroun et en Afrique francophone.
-Tu discutes avec ${userName} (${userGender}, vit à ${userCity}).
+    // 🧠 INSTRUCTIONS STRICTES POUR GABI AI
+    const systemPrompt = `Tu es Gabi AI, l'assistant virtuel de séduction de l'application LoveLink. 
+Tu es expert en relations amoureuses en Afrique (Cameroun, Sénégal, etc.).
+Ton interlocuteur est ${userName}, un ${userGender} vivant à ${userCity}.
 
-Règles de comportement :
-1. Réponds de manière très chaleureuse, naturelle, drôle et séduisante avec des émojis.
-2. Adaptes TOUJOURS tes propos au genre de ${userName} (${userGender}). Si ${userName} est un homme, parle-lui comme à un homme et donne-lui des bios pour homme !
-3. Sois concis (maximum 3 à 4 phrases).
-4. Sois très adapté à la culture africaine francophone (Yaoundé, Douala, Dakar, Abidjan).`;
+DIRECTIVES :
+1. Réponds avec intelligence, charisme et humour.
+2. Si on te demande une biographie, rédige une présentation UNIQUE, attirante et classe adaptée au genre de l'utilisateur (${userGender}).
+3. Utilise des émojis et un ton complice.
+4. Maximum 4 phrases. Ne sois jamais générique.`;
 
     const messages = [
       { role: "system", content: systemPrompt },
-      { role: "user", content: userPrompt || "Conseil de drague" },
+      { role: "user", content: userPrompt || "Donne-moi un conseil." },
     ];
 
     const aiResponse = await callGroqAI(messages);
 
     return NextResponse.json({ coachName: "Gabi AI", advice: aiResponse });
+
   } catch (error: any) {
-    console.error("Gabi AI Route Error:", error);
     return NextResponse.json(
-      { error: error?.message || "Erreur interne Gabi AI" },
+      { error: error?.message || "Erreur de connexion à l'IA" },
       { status: 500 }
     );
   }
