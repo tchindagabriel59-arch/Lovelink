@@ -132,24 +132,29 @@ function RegisterPageContent() {
           return false;
         }
         return true;
-      case 2:
-        if (!form.email.trim() || !form.password) {
-          setError("Numéro de téléphone (ou email) et mot de passe requis");
-          return false;
-        }
-        if (!isValidIdentifier(form.email)) {
-          setError("Entre un numéro valide (ex: 651387914) ou un email");
-          return false;
-        }
-        if (form.password.length < 6) {
-          setError("Mot de passe : minimum 6 caractères");
-          return false;
-        }
-        if (form.password !== form.confirmPassword) {
-          setError("Les mots de passe ne correspondent pas");
-          return false;
-        }
-        return true;
+      case 2: {
+  const id = form.email.trim();
+  if (!id || !form.password) {
+    setError("Numéro (ou email) et mot de passe requis");
+    return false;
+  }
+  const isMail = id.includes("@") && id.includes(".");
+  const digits = id.replace(/[\s\-\+\(\)]/g, "");
+  const isPhone = digits.length >= 8 && /^\d+$/.test(digits);
+  if (!isMail && !isPhone) {
+    setError("Entre un numéro valide (ex: 651387914) ou un email");
+    return false;
+  }
+  if (form.password.length < 6) {
+    setError("Mot de passe : minimum 6 caractères");
+    return false;
+  }
+  if (form.password !== form.confirmPassword) {
+    setError("Les mots de passe ne correspondent pas");
+    return false;
+  }
+  return true;
+}
       case 3:
         if (!form.birthDate) {
           setError("Indique ta date de naissance");
@@ -423,76 +428,76 @@ function RegisterPageContent() {
             )}
 
             {/* STEP 2 : Téléphone OU Email + MDP */}
-            {step === 2 && (
-              <div className="space-y-5 animate-fade-in">
-                <div className="text-center mb-2">
-                  <div className="w-14 h-14 mx-auto mb-3 rounded-2xl bg-gradient-to-br from-purple-500 to-violet-500 flex items-center justify-center">
-                    <Phone className="w-7 h-7 text-white" />
-                  </div>
-                  <h1 className="text-2xl font-black text-slate-900">
-                    Crée tes identifiants
-                  </h1>
-                  <p className="text-slate-500 text-sm mt-1">
-                    Ton numéro WhatsApp ou ton email
-                  </p>
-                </div>
+{step === 2 && (
+  <div className="space-y-5 animate-fade-in">
+    <div className="text-center mb-2">
+      <div className="w-14 h-14 mx-auto mb-3 rounded-2xl bg-gradient-to-br from-purple-500 to-violet-500 flex items-center justify-center">
+        <Phone className="w-7 h-7 text-white" />
+      </div>
+      <h1 className="text-2xl font-black text-slate-900">
+        Crée tes identifiants
+      </h1>
+      <p className="text-slate-500 text-sm mt-1">
+        Ton numéro WhatsApp ou ton email
+      </p>
+    </div>
 
-                <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-1.5">
-                    Numéro WhatsApp ou Email *
-                  </label>
-                  <input
-                    autoFocus
-                    type="text"
-                    inputMode="text"
-                    value={form.email}
-                    onChange={(e) => setField("email", e.target.value)}
-                    className="w-full px-4 py-3.5 rounded-2xl border-2 border-slate-200 focus:border-rose-400 outline-none"
-                    placeholder="Ex: 651387914 ou ton@email.com"
-                  />
-                  <p className="text-[11px] text-emerald-600 font-semibold mt-1.5 flex items-center gap-1">
-                    💡 Pas besoin d&apos;email ! Ton numéro de téléphone suffit.
-                  </p>
-                </div>
+    <div>
+      <label className="block text-sm font-bold text-slate-700 mb-1.5">
+        Numéro WhatsApp ou Email *
+      </label>
+      <input
+        autoFocus
+        type="text"
+        inputMode="text"
+        value={form.email}
+        onChange={(e) => setField("email", e.target.value)}
+        className="w-full px-4 py-3.5 rounded-2xl border-2 border-slate-200 focus:border-rose-400 outline-none"
+        placeholder="Ex: 651387914 ou ton@email.com"
+      />
+      <p className="text-[11px] text-emerald-600 font-semibold mt-1.5">
+        💡 Pas besoin d&apos;email ! Ton numéro de téléphone suffit.
+      </p>
+    </div>
 
-                <div className="relative">
-                  <label className="block text-sm font-bold text-slate-700 mb-1.5">
-                    Mot de passe *
-                  </label>
-                  <input
-                    type={showPassword ? "text" : "password"}
-                    value={form.password}
-                    onChange={(e) => setField("password", e.target.value)}
-                    className="w-full px-4 py-3.5 rounded-2xl border-2 border-slate-200 focus:border-rose-400 outline-none pr-12"
-                    placeholder="Min. 6 caractères"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-10 text-slate-400"
-                  >
-                    {showPassword ? (
-                      <EyeOff className="w-5 h-5" />
-                    ) : (
-                      <Eye className="w-5 h-5" />
-                    )}
-                  </button>
-                </div>
+    <div className="relative">
+      <label className="block text-sm font-bold text-slate-700 mb-1.5">
+        Mot de passe *
+      </label>
+      <input
+        type={showPassword ? "text" : "password"}
+        value={form.password}
+        onChange={(e) => setField("password", e.target.value)}
+        className="w-full px-4 py-3.5 rounded-2xl border-2 border-slate-200 focus:border-rose-400 outline-none pr-12"
+        placeholder="Min. 6 caractères"
+      />
+      <button
+        type="button"
+        onClick={() => setShowPassword(!showPassword)}
+        className="absolute right-3 top-10 text-slate-400"
+      >
+        {showPassword ? (
+          <EyeOff className="w-5 h-5" />
+        ) : (
+          <Eye className="w-5 h-5" />
+        )}
+      </button>
+    </div>
 
-                <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-1.5">
-                    Confirmer *
-                  </label>
-                  <input
-                    type="password"
-                    value={form.confirmPassword}
-                    onChange={(e) => setField("confirmPassword", e.target.value)}
-                    className="w-full px-4 py-3.5 rounded-2xl border-2 border-slate-200 focus:border-rose-400 outline-none"
-                    placeholder="••••••••"
-                  />
-                </div>
-              </div>
-            )}
+    <div>
+      <label className="block text-sm font-bold text-slate-700 mb-1.5">
+        Confirmer *
+      </label>
+      <input
+        type="password"
+        value={form.confirmPassword}
+        onChange={(e) => setField("confirmPassword", e.target.value)}
+        className="w-full px-4 py-3.5 rounded-2xl border-2 border-slate-200 focus:border-rose-400 outline-none"
+        placeholder="••••••••"
+      />
+    </div>
+  </div>
+)}
 
             {/* STEP 3 : Date de naissance */}
             {step === 3 && (
