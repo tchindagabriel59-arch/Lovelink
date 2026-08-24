@@ -4,19 +4,20 @@ import { db } from "@/db";
 import { users } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
+const GROQ_API_KEY = process.env.GROQ_API_KEY || "";
+
 async function callGroqAI(messages: { role: string; content: string }[]) {
   const apiKey = (process.env.GROQ_API_KEY || "").trim();
 
   if (!apiKey) {
-    throw new Error("La clé GROQ_API_KEY est manquante sur Vercel.");
+    throw new Error("La clé GROQ_API_KEY n'est pas configurée dans Vercel.");
   }
 
-  // 🎯 NOUVEAUX MODÈLES RECOMMANDÉS PAR TON MAIL (Post-Août 2026)
-  // On utilise les IDs officiels de Groq pour ces modèles
+  // 🎯 NOUVEAUX MODÈLES OFFICIELS 2026 (D'après ta documentation Groq)
   const models = [
-    "llama-3.1-70b-versatile", // Le remplaçant direct et stable
-    "qwen-2.5-7b-chat",        // Recommandé explicitement dans ton mail
-    "llama-3.1-8b-instant"     // Modèle de secours rapide
+    "gpt-oss-120b", // Ton modèle préféré
+    "qwen-3.6-27b", // Le remplaçant recommandé n°2
+    "gpt-oss-20b"   // Le remplaçant léger
   ];
 
   let lastErr = "";
@@ -43,48 +44,41 @@ async function callGroqAI(messages: { role: string; content: string }[]) {
         if (text) return text;
       } else {
         const errJson = await res.json().catch(() => ({}));
-        lastErr = `Erreur Groq sur ${model} : ${errJson.error?.message || res.statusText}`;
+        lastErr = `Groq (${model}) : ${errJson.error?.message || res.statusText}`;
+        console.error(lastErr);
       }
     } catch (e: any) {
-      lastErr = `Erreur réseau sur ${model} : ${e?.message}`;
+      lastErr = `Erreur réseau sur ${model}`;
     }
   }
 
-  throw new Error(lastErr || "Aucun modèle IA n'est disponible pour le moment.");
+  throw new Error(lastErr || "L'IA est indisponible pour le moment.");
 }
 
 export async function POST(req: NextRequest) {
   try {
     const userId = await getCurrentUserId();
-    if (!userId) {
-      return NextResponse.json({ error: "Session expirée" }, { status: 401 });
-    }
+    if (!userId) return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
 
-    // Charger les infos de l'utilisateur pour personnaliser l'IA
+    // Charger les infos pour que Gabi AI sache à qui il parle
     const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
     const u = user as any;
 
     const body = await req.json();
     const { userPrompt } = body;
 
-    const userName = u?.firstName || "Gabriel";
+    const userName = u?.firstName || "Utilisateur";
     const userGender = u?.gender === "male" ? "Homme" : "Femme";
     const userCity = u?.city || "Cameroun";
 
-    // 🧠 INSTRUCTIONS STRICTES POUR GABI AI
-    const systemPrompt = `Tu es Gabi AI, l'assistant virtuel de séduction de l'application LoveLink. 
-Tu es expert en relations amoureuses en Afrique (Cameroun, Sénégal, etc.).
-Ton interlocuteur est ${userName}, un ${userGender} vivant à ${userCity}.
-
-DIRECTIVES :
-1. Réponds avec intelligence, charisme et humour.
-2. Si on te demande une biographie, rédige une présentation UNIQUE, attirante et classe adaptée au genre de l'utilisateur (${userGender}).
-3. Utilise des émojis et un ton complice.
-4. Maximum 4 phrases. Ne sois jamais générique.`;
+    const systemPrompt = `Tu es Gabi AI, le coach de séduction intelligent de LoveLink. 
+Ton interlocuteur : ${userName}, ${userGender}, ville: ${userCity}.
+Ton style : Charismatique, drôle, expert en relations en Afrique.
+Instructions : Réponds toujours en français. Maximum 3-4 phrases. Utilise des émojis.`;
 
     const messages = [
       { role: "system", content: systemPrompt },
-      { role: "user", content: userPrompt || "Donne-moi un conseil." },
+      { role: "user", content: userPrompt || "Donne-moi un conseil de drague." },
     ];
 
     const aiResponse = await callGroqAI(messages);
@@ -92,8 +86,9 @@ DIRECTIVES :
     return NextResponse.json({ coachName: "Gabi AI", advice: aiResponse });
 
   } catch (error: any) {
+    console.error("Gabi AI Error:", error.message);
     return NextResponse.json(
-      { error: error?.message || "Erreur de connexion à l'IA" },
+      { error: error?.message || "Erreur de connexion à Gabi AI" },
       { status: 500 }
     );
   }
