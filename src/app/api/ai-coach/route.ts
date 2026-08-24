@@ -53,12 +53,11 @@ export async function POST(req: NextRequest) {
     const name = targetName?.trim() || "la personne";
     const city = targetCity?.trim() || "Cameroun";
 
-    // SYSTEM PROMPT GLOBAL DE GABI AI
     const systemPrompt = `Tu es Gabi AI, le coach virtuel officiel en séduction de l'application de rencontre LoveLink au Cameroun et en Afrique francophone.
 Ton rôle est de donner des conseils de drague drôles, bienveillants, polis et ultra efficaces adaptés à la culture locale (Yaoundé, Douala, Dakar, Abidjan).
 Réponds en français, avec un ton dynamique, chaleureux et complice (utilise des émojis). Sois concis (maximum 3 phrases courtes).`;
 
-    // 💬 1. DISCUSSION LIBRE AVEC GABI AI (POUR LA MODALE FLOTTANTE)
+    // 💬 1. DISCUSSION LIBRE AVEC GABI AI
     if (action === "chat" || userPrompt) {
       const messages = [
         { role: "system", content: systemPrompt },
@@ -87,8 +86,8 @@ Réponds en français, avec un ton dynamique, chaleureux et complice (utilise de
       if (aiResponse) {
         const suggestions = aiResponse
           .split("\n")
-          .map((s) => s.replace(/^[0-9.-]+\s*/, "").trim())
-          .filter((s) => s.length > 5)
+          .map((s: string) => s.replace(/^[0-9.-]+\s*/, "").trim())
+          .filter((s: string) => s.length > 5)
           .slice(0, 3);
 
         if (suggestions.length > 0) {
@@ -96,7 +95,7 @@ Réponds en français, avec un ton dynamique, chaleureux et complice (utilise de
         }
       }
 
-      // Fallback si pas de clé Groq
+      // Fallback
       const fallbackSuggestions = [
         `Salut ${name} ! J'ai vu que tu es à ${city}. C'est quoi ton endroit préféré pour prendre un verre au calme ? 😊`,
         `Coucou ${name} ! Ton profil m'a direct fait sourire ! Tu fais quoi de beau dans la vie ? ✨`,
