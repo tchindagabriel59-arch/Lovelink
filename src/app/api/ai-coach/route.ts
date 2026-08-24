@@ -13,13 +13,10 @@ async function callGroqAI(messages: { role: string; content: string }[]) {
     throw new Error("La clé GROQ_API_KEY est manquante sur Vercel.");
   }
 
-  // 🎯 UTILISATION DES IDS EXACTS DE TA DOCUMENTATION
   const models = [
-    "openai/gpt-oss-120b", // Le remplaçant de Llama 3.3
-    "qwen/qwen3.6-27b",    // Le remplaçant de Llama 3.1
+    "openai/gpt-oss-120b",
+    "qwen/qwen3.6-27b",
     "openai/gpt-oss-20b",
-    "llama-3.3-70b-versatile", // On le garde au cas où
-    "llama-3.1-8b-instant"
   ];
 
   let lastErr = "";
@@ -35,7 +32,7 @@ async function callGroqAI(messages: { role: string; content: string }[]) {
         body: JSON.stringify({
           model,
           messages,
-          temperature: 0.7,
+          temperature: 0.8,
           max_tokens: 500,
         }),
       });
@@ -47,14 +44,13 @@ async function callGroqAI(messages: { role: string; content: string }[]) {
         if (text) return text;
       } else {
         lastErr = `Modèle ${model} : ${data.error?.message || res.statusText}`;
-        console.error(lastErr);
       }
     } catch (e: any) {
       lastErr = `Erreur réseau sur ${model}`;
     }
   }
 
-  throw new Error(lastErr || "Aucun modèle de ta doc n'est accessible.");
+  throw new Error(lastErr || "Aucun modèle d'IA n'a répondu.");
 }
 
 export async function POST(req: NextRequest) {
@@ -66,21 +62,64 @@ export async function POST(req: NextRequest) {
     const u = user as any;
 
     const body = await req.json();
-    const { userPrompt } = body;
+    const { action, targetName, targetCity, userPrompt } = body as {
+      action?: string;
+      targetName?: string;
+      targetCity?: string;
+      userPrompt?: string;
+    };
 
-    const userName = u?.firstName || "Gabriel";
+    const userName = u?.firstName || "Utilisateur";
     const userGender = u?.gender === "male" ? "Homme" : "Femme";
     const userCity = u?.city || "Cameroun";
+    const target = targetName || "ton match";
 
-    const systemPrompt = `Tu es Gabi AI, le coach de séduction intelligent de LoveLink. 
+    const systemPrompt = `Tu es Gabi AI, le coach virtuel officiel de séduction sur LoveLink.
 Interlocuteur : ${userName}, ${userGender}, ville: ${userCity}.
-Ton style : Charismatique, drôle, expert en Afrique.
-IMPORTANT : Si on te demande une bio, rédige une présentation percutante adaptée à un ${userGender}.
-Réponds en 3-4 phrases maximum avec des émojis.`;
+Ton style : Charismatique, drôle, chaleureux, expert en drague en Afrique.
+Réponds en français avec des émojis. Maximum 3-4 phrases.`;
 
+    // 💬 1. PHRASES D'ACCROCHE POUR LE CHAT MESSAGERIE
+    if (action === "icebreaker") {
+      const messages = [
+        { role: "system", content: systemPrompt },
+        {
+          role: "user",
+          content: `Donne-moi 3 phrases d'accroche courtes, originales et séduisantes pour engager la conversation avec ${target}.
+RÈGLE STRICTE : Donne exactement 3 phrases, une par ligne. Pas de numérotation, pas d'introduction, pas de guillemets.`,
+        },
+      ];
+
+      let suggestions: string[] = [];
+      try {
+        const aiResponse = await callGroqAI(messages);
+        if (aiResponse) {
+          suggestions = aiResponse
+            .split("\n")
+            .map((s: string) => s.replace(/^[0-9.-]+\s*/, "").replace(/^["'-]/, "").replace(/["'-]$/, "").trim())
+            .filter((s: string) => s.length > 5)
+            .slice(0, 3);
+        }
+      } catch (err) {
+        console.error("Icebreaker AI Error:", err);
+      }
+
+      // Si l'IA n'a pas renvoyé 3 lignes propres, fallback sur 3 superbes phrases
+      if (suggestions.length < 3) {
+        suggestions = [
+          `Salut ${target} ! J'ai vu ta photo, ton sourire m'a captivé 😊 C'est quoi ton endroit préféré pour un verre ?`,
+          `Coucou ${target} ! Ravi d'avoir matché avec toi ✨ Tu fais quoi de beau aujourd'hui ?`,
+          `Salut ${target} ! On parie que j'arrive à te faire sourire en moins de 3 messages ? 😉`,
+        ];
+      }
+
+      return NextResponse.json({ coachName: "Gabi AI", suggestions });
+    }
+
+    // 💬 2. DISCUSSION LIBRE (CHAT GABI AI)
     const messages = [
       { role: "system", content: systemPrompt },
-      { role: "user", content: userPrompt || "Donne-moi un conseil." },
+      { role: "user", content: userPrompt || "Donne-moi un conseil de drague." },
     ];
 
     const aiResponse = await callGroqAI(messages);
