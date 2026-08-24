@@ -14,7 +14,7 @@ import Image from "next/image";
 import Notifications from "../components/Notifications";
 import InstallAppButton from "../components/InstallAppButton";
 import PushAutoSubscriber from "../components/PushAutoSubscriber";
-import GabiAiButton from "@/components/GabiAiButton";
+import GabiAiButton from "../components/GabiAiButton";
 import {
   Heart,
   User,
