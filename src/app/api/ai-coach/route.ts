@@ -10,14 +10,16 @@ async function callGroqAI(messages: { role: string; content: string }[]) {
   const apiKey = (process.env.GROQ_API_KEY || "").trim();
 
   if (!apiKey) {
-    throw new Error("La clé GROQ_API_KEY n'est pas configurée dans Vercel.");
+    throw new Error("La clé GROQ_API_KEY est manquante sur Vercel.");
   }
 
-  // 🎯 NOUVEAUX MODÈLES OFFICIELS 2026 (D'après ta documentation Groq)
+  // 🎯 UTILISATION DES IDS EXACTS DE TA DOCUMENTATION
   const models = [
-    "gpt-oss-120b", // Ton modèle préféré
-    "qwen-3.6-27b", // Le remplaçant recommandé n°2
-    "gpt-oss-20b"   // Le remplaçant léger
+    "openai/gpt-oss-120b", // Le remplaçant de Llama 3.3
+    "qwen/qwen3.6-27b",    // Le remplaçant de Llama 3.1
+    "openai/gpt-oss-20b",
+    "llama-3.3-70b-versatile", // On le garde au cas où
+    "llama-3.1-8b-instant"
   ];
 
   let lastErr = "";
@@ -33,18 +35,18 @@ async function callGroqAI(messages: { role: string; content: string }[]) {
         body: JSON.stringify({
           model,
           messages,
-          temperature: 0.8,
+          temperature: 0.7,
           max_tokens: 500,
         }),
       });
 
+      const data = await res.json();
+
       if (res.ok) {
-        const data = await res.json();
         const text = data.choices?.[0]?.message?.content;
         if (text) return text;
       } else {
-        const errJson = await res.json().catch(() => ({}));
-        lastErr = `Groq (${model}) : ${errJson.error?.message || res.statusText}`;
+        lastErr = `Modèle ${model} : ${data.error?.message || res.statusText}`;
         console.error(lastErr);
       }
     } catch (e: any) {
@@ -52,7 +54,7 @@ async function callGroqAI(messages: { role: string; content: string }[]) {
     }
   }
 
-  throw new Error(lastErr || "L'IA est indisponible pour le moment.");
+  throw new Error(lastErr || "Aucun modèle de ta doc n'est accessible.");
 }
 
 export async function POST(req: NextRequest) {
@@ -60,25 +62,25 @@ export async function POST(req: NextRequest) {
     const userId = await getCurrentUserId();
     if (!userId) return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
 
-    // Charger les infos pour que Gabi AI sache à qui il parle
     const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
     const u = user as any;
 
     const body = await req.json();
     const { userPrompt } = body;
 
-    const userName = u?.firstName || "Utilisateur";
+    const userName = u?.firstName || "Gabriel";
     const userGender = u?.gender === "male" ? "Homme" : "Femme";
     const userCity = u?.city || "Cameroun";
 
     const systemPrompt = `Tu es Gabi AI, le coach de séduction intelligent de LoveLink. 
-Ton interlocuteur : ${userName}, ${userGender}, ville: ${userCity}.
-Ton style : Charismatique, drôle, expert en relations en Afrique.
-Instructions : Réponds toujours en français. Maximum 3-4 phrases. Utilise des émojis.`;
+Interlocuteur : ${userName}, ${userGender}, ville: ${userCity}.
+Ton style : Charismatique, drôle, expert en Afrique.
+IMPORTANT : Si on te demande une bio, rédige une présentation percutante adaptée à un ${userGender}.
+Réponds en 3-4 phrases maximum avec des émojis.`;
 
     const messages = [
       { role: "system", content: systemPrompt },
-      { role: "user", content: userPrompt || "Donne-moi un conseil de drague." },
+      { role: "user", content: userPrompt || "Donne-moi un conseil." },
     ];
 
     const aiResponse = await callGroqAI(messages);
@@ -86,9 +88,8 @@ Instructions : Réponds toujours en français. Maximum 3-4 phrases. Utilise des 
     return NextResponse.json({ coachName: "Gabi AI", advice: aiResponse });
 
   } catch (error: any) {
-    console.error("Gabi AI Error:", error.message);
     return NextResponse.json(
-      { error: error?.message || "Erreur de connexion à Gabi AI" },
+      { error: error?.message || "Erreur Gabi AI" },
       { status: 500 }
     );
   }
