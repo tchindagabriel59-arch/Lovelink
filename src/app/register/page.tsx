@@ -19,7 +19,7 @@ import {
   Users,
   Search,
   Calendar,
-  Mail,
+  Phone,
   User,
 } from "lucide-react";
 
@@ -111,6 +111,19 @@ function RegisterPageContent() {
     return age;
   };
 
+  // Vérifie si c'est un email OU un numéro de téléphone valide
+  const isValidIdentifier = (value: string): boolean => {
+    const v = value.trim();
+    if (!v) return false;
+    if (v.includes("@")) {
+      // Email basique
+      return v.includes(".") && v.length >= 5;
+    }
+    // Téléphone : au moins 8 chiffres
+    const digits = v.replace(/[\s\-\+\(\)]/g, "");
+    return digits.length >= 8 && /^\d+$/.test(digits);
+  };
+
   const validateStep = (): boolean => {
     switch (step) {
       case 1:
@@ -121,7 +134,11 @@ function RegisterPageContent() {
         return true;
       case 2:
         if (!form.email.trim() || !form.password) {
-          setError("Email et mot de passe requis");
+          setError("Numéro de téléphone (ou email) et mot de passe requis");
+          return false;
+        }
+        if (!isValidIdentifier(form.email)) {
+          setError("Entre un numéro valide (ex: 651387914) ou un email");
           return false;
         }
         if (form.password.length < 6) {
@@ -229,7 +246,6 @@ function RegisterPageContent() {
     setError("");
 
     try {
-      // 1. Upload binaire de la photo sur Cloudinary
       let uploadedPhotoUrl = "";
       if (photoFile) {
         try {
@@ -238,7 +254,7 @@ function RegisterPageContent() {
             headers: {
               "Content-Type": photoFile.type || "image/jpeg",
             },
-            body: photoFile, // Envoi binaire directement
+            body: photoFile,
           });
 
           if (uploadRes.ok) {
@@ -259,12 +275,11 @@ function RegisterPageContent() {
         }
       }
 
-      // 2. Création du compte avec la photoUrl enregistrée direct en DB
       const res = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          email: form.email,
+          email: form.email.trim(), // peut être un téléphone OU un email
           password: form.password,
           firstName: form.firstName,
           lastName: form.lastName || form.firstName,
@@ -407,33 +422,39 @@ function RegisterPageContent() {
               </div>
             )}
 
-            {/* STEP 2 : Email / MDP */}
+            {/* STEP 2 : Téléphone OU Email + MDP */}
             {step === 2 && (
               <div className="space-y-5 animate-fade-in">
                 <div className="text-center mb-2">
                   <div className="w-14 h-14 mx-auto mb-3 rounded-2xl bg-gradient-to-br from-purple-500 to-violet-500 flex items-center justify-center">
-                    <Mail className="w-7 h-7 text-white" />
+                    <Phone className="w-7 h-7 text-white" />
                   </div>
                   <h1 className="text-2xl font-black text-slate-900">
                     Crée tes identifiants
                   </h1>
                   <p className="text-slate-500 text-sm mt-1">
-                    Pour te connecter en toute sécurité
+                    Ton numéro WhatsApp ou ton email
                   </p>
                 </div>
+
                 <div>
                   <label className="block text-sm font-bold text-slate-700 mb-1.5">
-                    Email *
+                    Numéro WhatsApp ou Email *
                   </label>
                   <input
                     autoFocus
-                    type="email"
+                    type="text"
+                    inputMode="text"
                     value={form.email}
                     onChange={(e) => setField("email", e.target.value)}
                     className="w-full px-4 py-3.5 rounded-2xl border-2 border-slate-200 focus:border-rose-400 outline-none"
-                    placeholder="ton@email.com"
+                    placeholder="Ex: 651387914 ou ton@email.com"
                   />
+                  <p className="text-[11px] text-emerald-600 font-semibold mt-1.5 flex items-center gap-1">
+                    💡 Pas besoin d&apos;email ! Ton numéro de téléphone suffit.
+                  </p>
                 </div>
+
                 <div className="relative">
                   <label className="block text-sm font-bold text-slate-700 mb-1.5">
                     Mot de passe *
@@ -450,9 +471,14 @@ function RegisterPageContent() {
                     onClick={() => setShowPassword(!showPassword)}
                     className="absolute right-3 top-10 text-slate-400"
                   >
-                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    {showPassword ? (
+                      <EyeOff className="w-5 h-5" />
+                    ) : (
+                      <Eye className="w-5 h-5" />
+                    )}
                   </button>
                 </div>
+
                 <div>
                   <label className="block text-sm font-bold text-slate-700 mb-1.5">
                     Confirmer *
@@ -487,7 +513,9 @@ function RegisterPageContent() {
                   type="date"
                   value={form.birthDate}
                   onChange={(e) => setField("birthDate", e.target.value)}
-                  max={new Date(new Date().setFullYear(new Date().getFullYear() - 18))
+                  max={new Date(
+                    new Date().setFullYear(new Date().getFullYear() - 18)
+                  )
                     .toISOString()
                     .split("T")[0]}
                   className="w-full px-4 py-4 rounded-2xl border-2 border-slate-200 focus:border-rose-400 outline-none text-lg"
@@ -556,7 +584,9 @@ function RegisterPageContent() {
                       }`}
                     >
                       <div className="text-2xl mb-1">{g.emoji}</div>
-                      <div className="font-bold text-sm text-slate-800">{g.label}</div>
+                      <div className="font-bold text-sm text-slate-800">
+                        {g.label}
+                      </div>
                     </button>
                   ))}
                 </div>
@@ -590,7 +620,9 @@ function RegisterPageContent() {
                       }`}
                     >
                       <span className="text-3xl">{o.emoji}</span>
-                      <span className="font-bold text-slate-900 flex-1">{o.label}</span>
+                      <span className="font-bold text-slate-900 flex-1">
+                        {o.label}
+                      </span>
                       {form.lookingFor === o.value && (
                         <Check className="w-5 h-5 text-rose-500" />
                       )}
@@ -621,7 +653,7 @@ function RegisterPageContent() {
                     value={form.city}
                     onChange={(e) => setField("city", e.target.value)}
                     className="w-full px-4 py-3.5 rounded-2xl border-2 border-slate-200 focus:border-rose-400 outline-none"
-                    placeholder="Ex: Dakar, Yaoundé, Abidjan..."
+                    placeholder="Ex: Douala, Yaoundé, Dakar..."
                   />
                 </div>
                 <div>
@@ -633,7 +665,7 @@ function RegisterPageContent() {
                     value={form.country}
                     onChange={(e) => setField("country", e.target.value)}
                     className="w-full px-4 py-3.5 rounded-2xl border-2 border-slate-200 focus:border-rose-400 outline-none"
-                    placeholder="Ex: Sénégal, Cameroun..."
+                    placeholder="Ex: Cameroun, Sénégal..."
                   />
                 </div>
                 <div>
@@ -705,7 +737,7 @@ function RegisterPageContent() {
               </div>
             )}
 
-            {/* STEP 8 : Photo + CGU (CORRIGÉ SANS CAPTURE="USER") */}
+            {/* STEP 8 : Photo + CGU */}
             {step === 8 && (
               <div className="space-y-5 animate-fade-in">
                 <div className="text-center mb-2">
@@ -744,7 +776,6 @@ function RegisterPageContent() {
                     </>
                   )}
                 </button>
-                {/* ✅ SANS capture="user" = laisse le choix Galerie / Caméra */}
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -770,7 +801,10 @@ function RegisterPageContent() {
                     onChange={(e) => setAcceptAge(e.target.checked)}
                     className="mt-1 w-5 h-5 accent-rose-500 cursor-pointer"
                   />
-                  <label htmlFor="acceptAge" className="text-sm text-slate-700 cursor-pointer">
+                  <label
+                    htmlFor="acceptAge"
+                    className="text-sm text-slate-700 cursor-pointer"
+                  >
                     Je certifie avoir <strong>au moins 18 ans</strong>
                   </label>
                 </div>
@@ -782,9 +816,16 @@ function RegisterPageContent() {
                     onChange={(e) => setAcceptCGU(e.target.checked)}
                     className="mt-1 w-5 h-5 accent-purple-500 cursor-pointer"
                   />
-                  <label htmlFor="acceptCGU" className="text-sm text-slate-700 cursor-pointer">
+                  <label
+                    htmlFor="acceptCGU"
+                    className="text-sm text-slate-700 cursor-pointer"
+                  >
                     J&apos;accepte les{" "}
-                    <Link href="/cgu" target="_blank" className="text-rose-500 underline font-bold">
+                    <Link
+                      href="/cgu"
+                      target="_blank"
+                      className="text-rose-500 underline font-bold"
+                    >
                       CGU
                     </Link>{" "}
                     et la{" "}
