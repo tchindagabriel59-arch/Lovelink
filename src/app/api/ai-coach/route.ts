@@ -1,21 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUserId } from "@/lib/auth";
+import { db } from "@/db";
+import { users } from "@/db/schema";
+import { eq } from "drizzle-orm";
 
 const GROQ_API_KEY = process.env.GROQ_API_KEY || "";
 
+// 🤖 FONCTION D'APPEL DIRECT À L'IA GROQ
 async function callGroqAI(messages: { role: string; content: string }[]) {
-  if (!GROQ_API_KEY) return null;
+  if (!GROQ_API_KEY) {
+    throw new Error("La clé GROQ_API_KEY n'est pas configurée dans les variables d'environnement Vercel.");
+  }
 
-  // Liste des modèles ACTUELS et VALIDES sur Groq (Mise à jour 2024/2025)
-  // On utilise les nouveaux modèles recommandés par Groq
-  const activeModels = [
-    "llama-3.3-70b-versatile", // Le plus puissant (équivalent 120B OSS)
-    "llama-3.1-70b-versatile", // Très stable
-    "mixtral-8x7b-32768",       // Excellent en français
-    "llama-3.1-8b-instant"      // Le plus rapide
-  ];
+  // Modèles Groq actuellement actifs
+  const models = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"];
+  let lastError = "";
 
-  for (const model of activeModels) {
+  for (const model of models) {
     try {
       const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
@@ -26,7 +27,7 @@ async function callGroqAI(messages: { role: string; content: string }[]) {
         body: JSON.stringify({
           model,
           messages,
-          temperature: 0.8,
+          temperature: 0.7,
           max_tokens: 400,
         }),
       });
@@ -35,77 +36,103 @@ async function callGroqAI(messages: { role: string; content: string }[]) {
         const data = await res.json();
         const content = data.choices?.[0]?.message?.content;
         if (content) return content;
+      } else {
+        const errText = await res.text();
+        lastError = `Groq (${model}) error [${res.status}]: ${errText}`;
+        console.error(lastError);
       }
     } catch (err) {
-      console.error(`Erreur avec le modèle ${model}:`, err);
-    }
-  }
-  return null;
-}
-
-// 🧠 GÉNÉRATEUR DE RÉPONSE MANUELLE (Si l'IA est hors-ligne)
-function getSmartFallback(prompt: string, userGender: string): string {
-  const p = prompt.toLowerCase().trim();
-  const isMale = userGender === "male" || p.includes("homme") || p.includes("garçon");
-
-  if (p.includes("bio") || p.includes("biographie") || p.includes("présentation")) {
-    if (isMale) {
-      return "✨ **Idée de Bio (Homme) :**\nEntrepreneur passionné, j'aime autant les soirées tranquilles que les aventures imprévues. Basé à Douala, je cherche une femme authentique avec qui partager de bons moments et peut-être plus. On se capte ? ☕✨";
-    } else {
-      return "✨ **Idée de Bio (Femme) :**\nSimple, pétillante et avec un grand cœur. J'aime les discussions vraies, la bonne cuisine et les voyages. Je cherche un homme respectueux pour construire une belle complicité. Viens me dire bonjour ! 💕";
+      lastError = `Fetch error (${model}): ${err instanceof Error ? err.message : String(err)}`;
+      console.error(lastError);
     }
   }
 
-  if (p.includes("trouver") || p.includes("bonne personne") || p.includes("rencontre")) {
-    return "💡 **Conseil de Gabi AI :** Pour trouver la perle rare, sois toi-même ! Complète ton profil à 100%, mets tes vraies passions et n'hésite pas à faire le premier pas avec humour. La sincérité est ce qui attire le plus ici. 😉";
-  }
-
-  return "Salut ! 👋 Je suis Gabi AI. Je peux t'aider à rédiger ta bio, te donner des idées de messages ou des conseils pour tes rendez-vous. Pose-moi ta question ! ✨";
+  throw new Error(lastError || "Impossible de contacter les serveurs Groq AI.");
 }
 
 export async function POST(req: NextRequest) {
   try {
     const userId = await getCurrentUserId();
-    if (!userId) return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
+    if (!userId) {
+      return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
+    }
+
+    // 1. Charger l'utilisateur en BDD pour connaître son VRAI genre, prénom et ville
+    const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+    const u = user as any;
 
     const body = await req.json();
-    const { action, targetName, targetCity, userGender, userPrompt } = body as {
+    const { action, targetName, targetCity, userPrompt } = body as {
       action?: string;
       targetName?: string;
       targetCity?: string;
-      userGender?: string;
       userPrompt?: string;
     };
 
-    const promptText = userPrompt || "";
-    // On détecte le genre pour éviter de donner une bio de femme à un homme
-    const detectedGender = userGender || (promptText.toLowerCase().includes("je suis un homme") ? "male" : "female");
+    const userName = u?.firstName || "Utilisateur";
+    const userGender = u?.gender === "male" ? "un Homme" : u?.gender === "female" ? "une Femme" : "Non précisé";
+    const userCity = u?.city || targetCity || "Cameroun";
 
-    const systemPrompt = `Tu es Gabi AI, le coach virtuel officiel de LoveLink. 
-Tu aides les célibataires en Afrique (Cameroun, Sénégal, Côte d'Ivoire...) à séduire avec classe, humour et respect.
-Si l'utilisateur est un homme (Gabriel, etc.), utilise des formules masculines.
-Si c'est une femme, utilise des formules féminines.
-Sois chaleureux, utilise des émojis et réponds en maximum 3-4 phrases.`;
+    // 🧠 SYSTEM PROMPT DE SÉDUCTION POUR NDOLO / GABI AI
+    const systemPrompt = `Tu es Gabi AI, le coach virtuel de séduction officiel de l'application LoveLink.
+Tu es en train de discuter avec ${userName}.
+Informations sur ${userName} :
+- Genre : ${userGender}
+- Ville : ${userCity}
 
-    // 💬 CHAT AVEC GABI AI
-    const messages = [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: promptText || "Donne-moi un conseil de drague." }
-    ];
+Ton rôle :
+- Réponds de manière super intelligente, naturelle, chaleureuse et dynamique (avec des émojis).
+- Adaptes TOUJOURS tes réponses au genre de ${userName} (${userGender}). Si ${userName} est un homme et te demande une bio, rédige une bio d'homme viril, drôle et classe.
+- Ne donne JAMAIS de réponses génériques. Sois créatif, captivant et va droit au but.
+- Sois très pertinent pour le contexte africain (Cameroun, Douala, Yaoundé, Dakar, etc.).`;
 
-    const aiResponse = await callGroqAI(messages);
+    // 💬 1. DISCUSSION LIBRE (CHAT)
+    if (action === "chat" || userPrompt) {
+      const messages = [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt || "Bonjour Gabi AI !" },
+      ];
 
-    if (aiResponse) {
+      const aiResponse = await callGroqAI(messages);
       return NextResponse.json({ coachName: "Gabi AI", advice: aiResponse });
     }
 
-    // 🔄 FALLBACK SI L'API GROQ ÉCHOUE
-    return NextResponse.json({
-      coachName: "Gabi AI",
-      advice: getSmartFallback(promptText, detectedGender),
-    });
+    // 💬 2. PHRASES D'ACCROCHE POUR LA MESSAGERIE
+    if (action === "icebreaker") {
+      const target = targetName || "la personne";
+      const messages = [
+        { role: "system", content: systemPrompt },
+        {
+          role: "user",
+          content: `Propose-moi 3 phrases d'accroche originales et captivantes pour engager la conversation avec ${target} qui vit à ${userCity}. Renvoie uniquement les 3 phrases séparées par une ligne.`,
+        },
+      ];
+
+      const aiResponse = await callGroqAI(messages);
+      const suggestions = aiResponse
+        .split("\n")
+        .map((s: string) => s.replace(/^[0-9.-]+\s*/, "").trim())
+        .filter((s: string) => s.length > 5)
+        .slice(0, 3);
+
+      return NextResponse.json({ coachName: "Gabi AI", suggestions });
+    }
+
+    // 💡 3. CONSEIL / BIO PAR DÉFAUT
+    const messages = [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: "Donne-moi un conseil du jour captivant pour réussir mes rencontres sur LoveLink." },
+    ];
+
+    const aiAdvice = await callGroqAI(messages);
+    return NextResponse.json({ coachName: "Gabi AI", advice: aiAdvice });
 
   } catch (error) {
-    return NextResponse.json({ error: "Erreur Gabi AI" }, { status: 500 });
+    console.error("Gabi AI Route Error:", error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return NextResponse.json(
+      { error: errorMessage || "Erreur de connexion à Gabi AI" },
+      { status: 500 }
+    );
   }
 }
