@@ -221,6 +221,7 @@ interface Profile {
 
 interface CurrentUser {
   isPremium?: boolean;
+  isBoosted?: boolean;
 }
 
 function getAge(birthDate: string): number {
@@ -258,6 +259,7 @@ function DiscoverSkeleton() {
 export default function DiscoverPage() {
   const router = useRouter();
   const [showTour, setShowTour] = useState(false);
+  const [showBoostPromo, setShowBoostPromo] = useState(false);
 
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -312,6 +314,27 @@ export default function DiscoverPage() {
     }
     loadAll();
   }, []);
+
+  // 🚀 PROMO BOOST : max 2 fois, après le tour, pas si Premium/Boost
+  useEffect(() => {
+    if (loading || showTour) return;
+    if (currentUser?.isPremium || currentUser?.isBoosted) return;
+
+    try {
+      const KEY = "lovelink_boost_promo_count";
+      const count = parseInt(localStorage.getItem(KEY) || "0", 10);
+      if (count >= 2) return;
+
+      const timer = setTimeout(() => {
+        setShowBoostPromo(true);
+        localStorage.setItem(KEY, String(count + 1));
+      }, 2800);
+
+      return () => clearTimeout(timer);
+    } catch {
+      // ignore
+    }
+  }, [loading, showTour, currentUser?.isPremium, currentUser?.isBoosted]);
 
   const handleAction = useCallback(
     async (isLike: boolean) => {
@@ -413,7 +436,13 @@ export default function DiscoverPage() {
         <Sparkles className="w-16 h-16 text-rose-500 mb-4" />
         <h2 className="text-2xl font-black mb-2">Tu as tout vu !</h2>
         <p className="text-slate-400 text-sm mb-6">Reviens plus tard pour de nouveaux profils.</p>
-        <button onClick={() => { setCurrentIndex(0); setLoading(true); }} className="px-6 py-3 bg-rose-500 font-bold rounded-full">
+        <button
+          onClick={() => {
+            setCurrentIndex(0);
+            setLoading(true);
+          }}
+          className="px-6 py-3 bg-rose-500 font-bold rounded-full"
+        >
           Rafraîchir
         </button>
       </div>
@@ -429,15 +458,55 @@ export default function DiscoverPage() {
 
   return (
     <div className="fixed inset-0 bg-black lg:relative lg:min-h-screen lg:bg-slate-100 lg:flex lg:flex-col lg:items-center lg:justify-center lg:p-4">
-
       {/* 🚀 TOUR EN DIRECT */}
       {showTour && <OnboardingTour onFinish={completeTour} />}
+
+      {/* 🚀 BANNIÈRE PROMO BOOST (max 2 fois) */}
+      {showBoostPromo && !showTour && (
+        <div className="fixed bottom-28 left-3 right-3 z-[90] max-w-md mx-auto animate-in slide-in-from-bottom duration-300">
+          <div className="bg-gradient-to-r from-purple-600 via-rose-500 to-amber-400 p-[1.5px] rounded-2xl shadow-2xl">
+            <div className="bg-slate-950/95 rounded-2xl p-3.5 flex items-center gap-3">
+              <div className="w-11 h-11 rounded-full bg-gradient-to-tr from-purple-500 to-amber-400 flex items-center justify-center flex-shrink-0 shadow-lg">
+                <Rocket className="w-5 h-5 text-white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-white text-sm font-black leading-tight">
+                  Multiplie tes matchs 🚀
+                </p>
+                <p className="text-white/70 text-[11px] mt-0.5 leading-snug">
+                  Boost ton profil et apparais en premier dans Discover
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowBoostPromo(false);
+                  router.push("/boost");
+                }}
+                className="px-3.5 py-2 bg-white text-rose-600 text-xs font-black rounded-xl flex-shrink-0 shadow-md active:scale-95 transition"
+              >
+                GO
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowBoostPromo(false)}
+                className="text-white/50 hover:text-white text-xl leading-none px-1 flex-shrink-0"
+                aria-label="Fermer"
+              >
+                ×
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 💬 MODALE MESSAGE DIRECT */}
       {showDirectMessageModal && currentProfile && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4">
           <div className="bg-slate-900 border border-slate-800 text-white rounded-3xl p-6 max-w-md w-full shadow-2xl">
-            <h3 className="font-bold text-lg text-white mb-2">Message direct à {currentProfile.firstName}</h3>
+            <h3 className="font-bold text-lg text-white mb-2">
+              Message direct à {currentProfile.firstName}
+            </h3>
             <textarea
               value={directMessageText}
               onChange={(e) => setDirectMessageText(e.target.value)}
@@ -446,10 +515,17 @@ export default function DiscoverPage() {
               className="w-full p-4 rounded-2xl bg-slate-800 border border-slate-700 text-sm text-white outline-none mb-4"
             />
             <div className="flex gap-3">
-              <button onClick={() => setShowDirectMessageModal(false)} className="flex-1 py-3 rounded-xl border border-slate-700 text-sm">
+              <button
+                onClick={() => setShowDirectMessageModal(false)}
+                className="flex-1 py-3 rounded-xl border border-slate-700 text-sm"
+              >
                 Annuler
               </button>
-              <button onClick={submitDirectMessage} disabled={sendingDirectMessage} className="flex-1 py-3 rounded-xl bg-purple-600 font-bold text-sm">
+              <button
+                onClick={submitDirectMessage}
+                disabled={sendingDirectMessage}
+                className="flex-1 py-3 rounded-xl bg-purple-600 font-bold text-sm"
+              >
                 {sendingDirectMessage ? "Envoi..." : "Envoyer"}
               </button>
             </div>
@@ -469,10 +545,17 @@ export default function DiscoverPage() {
                 : "Envoyer un message direct sans matcher est réservé aux membres Premium."}
             </p>
             <div className="flex gap-3">
-              <button onClick={() => setShowPremiumModal(false)} className="flex-1 py-3 border border-slate-200 rounded-xl text-sm font-semibold">
+              <button
+                onClick={() => setShowPremiumModal(false)}
+                className="flex-1 py-3 border border-slate-200 rounded-xl text-sm font-semibold"
+              >
                 Fermer
               </button>
-              <Link href="/premium" onClick={() => setShowPremiumModal(false)} className="flex-1 py-3 bg-amber-500 text-white font-bold rounded-xl text-sm flex items-center justify-center gap-1">
+              <Link
+                href="/premium"
+                onClick={() => setShowPremiumModal(false)}
+                className="flex-1 py-3 bg-amber-500 text-white font-bold rounded-xl text-sm flex items-center justify-center gap-1"
+              >
                 <Gem size={16} /> Premium
               </Link>
             </div>
@@ -483,12 +566,19 @@ export default function DiscoverPage() {
       {/* CARTE PROFIL */}
       <div
         key={currentIndex}
-        style={{ transform: cardTransform, transition: dragStart ? "none" : "transform 350ms ease" }}
+        style={{
+          transform: cardTransform,
+          transition: dragStart ? "none" : "transform 350ms ease",
+        }}
         className="relative w-full h-full lg:w-[420px] lg:h-[750px] lg:rounded-3xl overflow-hidden bg-black shadow-2xl"
       >
         <div className="absolute inset-0 select-none">
           {hasPhotos ? (
-            <img src={photos[currentPhotoIndex]} alt="" className="w-full h-full object-cover" />
+            <img
+              src={photos[currentPhotoIndex]}
+              alt=""
+              className="w-full h-full object-cover"
+            />
           ) : (
             <div className="w-full h-full bg-gradient-to-br from-rose-500 to-purple-600 flex items-center justify-center text-7xl font-bold text-white">
               {currentProfile.firstName.charAt(0)}
@@ -496,38 +586,55 @@ export default function DiscoverPage() {
           )}
         </div>
 
-        {/* GRADIENT OMBRE */}
         <div className="absolute bottom-0 left-0 right-0 h-72 bg-gradient-to-t from-black via-black/60 to-transparent pointer-events-none z-10" />
 
-        {/* PROFIL INFOS (RELEVÉ AU-DESSUS DES BOUTONS) */}
         <div className="absolute bottom-36 left-4 right-4 text-white z-20 pointer-events-none">
           <h2 className="text-3xl font-black flex items-center gap-2">
             {currentProfile.firstName}, {getAge(currentProfile.birthDate)}
-            {currentProfile.isVerified && <BadgeCheck className="w-6 h-6 text-blue-400 fill-blue-500" />}
+            {currentProfile.isVerified && (
+              <BadgeCheck className="w-6 h-6 text-blue-400 fill-blue-500" />
+            )}
           </h2>
           <p className="text-sm text-white/80 flex items-center gap-1 mt-1">
             <MapPin size={14} /> {currentProfile.city || "Cameroun"}
           </p>
         </div>
 
-        {/* 🎯 BARRE D'ACTIONS : RELEVÉE À bottom-20 (AU-DESSUS DE LA BARRE DE NAV MOBILE) */}
         <div className="absolute bottom-20 lg:bottom-6 left-0 right-0 flex items-center justify-center gap-2 z-30 px-2">
-          <button onClick={handleRewind} className="w-11 h-11 bg-white rounded-full shadow-lg flex items-center justify-center text-amber-500 hover:scale-110 active:scale-95 transition">
+          <button
+            onClick={handleRewind}
+            className="w-11 h-11 bg-white rounded-full shadow-lg flex items-center justify-center text-amber-500 hover:scale-110 active:scale-95 transition"
+          >
             <RotateCcw size={20} />
           </button>
-          <button onClick={() => handleAction(false)} className="w-14 h-14 bg-white rounded-full shadow-xl flex items-center justify-center text-red-500 hover:scale-110 active:scale-95 transition">
+          <button
+            onClick={() => handleAction(false)}
+            className="w-14 h-14 bg-white rounded-full shadow-xl flex items-center justify-center text-red-500 hover:scale-110 active:scale-95 transition"
+          >
             <X size={28} />
           </button>
-          <button onClick={handleSuperLike} className="w-12 h-12 bg-white rounded-full shadow-lg flex items-center justify-center text-blue-500 hover:scale-110 active:scale-95 transition">
+          <button
+            onClick={handleSuperLike}
+            className="w-12 h-12 bg-white rounded-full shadow-lg flex items-center justify-center text-blue-500 hover:scale-110 active:scale-95 transition"
+          >
             <Star size={24} className="fill-blue-500" />
           </button>
-          <button onClick={() => handleAction(true)} className="w-14 h-14 bg-white rounded-full shadow-xl flex items-center justify-center text-green-500 hover:scale-110 active:scale-95 transition">
+          <button
+            onClick={() => handleAction(true)}
+            className="w-14 h-14 bg-white rounded-full shadow-xl flex items-center justify-center text-green-500 hover:scale-110 active:scale-95 transition"
+          >
             <Heart size={28} className="fill-green-500" />
           </button>
-          <button onClick={handleDirectMessage} className="w-11 h-11 bg-white rounded-full shadow-lg flex items-center justify-center text-purple-500 hover:scale-110 active:scale-95 transition">
+          <button
+            onClick={handleDirectMessage}
+            className="w-11 h-11 bg-white rounded-full shadow-lg flex items-center justify-center text-purple-500 hover:scale-110 active:scale-95 transition"
+          >
             <MessageCircle size={20} />
           </button>
-          <button onClick={() => router.push("/boost")} className="w-11 h-11 bg-gradient-to-tr from-purple-600 to-amber-500 rounded-full shadow-lg flex items-center justify-center text-white hover:scale-110 active:scale-95 transition">
+          <button
+            onClick={() => router.push("/boost")}
+            className="w-11 h-11 bg-gradient-to-tr from-purple-600 to-amber-500 rounded-full shadow-lg flex items-center justify-center text-white hover:scale-110 active:scale-95 transition"
+          >
             <Rocket size={20} />
           </button>
         </div>
