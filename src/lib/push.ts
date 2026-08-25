@@ -99,7 +99,47 @@ export const PushTemplates = {
     body: `${fromName} t'a liké !`,
     icon: "/icon",
     tag: "like",
-    url: "/likes-recus",
+    // 👑 PREMIUM
+  premiumExpiring3d: () => ({
+    title: "⏰ Ton Premium expire dans 3 jours",
+    body: "Renouvelle maintenant pour garder tes avantages 💎",
+    icon: "/icon",
+    tag: "premium_expiring_3d",
+    url: "/premium",
+  }),
+
+  premiumExpiring1d: () => ({
+    title: "🚨 Premium : plus qu'1 jour !",
+    body: "Dernière ligne droite… renouvelle pour ne rien perdre 👑",
+    icon: "/icon",
+    tag: "premium_expiring_1d",
+    url: "/premium",
+  }),
+
+  premiumExpired: () => ({
+    title: "😢 Ton Premium est terminé",
+    body: "Ton badge et tes avantages sont désactivés. Renouvelle en 1 clic !",
+    icon: "/icon",
+    tag: "premium_expired",
+    url: "/premium",
+  }),
+
+  // 🚀 BOOST
+  boostExpiringSoon: () => ({
+    title: "⚡ Ton Boost se termine bientôt",
+    body: "Plus que ~2h de visibilité max. Prolonge ton Boost !",
+    icon: "/icon",
+    tag: "boost_expiring_soon",
+    url: "/boost",
+  }),
+
+  boostExpired: () => ({
+    title: "🚀 Ton Boost est terminé",
+    body: "Ton profil n'est plus mis en avant. Relance un Boost pour rester visible !",
+    icon: "/icon",
+    tag: "boost_expired",
+    url: "/boost",
+  }),  url: "/likes-recus",
   }),
 
   superLike: (fromName: string) => ({
