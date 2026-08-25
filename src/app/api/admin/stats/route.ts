@@ -19,8 +19,6 @@ export async function GET() {
     monthAgo.setMonth(monthAgo.getMonth() - 1);
     const last24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
-    // ⚡ OPTIMISATION : Toutes les requêtes EN PARALLÈLE avec Promise.all
-    // Au lieu de 12 requêtes séquentielles (1200ms), on fait 1 aller-retour (120ms)
     const [
       [totalUsers],
       [newToday],
@@ -29,6 +27,7 @@ export async function GET() {
       [activeUsers],
       [premiumUsers],
       [bannedUsers],
+      [verifiedUsers], // ✅ NOUVEAU
       genderStats,
       [totalLikes],
       [totalMatches],
@@ -61,6 +60,11 @@ export async function GET() {
         .select({ count: sql<number>`count(*)::int` })
         .from(users)
         .where(eq(users.isBanned, true)),
+      // ✅ Compte exact des badges vérifiés
+      db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(users)
+        .where(eq(users.isVerified, true)),
       db
         .select({
           gender: users.gender,
@@ -88,6 +92,7 @@ export async function GET() {
           active24h: activeUsers.count,
           premium: premiumUsers.count,
           banned: bannedUsers.count,
+          verified: verifiedUsers.count, // ✅ NOUVEAU
         },
         gender: genderStats,
         activity: {
@@ -106,7 +111,6 @@ export async function GET() {
       },
       {
         headers: {
-          // Cache 30s pour éviter de recharger inutilement
           "Cache-Control": "private, max-age=30, stale-while-revalidate=60",
         },
       }
