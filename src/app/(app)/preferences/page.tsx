@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useUser } from "../layout";
+import { useRouter } from "next/navigation";
 import {
   Settings,
   Save,
@@ -31,6 +32,9 @@ const distanceOptions = [
 ];
 
 export default function PreferencesPage() {
+  export default function PreferencesPage() {
+  const router = useRouter(); // <-- Ajoute cette ligne
+  const { user } = useUser();
   const { user } = useUser();
   const isPremium = user?.isPremium || false;
 
@@ -167,8 +171,7 @@ export default function PreferencesPage() {
     );
   }
 
-  async function handleSave() {
-    setSaving(true);
+    async function handleSave() {
     setSaved(false);
     try {
       const res = await fetch("/api/preferences", {
@@ -177,8 +180,9 @@ export default function PreferencesPage() {
         body: JSON.stringify(prefs),
       });
       if (res.ok) {
-        setSaved(true);
-        setTimeout(() => setSaved(false), 3000);
+        // 🚀 Redirection directe vers la page Découvrir !
+        router.push("/discover");
+        router.refresh();
       }
     } catch {
       alert("Erreur");
