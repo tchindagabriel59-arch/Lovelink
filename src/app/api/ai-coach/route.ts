@@ -4,11 +4,8 @@ import { db } from "@/db";
 import { users } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
-const GROQ_API_KEY = process.env.GROQ_API_KEY || "";
-
 async function callGroqAI(messages: { role: string; content: string }[]) {
   const apiKey = (process.env.GROQ_API_KEY || "").trim();
-
   if (!apiKey) {
     throw new Error("La clé GROQ_API_KEY est manquante sur Vercel.");
   }
@@ -32,20 +29,19 @@ async function callGroqAI(messages: { role: string; content: string }[]) {
         body: JSON.stringify({
           model,
           messages,
-          temperature: 0.8,
-          max_tokens: 500,
+          temperature: 0.75,
+          max_tokens: 600,
         }),
       });
 
       const data = await res.json();
-
       if (res.ok) {
         const text = data.choices?.[0]?.message?.content;
-        if (text) return text;
+        if (text) return text as string;
       } else {
         lastErr = `Modèle ${model} : ${data.error?.message || res.statusText}`;
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       lastErr = `Erreur réseau sur ${model}`;
     }
   }
@@ -56,80 +52,128 @@ async function callGroqAI(messages: { role: string; content: string }[]) {
 export async function POST(req: NextRequest) {
   try {
     const userId = await getCurrentUserId();
-    if (!userId) return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
+    if (!userId) {
+      return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
+    }
 
     const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
     const u = user as any;
 
     const body = await req.json();
-    const { action, targetName, targetCity, userPrompt } = body as {
+    const {
+      action,
+      targetName,
+      targetCity,
+      userPrompt,
+      history,
+    } = body as {
       action?: string;
       targetName?: string;
       targetCity?: string;
       userPrompt?: string;
+      history?: { role: string; content: string }[];
     };
 
     const userName = u?.firstName || "Utilisateur";
-    const userGender = u?.gender === "male" ? "Homme" : "Femme";
-    const userCity = u?.city || "Cameroun";
-    const target = targetName || "ton match";
+    const userGender =
+      u?.gender === "male" ? "Homme" : u?.gender === "female" ? "Femme" : "Non précisé";
+    const userCity = u?.city || targetCity || "Cameroun";
+    const lookingFor = u?.lookingFor || "relation";
+    const occupation = u?.occupation || "";
+    const bio = u?.bio || "";
 
-    const systemPrompt = `Tu es Gabi AI, le coach virtuel officiel de séduction sur LoveLink.
-Interlocuteur : ${userName}, ${userGender}, ville: ${userCity}.
-Ton style : Charismatique, drôle, chaleureux, expert en drague en Afrique.
-Réponds en français avec des émojis. Maximum 3-4 phrases.`;
+    const systemPrompt = `Tu es Gabi AI, le coach de séduction PERSONNEL de ${userName} sur LoveLink.
 
-    // 💬 1. PHRASES D'ACCROCHE POUR LE CHAT MESSAGERIE
+PROFIL DE ${userName.toUpperCase()} :
+- Prénom : ${userName}
+- Genre : ${userGender}
+- Ville : ${userCity}
+- Recherche : ${lookingFor}
+- Profession : ${occupation || "non renseignée"}
+- Bio actuelle : ${bio || "pas encore de bio"}
+
+RÈGLES :
+1. Tu te souviens de TOUTE la conversation ci-dessous. Ne redis pas "Salut je suis Gabi" à chaque message.
+2. Adapte toujours tes conseils au genre (${userGender}) et à la ville (${userCity}).
+3. Si on te demande une bio : rédige une bio unique, prête à copier-coller, pour un(e) ${userGender}.
+4. Si on te demande une accroche : donne des phrases concrètes.
+5. Sois chaleureux, drôle, direct, max 4 phrases, avec émojis.
+6. Parle comme un vrai coach qui connaît déjà ${userName}, pas comme un bot générique.
+7. Réponds toujours en français.`;
+
+    // 🔑 Accroches messagerie
     if (action === "icebreaker") {
-      const messages = [
+      const target = targetName || "ton match";
+      const aiResponse = await callGroqAI([
         { role: "system", content: systemPrompt },
         {
           role: "user",
-          content: `Donne-moi 3 phrases d'accroche courtes, originales et séduisantes pour engager la conversation avec ${target}.
-RÈGLE STRICTE : Donne exactement 3 phrases, une par ligne. Pas de numérotation, pas d'introduction, pas de guillemets.`,
+          content: `Donne 3 phrases d'accroche pour écrire à ${target}.
+Exactement 3 lignes, sans numéros, sans guillemets, sans intro.`,
         },
-      ];
+      ]);
 
-      let suggestions: string[] = [];
-      try {
-        const aiResponse = await callGroqAI(messages);
-        if (aiResponse) {
-          suggestions = aiResponse
-            .split("\n")
-            .map((s: string) => s.replace(/^[0-9.-]+\s*/, "").replace(/^["'-]/, "").replace(/["'-]$/, "").trim())
-            .filter((s: string) => s.length > 5)
-            .slice(0, 3);
-        }
-      } catch (err) {
-        console.error("Icebreaker AI Error:", err);
-      }
+      let suggestions = aiResponse
+        .split("\n")
+        .map((s: string) =>
+          s
+            .replace(/^[0-9.•\-\*]+\s*/, "")
+            .replace(/^["«»]|["«»]$/g, "")
+            .trim()
+        )
+        .filter((s: string) => s.length > 5)
+        .slice(0, 3);
 
-      // Si l'IA n'a pas renvoyé 3 lignes propres, fallback sur 3 superbes phrases
-      if (suggestions.length < 3) {
+      if (suggestions.length < 1) {
         suggestions = [
-          `Salut ${target} ! J'ai vu ta photo, ton sourire m'a captivé 😊 C'est quoi ton endroit préféré pour un verre ?`,
-          `Coucou ${target} ! Ravi d'avoir matché avec toi ✨ Tu fais quoi de beau aujourd'hui ?`,
-          `Salut ${target} ! On parie que j'arrive à te faire sourire en moins de 3 messages ? 😉`,
+          `Salut ${target} ! Ton profil m'a tout de suite parlé 😊`,
+          `Coucou ${target} ! Ravi de matcher avec toi ✨`,
+          `Salut ${target} ! Comment se passe ta journée ? 😉`,
         ];
       }
 
       return NextResponse.json({ coachName: "Gabi AI", suggestions });
     }
 
-    // 💬 2. DISCUSSION LIBRE (CHAT GABI AI)
-    const messages = [
+    // 🔑 Chat avec MÉMOIRE (historique client)
+    const historySafe = Array.isArray(history)
+      ? history
+          .filter(
+            (h) =>
+              h &&
+              (h.role === "user" || h.role === "assistant") &&
+              typeof h.content === "string" &&
+              h.content.trim().length > 0
+          )
+          .slice(-20)
+      : [];
+
+    const groqMessages: { role: string; content: string }[] = [
       { role: "system", content: systemPrompt },
-      { role: "user", content: userPrompt || "Donne-moi un conseil de drague." },
+      ...historySafe,
     ];
 
-    const aiResponse = await callGroqAI(messages);
+    // Si history ne contient pas encore le dernier message user, l'ajouter
+    const last = historySafe[historySafe.length - 1];
+    if (userPrompt && (!last || last.content !== userPrompt)) {
+      groqMessages.push({ role: "user", content: userPrompt });
+    }
 
-    return NextResponse.json({ coachName: "Gabi AI", advice: aiResponse });
+    if (groqMessages.length === 1) {
+      groqMessages.push({
+        role: "user",
+        content: userPrompt || "Donne-moi un conseil de drague personnalisé.",
+      });
+    }
 
-  } catch (error: any) {
-    return NextResponse.json(
-      { error: error?.message || "Erreur Gabi AI" },
-      { status: 500 }
-    );
+    const aiResponse = await callGroqAI(groqMessages);
+
+    return NextResponse.json({
+      coachName: "Gabi AI",
+      advice: aiResponse,
+    });
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : "Erreur Gabi AI";
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
