@@ -29,6 +29,7 @@ interface Stats {
     active24h: number;
     premium: number;
     banned: number;
+    verified: number;
   };
   gender: Array<{ gender: string; count: number }>;
   activity: {
@@ -209,7 +210,7 @@ export default function AdminDashboard() {
 </header>
 
       <main className="max-w-7xl mx-auto p-6 space-y-6">
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
           <StatCard
             icon={<Users className="w-6 h-6" />}
             label="Utilisateurs totaux"
@@ -230,6 +231,14 @@ export default function AdminDashboard() {
             value={stats.users.premium}
             color="from-amber-500 to-orange-500"
             trend={`${stats.revenue.monthlyRevenue}€ / mois`}
+          />
+          {/* ✅ NOUVEAU : Profils avec badge vérifié */}
+          <StatCard
+            icon={<ShieldCheck className="w-6 h-6" />}
+            label="Profils vérifiés"
+            value={stats.users.verified}
+            color="from-sky-500 to-blue-600"
+            trend={`${stats.users.total > 0 ? ((stats.users.verified / stats.users.total) * 100).toFixed(1) : 0}% des membres`}
           />
           <StatCard
             icon={<Flag className="w-6 h-6" />}
