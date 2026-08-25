@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { users, notifications } from "@/db/schema";
-import { and, eq, gte, lt, isNotNull, sql } from "drizzle-orm";
+import { and, eq, gte, lt, isNotNull } from "drizzle-orm";
 import { sendPushToUser, PushTemplates } from "@/lib/push";
 
 export const dynamic = "force-dynamic";
@@ -48,15 +48,12 @@ async function notifyUser(
 
 export async function GET(req: NextRequest) {
   try {
-    // 🔐 Sécurité cron
     const authHeader = req.headers.get("authorization");
     const cronSecret = process.env.CRON_SECRET;
     const isVercelCron = req.headers.get("x-vercel-cron") === "1";
 
     if (cronSecret) {
-      const ok =
-        isVercelCron ||
-        authHeader === `Bearer ${cronSecret}`;
+      const ok = isVercelCron || authHeader === `Bearer ${cronSecret}`;
       if (!ok) {
         return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
       }
@@ -71,10 +68,7 @@ export async function GET(req: NextRequest) {
       boostExpired: 0,
     };
 
-    // ═══════════════════════════════════════
-    // 👑 PREMIUM — expire dans ~3 jours (J-3)
-    // Fenêtre : entre 2.5j et 3.5j
-    // ═══════════════════════════════════════
+    // 👑 PREMIUM J-3
     const in2_5d = new Date(now.getTime() + 2.5 * 24 * 60 * 60 * 1000);
     const in3_5d = new Date(now.getTime() + 3.5 * 24 * 60 * 60 * 1000);
 
@@ -105,10 +99,7 @@ export async function GET(req: NextRequest) {
       results.premiumExpiring3d++;
     }
 
-    // ═══════════════════════════════════════
-    // 👑 PREMIUM — expire dans ~1 jour (J-1)
-    // Fenêtre : entre 12h et 36h
-    // ═══════════════════════════════════════
+    // 👑 PREMIUM J-1
     const in12h = new Date(now.getTime() + 12 * 60 * 60 * 1000);
     const in36h = new Date(now.getTime() + 36 * 60 * 60 * 1000);
 
@@ -139,9 +130,7 @@ export async function GET(req: NextRequest) {
       results.premiumExpiring1d++;
     }
 
-    // ═══════════════════════════════════════
-    // 👑 PREMIUM — EXPIRÉ → désactive + notif
-    // ═══════════════════════════════════════
+    // 👑 PREMIUM EXPIRÉ
     const expiredPremium = await db
       .select({
         id: users.id,
@@ -157,7 +146,6 @@ export async function GET(req: NextRequest) {
       );
 
     for (const u of expiredPremium) {
-      // Désactive en BDD
       await db
         .update(users)
         .set({ isPremium: false, isIncognito: false })
@@ -174,10 +162,7 @@ export async function GET(req: NextRequest) {
       results.premiumExpired++;
     }
 
-    // ═══════════════════════════════════════
-    // 🚀 BOOST — se termine dans ~2h
-    // Fenêtre : entre 30 min et 2h30
-    // ═══════════════════════════════════════
+    // 🚀 BOOST BIENTÔT FINI (~2h)
     const in30m = new Date(now.getTime() + 30 * 60 * 1000);
     const in2h30 = new Date(now.getTime() + 2.5 * 60 * 60 * 1000);
 
@@ -207,10 +192,7 @@ export async function GET(req: NextRequest) {
       results.boostExpiringSoon++;
     }
 
-    // ═══════════════════════════════════════
-    // 🚀 BOOST — EXPIRÉ → notif
-    // (boostEndAt dans le passé, max 3h pour ne pas spammer les vieux)
-    // ═══════════════════════════════════════
+    // 🚀 BOOST EXPIRÉ
     const threeHoursAgo = new Date(now.getTime() - 3 * 60 * 60 * 1000);
 
     const boostExpired = await db
@@ -224,7 +206,7 @@ export async function GET(req: NextRequest) {
         and(
           isNotNull(users.boostEndAt),
           lt(users.boostEndAt, now),
-          gte(users.boostEndAt, threeHoursAgo) // seulement les tout récents
+          gte(users.boostEndAt, threeHoursAgo)
         )
       );
 
@@ -240,8 +222,6 @@ export async function GET(req: NextRequest) {
       results.boostExpired++;
     }
 
-    console.log("[CRON subscription-expiry]", results);
-
     return NextResponse.json({
       success: true,
       at: now.toISOString(),
@@ -253,7 +233,6 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// Vercel Cron utilise GET ; on accepte aussi POST
 export async function POST(req: NextRequest) {
   return GET(req);
 }
