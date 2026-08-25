@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { users, subscriptions, payments } from "@/db/schema";
-import { eq, desc, and, gte } from "drizzle-orm";
+import { users, payments } from "@/db/schema";
+import { eq, desc, and, gte, lt } from "drizzle-orm";
 import { getCurrentUserId } from "@/lib/auth";
 
 export async function GET() {
@@ -11,7 +11,6 @@ export async function GET() {
       return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
     }
 
-    // Vérifier que c'est un admin
     const [adminCheck] = await db
       .select({ isAdmin: users.isAdmin })
       .from(users)
@@ -22,8 +21,21 @@ export async function GET() {
       return NextResponse.json({ error: "Accès admin requis" }, { status: 403 });
     }
 
-    // Récupérer tous les Premium
-    const premiumUsers = await db
+    const now = new Date();
+
+    // 🔄 CRITIQUE : désactive auto tous les Premium expirés en BDD
+    await db
+      .update(users)
+      .set({ isPremium: false })
+      .where(
+        and(
+          eq(users.isPremium, true),
+          lt(users.premiumExpiresAt, now)
+        )
+      );
+
+    // Liste des Premium encore actifs (après nettoyage)
+    const activeUsers = await db
       .select({
         id: users.id,
         email: users.email,
@@ -44,7 +56,36 @@ export async function GET() {
       .where(eq(users.isPremium, true))
       .orderBy(desc(users.premiumExpiresAt));
 
-    // Récupérer le dernier paiement de chaque utilisateur
+    // Liste des expirés récents (pour le filtre admin "Expirés")
+    const expiredUsers = await db
+      .select({
+        id: users.id,
+        email: users.email,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        photoUrl: users.photoUrl,
+        gender: users.gender,
+        city: users.city,
+        country: users.country,
+        isPremium: users.isPremium,
+        premiumPlan: users.premiumPlan,
+        premiumExpiresAt: users.premiumExpiresAt,
+        isOnline: users.isOnline,
+        lastSeen: users.lastSeen,
+        createdAt: users.createdAt,
+      })
+      .from(users)
+      .where(
+        and(
+          eq(users.isPremium, false),
+          lt(users.premiumExpiresAt, now)
+        )
+      )
+      .orderBy(desc(users.premiumExpiresAt))
+      .limit(50);
+
+    const premiumUsers = [...activeUsers, ...expiredUsers];
+
     const usersWithPayments = await Promise.all(
       premiumUsers.map(async (user) => {
         const [lastPayment] = await db
@@ -69,40 +110,26 @@ export async function GET() {
       })
     );
 
-    // Calculer les stats globales
-    const now = new Date();
     const monthAgo = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
 
-    // Revenus des 30 derniers jours
     const recentPayments = await db
-      .select({
-        amount: payments.amount,
-      })
+      .select({ amount: payments.amount })
       .from(payments)
-      .where(
-        and(
-          eq(payments.status, "success"),
-          gte(payments.completedAt, monthAgo)
-        )
-      );
+      .where(and(eq(payments.status, "success"), gte(payments.completedAt, monthAgo)));
 
     const monthlyRevenue = recentPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
 
-    // Total tous temps
     const allSuccessPayments = await db
-      .select({
-        amount: payments.amount,
-      })
+      .select({ amount: payments.amount })
       .from(payments)
       .where(eq(payments.status, "success"));
 
     const totalRevenue = allSuccessPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
 
-    // Calculer les expirations à venir (7 prochains jours)
     const in7Days = new Date();
     in7Days.setDate(in7Days.getDate() + 7);
 
-    const expiringSoon = usersWithPayments.filter((u) => {
+    const expiringSoon = activeUsers.filter((u) => {
       if (!u.premiumExpiresAt) return false;
       const expiry = new Date(u.premiumExpiresAt);
       return expiry > now && expiry <= in7Days;
@@ -111,9 +138,9 @@ export async function GET() {
     return NextResponse.json({
       premiumUsers: usersWithPayments,
       stats: {
-        total: usersWithPayments.length,
-        monthly: usersWithPayments.filter((u) => u.premiumPlan === "premium").length,
-        gold: usersWithPayments.filter((u) => u.premiumPlan === "gold").length,
+        total: activeUsers.length,
+        monthly: activeUsers.filter((u) => u.premiumPlan === "premium").length,
+        gold: activeUsers.filter((u) => u.premiumPlan === "gold").length,
         monthlyRevenue,
         totalRevenue,
         expiringSoon,
