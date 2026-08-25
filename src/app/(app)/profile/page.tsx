@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { useUser } from "../layout";
 import PushNotifButton from "../../components/PushNotifButton";
 import RewardBanner from "../../components/RewardBanner";
@@ -55,6 +56,8 @@ const gradients = [
 ];
 
 export default function ProfilePage() {
+  const router = useRouter(); // <-- Ajoute cette ligne
+  const { user, refreshUser } = useUser();
   const { user, refreshUser } = useUser();
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -208,7 +211,7 @@ export default function ProfilePage() {
     // ✅ FIX : Ne pas appeler refreshUser ici non plus
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
     try {
@@ -218,9 +221,10 @@ export default function ProfilePage() {
         body: JSON.stringify(form),
       });
       if (res.ok) {
-        setSaved(true);
-        // ✅ FIX : Refresh user seulement après le clic sur "Enregistrer"
         await refreshUser();
+        // 🚀 Redirection directe vers la page Découvrir !
+        router.push("/discover");
+        router.refresh();
       }
     } catch {
       // silently fail
