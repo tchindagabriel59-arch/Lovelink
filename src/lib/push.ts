@@ -30,7 +30,6 @@ export async function sendPushToUser(
   payload: PushPayload
 ): Promise<{ success: boolean; sent: number; failed: number }> {
   try {
-    // Récupérer tous les abonnements de cet user
     const subs = await db
       .select()
       .from(pushSubscriptions)
@@ -43,7 +42,6 @@ export async function sendPushToUser(
     let sent = 0;
     let failed = 0;
 
-    // Envoyer à tous les appareils en parallèle
     await Promise.allSettled(
       subs.map(async (sub) => {
         try {
@@ -63,7 +61,6 @@ export async function sendPushToUser(
           failed++;
           const error = err as { statusCode?: number };
 
-          // Si abonnement expiré (410) ou introuvable (404), supprimer
           if (error.statusCode === 410 || error.statusCode === 404) {
             console.log("[Push] Suppression abonnement expiré:", sub.endpoint);
             await db
@@ -99,47 +96,7 @@ export const PushTemplates = {
     body: `${fromName} t'a liké !`,
     icon: "/icon",
     tag: "like",
-    // 👑 PREMIUM
-  premiumExpiring3d: () => ({
-    title: "⏰ Ton Premium expire dans 3 jours",
-    body: "Renouvelle maintenant pour garder tes avantages 💎",
-    icon: "/icon",
-    tag: "premium_expiring_3d",
-    url: "/premium",
-  }),
-
-  premiumExpiring1d: () => ({
-    title: "🚨 Premium : plus qu'1 jour !",
-    body: "Dernière ligne droite… renouvelle pour ne rien perdre 👑",
-    icon: "/icon",
-    tag: "premium_expiring_1d",
-    url: "/premium",
-  }),
-
-  premiumExpired: () => ({
-    title: "😢 Ton Premium est terminé",
-    body: "Ton badge et tes avantages sont désactivés. Renouvelle en 1 clic !",
-    icon: "/icon",
-    tag: "premium_expired",
-    url: "/premium",
-  }),
-
-  // 🚀 BOOST
-  boostExpiringSoon: () => ({
-    title: "⚡ Ton Boost se termine bientôt",
-    body: "Plus que ~2h de visibilité max. Prolonge ton Boost !",
-    icon: "/icon",
-    tag: "boost_expiring_soon",
-    url: "/boost",
-  }),
-
-  boostExpired: () => ({
-    title: "🚀 Ton Boost est terminé",
-    body: "Ton profil n'est plus mis en avant. Relance un Boost pour rester visible !",
-    icon: "/icon",
-    tag: "boost_expired",
-    url: "/boost",
-  }),  url: "/likes-recus",
+    url: "/likes-recus",
   }),
 
   superLike: (fromName: string) => ({
@@ -212,5 +169,46 @@ export const PushTemplates = {
     icon: "/icon",
     tag: "incomplete_profile",
     url: "/profile",
+  }),
+
+  // 👑 EXPIRATION PREMIUM & BOOST
+  premiumExpiring3d: () => ({
+    title: "⏰ Ton Premium expire dans 3 jours",
+    body: "Renouvelle maintenant pour garder tes avantages 💎",
+    icon: "/icon",
+    tag: "premium_expiring_3d",
+    url: "/premium",
+  }),
+
+  premiumExpiring1d: () => ({
+    title: "🚨 Premium : plus qu'1 jour !",
+    body: "Dernière ligne droite… renouvelle pour ne rien perdre 👑",
+    icon: "/icon",
+    tag: "premium_expiring_1d",
+    url: "/premium",
+  }),
+
+  premiumExpired: () => ({
+    title: "😢 Ton Premium est terminé",
+    body: "Ton badge et tes avantages sont désactivés. Renouvelle en 1 clic !",
+    icon: "/icon",
+    tag: "premium_expired",
+    url: "/premium",
+  }),
+
+  boostExpiringSoon: () => ({
+    title: "⚡ Ton Boost se termine bientôt",
+    body: "Plus que ~2h de visibilité max. Prolonge ton Boost !",
+    icon: "/icon",
+    tag: "boost_expiring_soon",
+    url: "/boost",
+  }),
+
+  boostExpired: () => ({
+    title: "🚀 Ton Boost est terminé",
+    body: "Ton profil n'est plus mis en avant. Relance un Boost pour rester visible !",
+    icon: "/icon",
+    tag: "boost_expired",
+    url: "/boost",
   }),
 };
