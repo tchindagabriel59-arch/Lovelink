@@ -60,6 +60,13 @@ function getDaysRemaining(expiryDate: string | null): number {
   return Math.ceil(diff / (1000 * 60 * 60 * 24));
 }
 
+/** ✅ Premium VRAIMENT actif (isPremium + date non expirée) */
+function isTrulyPremium(user: PremiumUser): boolean {
+  if (!user.isPremium) return false;
+  if (!user.premiumExpiresAt) return true; // premium à vie
+  return new Date(user.premiumExpiresAt) > new Date();
+}
+
 export default function AdminPremiumPage() {
   const [premiumUsers, setPremiumUsers] = useState<PremiumUser[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
@@ -117,19 +124,25 @@ export default function AdminPremiumPage() {
       u.email.toLowerCase().includes(search.toLowerCase());
 
     let categoryMatch = true;
+    const days = getDaysRemaining(u.premiumExpiresAt);
+    const active = isTrulyPremium(u);
+
     switch (filter) {
       case "premium":
-        categoryMatch = u.premiumPlan === "premium";
+        categoryMatch = active && u.premiumPlan === "premium";
         break;
       case "gold":
-        categoryMatch = u.premiumPlan === "gold";
+        categoryMatch = active && u.premiumPlan === "gold";
         break;
       case "expiring":
-        const days = getDaysRemaining(u.premiumExpiresAt);
-        categoryMatch = days > 0 && days <= 7;
+        categoryMatch = active && days > 0 && days <= 7;
         break;
       case "expired":
-        categoryMatch = getDaysRemaining(u.premiumExpiresAt) < 0;
+        categoryMatch = !active || days < 0;
+        break;
+      case "all":
+      default:
+        categoryMatch = true;
         break;
     }
 
@@ -138,7 +151,6 @@ export default function AdminPremiumPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
-      {/* Header simplifié */}
       <header className="p-6 border-b border-slate-800">
         <div className="max-w-7xl mx-auto flex items-center gap-3">
           <div className="w-12 h-12 bg-gradient-to-br from-amber-500 to-orange-500 rounded-xl flex items-center justify-center shadow-lg">
@@ -167,7 +179,7 @@ export default function AdminPremiumPage() {
                   <div className="w-12 h-12 bg-gradient-to-br from-amber-500 to-orange-500 rounded-xl flex items-center justify-center mb-3">
                     <Crown className="w-6 h-6 text-white" />
                   </div>
-                  <p className="text-sm text-slate-400">Total Premium</p>
+                  <p className="text-sm text-slate-400">Total Premium actifs</p>
                   <p className="text-3xl font-bold mt-1">{stats.total}</p>
                   <p className="text-xs text-slate-500 mt-1">
                     {stats.monthly} Premium • {stats.gold} Gold
@@ -196,16 +208,20 @@ export default function AdminPremiumPage() {
                   <p className="text-xs text-slate-500 mt-1">FCFA (tous temps)</p>
                 </div>
 
-                <div className={`rounded-2xl p-5 border ${
-                  stats.expiringSoon > 0
-                    ? "bg-gradient-to-br from-red-500/20 to-pink-500/20 border-red-500/30"
-                    : "bg-slate-900 border-slate-800"
-                }`}>
-                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-3 ${
+                <div
+                  className={`rounded-2xl p-5 border ${
                     stats.expiringSoon > 0
-                      ? "bg-gradient-to-br from-red-500 to-pink-500"
-                      : "bg-slate-800"
-                  }`}>
+                      ? "bg-gradient-to-br from-red-500/20 to-pink-500/20 border-red-500/30"
+                      : "bg-slate-900 border-slate-800"
+                  }`}
+                >
+                  <div
+                    className={`w-12 h-12 rounded-xl flex items-center justify-center mb-3 ${
+                      stats.expiringSoon > 0
+                        ? "bg-gradient-to-br from-red-500 to-pink-500"
+                        : "bg-slate-800"
+                    }`}
+                  >
                     <Clock className="w-6 h-6 text-white" />
                   </div>
                   <p className="text-sm text-slate-400">Expirent bientôt</p>
@@ -227,20 +243,27 @@ export default function AdminPremiumPage() {
             </div>
 
             <div className="flex flex-wrap gap-2">
-              <FilterBtn current={filter} value="all" onClick={setFilter}>Tous</FilterBtn>
-              <FilterBtn current={filter} value="premium" onClick={setFilter}>💎 Premium</FilterBtn>
-              <FilterBtn current={filter} value="gold" onClick={setFilter}>🏆 Gold</FilterBtn>
-              <FilterBtn current={filter} value="expiring" onClick={setFilter}>⏰ Expirent bientôt</FilterBtn>
-              <FilterBtn current={filter} value="expired" onClick={setFilter}>❌ Expirés</FilterBtn>
+              <FilterBtn current={filter} value="all" onClick={setFilter}>
+                Tous
+              </FilterBtn>
+              <FilterBtn current={filter} value="premium" onClick={setFilter}>
+                💎 Premium
+              </FilterBtn>
+              <FilterBtn current={filter} value="gold" onClick={setFilter}>
+                🏆 Gold
+              </FilterBtn>
+              <FilterBtn current={filter} value="expiring" onClick={setFilter}>
+                ⏰ Expirent bientôt
+              </FilterBtn>
+              <FilterBtn current={filter} value="expired" onClick={setFilter}>
+                ❌ Expirés
+              </FilterBtn>
             </div>
 
             {filteredUsers.length === 0 ? (
               <div className="text-center py-12 bg-slate-900 border border-slate-800 rounded-2xl">
                 <Crown className="w-16 h-16 text-slate-700 mx-auto mb-4" />
                 <p className="text-slate-500">Aucun abonné Premium trouvé</p>
-                <p className="text-sm text-slate-600 mt-2">
-                  Les abonnés apparaîtront ici quand ils souscriront au Premium
-                </p>
               </div>
             ) : (
               <div className="grid gap-3">
@@ -281,10 +304,20 @@ export default function AdminPremiumPage() {
                     alt={selectedUser.firstName}
                     width={96}
                     height={96}
-                    className="w-24 h-24 rounded-2xl object-cover border-2 border-amber-500/50"
+                    className={`w-24 h-24 rounded-2xl object-cover border-2 ${
+                      isTrulyPremium(selectedUser)
+                        ? "border-amber-500/50"
+                        : "border-slate-600"
+                    }`}
                   />
                 ) : (
-                  <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center text-white font-bold text-3xl">
+                  <div
+                    className={`w-24 h-24 rounded-2xl flex items-center justify-center text-white font-bold text-3xl ${
+                      isTrulyPremium(selectedUser)
+                        ? "bg-gradient-to-br from-amber-500 to-orange-500"
+                        : "bg-slate-700"
+                    }`}
+                  >
                     {selectedUser.firstName.charAt(0)}
                     {selectedUser.lastName.charAt(0)}
                   </div>
@@ -294,13 +327,19 @@ export default function AdminPremiumPage() {
                     <h3 className="text-2xl font-bold">
                       {selectedUser.firstName} {selectedUser.lastName}
                     </h3>
-                    {selectedUser.premiumPlan === "gold" ? (
-                      <span className="px-3 py-1 bg-gradient-to-r from-yellow-500 to-orange-500 text-white rounded-full text-xs font-black">
-                        🏆 GOLD
-                      </span>
+                    {isTrulyPremium(selectedUser) ? (
+                      selectedUser.premiumPlan === "gold" ? (
+                        <span className="px-3 py-1 bg-gradient-to-r from-yellow-500 to-orange-500 text-white rounded-full text-xs font-black">
+                          🏆 GOLD
+                        </span>
+                      ) : (
+                        <span className="px-3 py-1 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-full text-xs font-black">
+                          💎 PREMIUM
+                        </span>
+                      )
                     ) : (
-                      <span className="px-3 py-1 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-full text-xs font-black">
-                        💎 PREMIUM
+                      <span className="px-3 py-1 bg-slate-700 text-slate-300 rounded-full text-xs font-black">
+                        🔒 EXPIRÉ
                       </span>
                     )}
                   </div>
@@ -321,27 +360,39 @@ export default function AdminPremiumPage() {
               </div>
 
               {selectedUser.premiumExpiresAt && (
-                <div className={`p-4 rounded-xl border ${
-                  getDaysRemaining(selectedUser.premiumExpiresAt) < 0
-                    ? "bg-red-500/10 border-red-500/30"
-                    : getDaysRemaining(selectedUser.premiumExpiresAt) <= 7
-                    ? "bg-amber-500/10 border-amber-500/30"
-                    : "bg-green-500/10 border-green-500/30"
-                }`}>
+                <div
+                  className={`p-4 rounded-xl border ${
+                    getDaysRemaining(selectedUser.premiumExpiresAt) < 0
+                      ? "bg-red-500/10 border-red-500/30"
+                      : getDaysRemaining(selectedUser.premiumExpiresAt) <= 7
+                      ? "bg-amber-500/10 border-amber-500/30"
+                      : "bg-green-500/10 border-green-500/30"
+                  }`}
+                >
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-xs text-slate-400 mb-1">Statut de l&apos;abonnement</p>
+                      <p className="text-xs text-slate-400 mb-1">
+                        Statut de l&apos;abonnement
+                      </p>
                       <p className="font-bold flex items-center gap-2">
                         {getDaysRemaining(selectedUser.premiumExpiresAt) < 0 ? (
                           <>
                             <AlertTriangle className="w-5 h-5 text-red-400" />
-                            <span className="text-red-400">Expiré depuis {Math.abs(getDaysRemaining(selectedUser.premiumExpiresAt))} jours</span>
+                            <span className="text-red-400">
+                              Expiré depuis{" "}
+                              {Math.abs(
+                                getDaysRemaining(selectedUser.premiumExpiresAt)
+                              )}{" "}
+                              jours
+                            </span>
                           </>
                         ) : (
                           <>
                             <CheckCircle className="w-5 h-5 text-green-400" />
                             <span className="text-green-400">
-                              Actif • {getDaysRemaining(selectedUser.premiumExpiresAt)} jours restants
+                              Actif •{" "}
+                              {getDaysRemaining(selectedUser.premiumExpiresAt)}{" "}
+                              jours restants
                             </span>
                           </>
                         )}
@@ -350,7 +401,9 @@ export default function AdminPremiumPage() {
                     <div className="text-right">
                       <p className="text-xs text-slate-400 mb-1">Expire le</p>
                       <p className="font-bold">
-                        {new Date(selectedUser.premiumExpiresAt).toLocaleDateString("fr-FR")}
+                        {new Date(
+                          selectedUser.premiumExpiresAt
+                        ).toLocaleDateString("fr-FR")}
                       </p>
                     </div>
                   </div>
@@ -367,15 +420,20 @@ export default function AdminPremiumPage() {
                     <div>
                       <p className="text-xs text-slate-500">Montant</p>
                       <p className="font-bold text-lg text-green-400">
-                        {selectedUser.lastPayment.amount.toLocaleString()} {selectedUser.lastPayment.currency}
+                        {selectedUser.lastPayment.amount.toLocaleString()}{" "}
+                        {selectedUser.lastPayment.currency}
                       </p>
                     </div>
                     <div>
                       <p className="text-xs text-slate-500">Formule</p>
                       <p className="font-bold">
-                        {selectedUser.lastPayment.plan === "gold" ? "🏆 Gold" : "💎 Premium"}
+                        {selectedUser.lastPayment.plan === "gold"
+                          ? "🏆 Gold"
+                          : "💎 Premium"}
                         {" • "}
-                        {selectedUser.lastPayment.billingPeriod === "yearly" ? "Annuel" : "Mensuel"}
+                        {selectedUser.lastPayment.billingPeriod === "yearly"
+                          ? "Annuel"
+                          : "Mensuel"}
                       </p>
                     </div>
                     <div>
@@ -387,7 +445,9 @@ export default function AdminPremiumPage() {
                     <div>
                       <p className="text-xs text-slate-500">Date</p>
                       <p className="font-bold">
-                        {new Date(selectedUser.lastPayment.completedAt).toLocaleDateString("fr-FR")}
+                        {new Date(
+                          selectedUser.lastPayment.completedAt
+                        ).toLocaleDateString("fr-FR")}
                       </p>
                     </div>
                   </div>
@@ -421,15 +481,17 @@ export default function AdminPremiumPage() {
                 </div>
               </div>
 
-              <div className="border-t border-slate-800 pt-6">
-                <button
-                  onClick={() => removePremium(selectedUser.id)}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 rounded-xl font-semibold transition"
-                >
-                  <X className="w-4 h-4" />
-                  Retirer le statut Premium
-                </button>
-              </div>
+              {isTrulyPremium(selectedUser) && (
+                <div className="border-t border-slate-800 pt-6">
+                  <button
+                    onClick={() => removePremium(selectedUser.id)}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 rounded-xl font-semibold transition"
+                  >
+                    <X className="w-4 h-4" />
+                    Retirer le statut Premium
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -472,14 +534,15 @@ function PremiumUserRow({
   onView: () => void;
 }) {
   const daysRemaining = getDaysRemaining(user.premiumExpiresAt);
-  const isExpired = daysRemaining < 0;
-  const isExpiringSoon = daysRemaining > 0 && daysRemaining <= 7;
+  const active = isTrulyPremium(user);
+  const isExpired = !active;
+  const isExpiringSoon = active && daysRemaining > 0 && daysRemaining <= 7;
 
   return (
     <div
       className={`bg-slate-900 border rounded-xl p-4 hover:border-amber-500/50 transition cursor-pointer ${
         isExpired
-          ? "border-red-500/30"
+          ? "border-red-500/30 opacity-75"
           : isExpiringSoon
           ? "border-amber-500/30"
           : "border-slate-800"
@@ -494,17 +557,29 @@ function PremiumUserRow({
               alt={user.firstName}
               width={56}
               height={56}
-              className="w-14 h-14 rounded-xl object-cover border-2 border-amber-500/30"
+              className={`w-14 h-14 rounded-xl object-cover border-2 ${
+                active ? "border-amber-500/30" : "border-slate-600"
+              }`}
             />
           ) : (
-            <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center text-white font-bold">
+            <div
+              className={`w-14 h-14 rounded-xl flex items-center justify-center text-white font-bold ${
+                active
+                  ? "bg-gradient-to-br from-amber-500 to-orange-500"
+                  : "bg-slate-700"
+              }`}
+            >
               {user.firstName.charAt(0)}
               {user.lastName.charAt(0)}
             </div>
           )}
-          <div className="absolute -top-1 -right-1 w-6 h-6 bg-gradient-to-br from-amber-500 to-orange-500 rounded-full flex items-center justify-center">
-            <Crown className="w-3 h-3 text-white fill-white" />
-          </div>
+
+          {/* 👑 Couronne UNIQUEMENT si encore actif */}
+          {active && (
+            <div className="absolute -top-1 -right-1 w-6 h-6 bg-gradient-to-br from-amber-500 to-orange-500 rounded-full flex items-center justify-center">
+              <Crown className="w-3 h-3 text-white fill-white" />
+            </div>
+          )}
         </div>
 
         <div className="flex-1 min-w-0">
@@ -512,13 +587,21 @@ function PremiumUserRow({
             <p className="font-bold truncate">
               {user.firstName} {user.lastName}
             </p>
-            {user.premiumPlan === "gold" ? (
-              <span className="text-xs px-2 py-0.5 bg-yellow-500/20 text-yellow-400 rounded-full font-bold">
-                🏆 GOLD
-              </span>
+
+            {/* Badge UNIQUEMENT si actif, sinon EXPIRÉ */}
+            {active ? (
+              user.premiumPlan === "gold" ? (
+                <span className="text-xs px-2 py-0.5 bg-yellow-500/20 text-yellow-400 rounded-full font-bold">
+                  🏆 GOLD
+                </span>
+              ) : (
+                <span className="text-xs px-2 py-0.5 bg-amber-500/20 text-amber-400 rounded-full font-bold">
+                  💎 PREMIUM
+                </span>
+              )
             ) : (
-              <span className="text-xs px-2 py-0.5 bg-amber-500/20 text-amber-400 rounded-full font-bold">
-                💎 PREMIUM
+              <span className="text-xs px-2 py-0.5 bg-red-500/20 text-red-400 rounded-full font-bold">
+                🔒 EXPIRÉ
               </span>
             )}
           </div>
@@ -535,7 +618,9 @@ function PremiumUserRow({
           {isExpired ? (
             <div className="text-red-400">
               <p className="text-xs font-bold">EXPIRÉ</p>
-              <p className="text-xs">Il y a {Math.abs(daysRemaining)}j</p>
+              <p className="text-xs">
+                Il y a {Math.abs(daysRemaining)}j
+              </p>
             </div>
           ) : isExpiringSoon ? (
             <div className="text-amber-400">
