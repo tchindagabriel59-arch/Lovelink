@@ -129,14 +129,12 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    const AUTH_MAX_AGE = 60 * 60 * 24 * 90; // 90 jours
-
-// après createToken(user.id) :
+    // Remplace maxAge: 60 * 60 * 24 * 7 par 365 jours :
 response.cookies.set("auth_token", token, {
   httpOnly: true,
   secure: process.env.NODE_ENV === "production",
   sameSite: "lax",
-  maxAge: AUTH_MAX_AGE,
+  maxAge: 60 * 60 * 24 * 365, // 👈 1 an
   path: "/",
 });
 
