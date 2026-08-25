@@ -1,35 +1,100 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { Heart, Shield, MessageCircle, Sparkles, Users, Star, ArrowRight, ChevronRight } from "lucide-react";
+import { useRouter } from "next/navigation";
+import {
+  Heart,
+  Shield,
+  MessageCircle,
+  Sparkles,
+  Star,
+  ArrowRight,
+  ChevronRight,
+  LayoutDashboard,
+} from "lucide-react";
 
 export default function HomePage() {
+  const router = useRouter();
+  const [checkingAuth, setCheckingAuth] = useState(true);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+  // ⚡ VÉRIFICATION SILENCIEUSE DE SESSION AU CHARGEMENT
+  useEffect(() => {
+    let isMounted = true;
+    fetch("/api/auth/me", { credentials: "include" })
+      .then((res) => {
+        if (res.ok) return res.json();
+        return null;
+      })
+      .then((data) => {
+        if (isMounted && data?.user) {
+          setIsLoggedIn(true);
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (isMounted) setCheckingAuth(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen bg-slate-50">
       {/* Navigation */}
-      <nav className="fixed top-0 left-0 right-0 z-50 glass-card">
+      <nav className="fixed top-0 left-0 right-0 z-50 glass-card border-b border-slate-100">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-2">
+          <Link href="/" className="flex items-center gap-2">
             <Heart className="w-8 h-8 text-rose-500 fill-rose-500" />
             <span className="text-2xl font-bold gradient-text">LoveLink</span>
-          </div>
+          </Link>
+
           <div className="hidden md:flex items-center gap-8">
-            <a href="#features" className="text-slate-600 hover:text-rose-500 transition font-medium">Fonctionnalités</a>
-            <a href="#how-it-works" className="text-slate-600 hover:text-rose-500 transition font-medium">Comment ça marche</a>
-            <a href="#testimonials" className="text-slate-600 hover:text-rose-500 transition font-medium">Témoignages</a>
+            <a href="#features" className="text-slate-600 hover:text-rose-500 transition font-medium">
+              Fonctionnalités
+            </a>
+            <a href="#how-it-works" className="text-slate-600 hover:text-rose-500 transition font-medium">
+              Comment ça marche
+            </a>
+            <a href="#testimonials" className="text-slate-600 hover:text-rose-500 transition font-medium">
+              Témoignages
+            </a>
           </div>
+
+          {/* 🎯 NAVIGATION INTELLIGENTE FARATA */}
           <div className="flex items-center gap-3">
-            <Link
-              href="/login"
-              className="px-5 py-2.5 text-slate-700 hover:text-rose-500 transition font-medium"
-            >
-              Connexion
-            </Link>
-            <Link
-              href="/register"
-              className="px-6 py-2.5 bg-gradient-to-r from-rose-500 to-purple-600 text-white rounded-full font-semibold hover:shadow-lg hover:shadow-rose-500/25 transition-all duration-300 hover:-translate-y-0.5"
-            >
-              S&apos;inscrire
-            </Link>
+            {checkingAuth ? (
+              <div className="h-10 w-28 bg-slate-200 rounded-full animate-pulse" />
+            ) : isLoggedIn ? (
+              /* SI DÉJÀ CONNECTÉ -> BOUTON DASHBOARD DIRECT */
+              <Link
+                href="/dashboard"
+                className="px-6 py-2.5 bg-gradient-to-r from-rose-500 to-purple-600 text-white rounded-full font-bold shadow-lg shadow-rose-500/25 hover:scale-105 transition-all flex items-center gap-2"
+              >
+                <LayoutDashboard className="w-4 h-4" />
+                Dashboard
+              </Link>
+            ) : (
+              /* SI NON CONNECTÉ -> CONNEXION & INSCRIPTION */
+              <>
+                <Link
+                  href="/login"
+                  className="px-5 py-2.5 text-slate-700 hover:text-rose-500 transition font-semibold text-sm"
+                >
+                  Connexion
+                </Link>
+                <Link
+                  href="/register"
+                  className="px-6 py-2.5 bg-gradient-to-r from-rose-500 to-purple-600 text-white rounded-full font-semibold shadow-md hover:shadow-lg transition-all duration-300 hover:-translate-y-0.5 text-sm"
+                >
+                  S&apos;inscrire
+                </Link>
+              </>
+            )}
           </div>
         </div>
       </nav>
@@ -55,13 +120,23 @@ export default function HomePage() {
               ou de nouvelles rencontres. Authentique, sécurisé et gratuit.
             </p>
             <div className="mt-8 flex flex-col sm:flex-row gap-4">
-              <Link
-                href="/register"
-                className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-gradient-to-r from-rose-500 to-purple-600 text-white rounded-full text-lg font-semibold hover:shadow-xl hover:shadow-rose-500/30 transition-all duration-300 hover:-translate-y-1"
-              >
-                Commencer gratuitement
-                <ArrowRight className="w-5 h-5" />
-              </Link>
+              {isLoggedIn ? (
+                <Link
+                  href="/dashboard"
+                  className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-gradient-to-r from-rose-500 to-purple-600 text-white rounded-full text-lg font-bold shadow-xl shadow-rose-500/30 transition-all duration-300 hover:-translate-y-1"
+                >
+                  Accéder à mon Dashboard
+                  <ArrowRight className="w-5 h-5" />
+                </Link>
+              ) : (
+                <Link
+                  href="/register"
+                  className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-gradient-to-r from-rose-500 to-purple-600 text-white rounded-full text-lg font-semibold hover:shadow-xl hover:shadow-rose-500/30 transition-all duration-300 hover:-translate-y-1"
+                >
+                  Commencer gratuitement
+                  <ArrowRight className="w-5 h-5" />
+                </Link>
+              )}
               <a
                 href="#how-it-works"
                 className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-white text-slate-700 rounded-full text-lg font-semibold border border-slate-200 hover:border-rose-300 transition-all duration-300"
@@ -297,22 +372,31 @@ export default function HomePage() {
       <section className="py-24 bg-gradient-to-br from-slate-900 to-slate-800 relative overflow-hidden">
         <div className="absolute top-0 left-1/2 w-96 h-96 bg-rose-500/10 rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2" />
         <div className="relative max-w-4xl mx-auto px-6 text-center">
-          <Heart className="w-16 h-16 text-rose-500 fill-rose-500 mx-auto mb-6 animate-pulse-heart" />
+          <Heart className="w-16 h-16 text-rose-500 fill-rose-500 mx-auto mb-6 animate-pulse" />
           <h2 className="text-4xl md:text-5xl font-bold text-white">
             Prêt(e) à trouver l&apos;amour ?
           </h2>
           <p className="mt-4 text-xl text-slate-300 max-w-2xl mx-auto">
             Rejoignez LoveLink aujourd&apos;hui et commencez votre histoire d&apos;amour.
-            L&apos;inscription est gratuite et ne prend que 2 minutes.
           </p>
           <div className="mt-8 flex flex-col sm:flex-row gap-4 justify-center">
-            <Link
-              href="/register"
-              className="inline-flex items-center justify-center gap-2 px-10 py-4 bg-gradient-to-r from-rose-500 to-purple-600 text-white rounded-full text-lg font-semibold hover:shadow-xl hover:shadow-rose-500/30 transition-all duration-300 hover:-translate-y-1"
-            >
-              Créer mon profil
-              <ArrowRight className="w-5 h-5" />
-            </Link>
+            {isLoggedIn ? (
+              <Link
+                href="/dashboard"
+                className="inline-flex items-center justify-center gap-2 px-10 py-4 bg-gradient-to-r from-rose-500 to-purple-600 text-white rounded-full text-lg font-bold shadow-xl shadow-rose-500/30 transition-all duration-300 hover:-translate-y-1"
+              >
+                Accéder à mon Dashboard
+                <ArrowRight className="w-5 h-5" />
+              </Link>
+            ) : (
+              <Link
+                href="/register"
+                className="inline-flex items-center justify-center gap-2 px-10 py-4 bg-gradient-to-r from-rose-500 to-purple-600 text-white rounded-full text-lg font-semibold hover:shadow-xl hover:shadow-rose-500/30 transition-all duration-300 hover:-translate-y-1"
+              >
+                Créer mon profil
+                <ArrowRight className="w-5 h-5" />
+              </Link>
+            )}
           </div>
         </div>
       </section>
@@ -331,9 +415,7 @@ export default function HomePage() {
                 ou faire de belles connaissances partout dans le monde.
               </p>
               <div className="mt-4 text-sm space-y-1">
-                <p className="flex items-center gap-2">
-                  📍 Dakar, Sénégal
-                </p>
+                <p className="flex items-center gap-2">📍 Dakar, Sénégal</p>
                 <p className="flex items-center gap-2">
                   ✉️{" "}
                   <a
@@ -355,15 +437,17 @@ export default function HomePage() {
                   </Link>
                 </li>
                 <li>
-                  <Link href="/register" className="hover:text-rose-400 transition">
-                    S&apos;inscrire
+                  <Link href={isLoggedIn ? "/dashboard" : "/register"} className="hover:text-rose-400 transition">
+                    {isLoggedIn ? "Dashboard" : "S'inscrire"}
                   </Link>
                 </li>
-                <li>
-                  <Link href="/login" className="hover:text-rose-400 transition">
-                    Se connecter
-                  </Link>
-                </li>
+                {!isLoggedIn && (
+                  <li>
+                    <Link href="/login" className="hover:text-rose-400 transition">
+                      Se connecter
+                    </Link>
+                  </li>
+                )}
                 <li>
                   <a href="#features" className="hover:text-rose-400 transition">
                     Fonctionnalités
