@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useUser } from "../layout";
-import { useRouter } from "next/navigation";
 import {
   Settings,
   Save,
@@ -32,8 +32,7 @@ const distanceOptions = [
 ];
 
 export default function PreferencesPage() {
-  const router = useRouter(); // <-- Ajoute cette ligne
-  const { user } = useUser();
+  const router = useRouter();
   const { user } = useUser();
   const isPremium = user?.isPremium || false;
 
@@ -170,8 +169,8 @@ export default function PreferencesPage() {
     );
   }
 
-    async function handleSave() {
-    setSaved(false);
+  async function handleSave() {
+    setSaving(true);
     try {
       const res = await fetch("/api/preferences", {
         method: "PUT",
@@ -179,7 +178,7 @@ export default function PreferencesPage() {
         body: JSON.stringify(prefs),
       });
       if (res.ok) {
-        // 🚀 Redirection directe vers la page Découvrir !
+        // 🚀 Redirection directe vers Découvrir
         router.push("/discover");
         router.refresh();
       }
