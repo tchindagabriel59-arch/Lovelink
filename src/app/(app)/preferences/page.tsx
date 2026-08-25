@@ -32,7 +32,6 @@ const distanceOptions = [
 ];
 
 export default function PreferencesPage() {
-  export default function PreferencesPage() {
   const router = useRouter(); // <-- Ajoute cette ligne
   const { user } = useUser();
   const { user } = useUser();
