@@ -8,10 +8,13 @@ const JWT_SECRET = new TextEncoder().encode(
   process.env.JWT_SECRET || "lovelink-super-secret-key-2024-change-me"
 );
 
+// ⚡ Durée de session style Farata : 1 AN (365 jours)
+export const AUTH_MAX_AGE_SECONDS = 60 * 60 * 24 * 365; 
+
 export async function createToken(userId: number) {
   return new SignJWT({ userId })
     .setProtectedHeader({ alg: "HS256" })
-    .setExpirationTime("7d")
+    .setExpirationTime("365d") // 👈 Valable 1 an au lieu de 7 jours !
     .sign(JWT_SECRET);
 }
 
@@ -25,8 +28,6 @@ export async function verifyToken(token: string) {
 }
 
 // ⚡ VERSION RAPIDE (0 requête SQL)
-// Utilise UNIQUEMENT le JWT — pas de check BDD
-// Le check "banni" est fait à la connexion (login)
 export async function getCurrentUserId(): Promise<number | null> {
   const cookieStore = await cookies();
   const token = cookieStore.get("auth_token")?.value;
@@ -36,9 +37,7 @@ export async function getCurrentUserId(): Promise<number | null> {
   return payload.userId;
 }
 
-// ⚡ VERSION AVEC CHECK BANNI (à utiliser SEULEMENT pour actions sensibles)
-// À utiliser dans : envoyer message, liker, upload photo, etc.
-// PAS besoin pour : /api/auth/me, /api/dashboard-stats, /api/discover, etc.
+// ⚡ VERSION AVEC CHECK BANNI
 export async function getCurrentUserIdWithBanCheck(): Promise<number | null> {
   const userId = await getCurrentUserId();
   if (!userId) return null;
