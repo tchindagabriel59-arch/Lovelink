@@ -129,14 +129,16 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // Sauvegarde du cookie de session auth_token
-    response.cookies.set("auth_token", token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 60 * 60 * 24 * 7,
-      path: "/",
-    });
+    const AUTH_MAX_AGE = 60 * 60 * 24 * 90; // 90 jours
+
+// après createToken(user.id) :
+response.cookies.set("auth_token", token, {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: "lax",
+  maxAge: AUTH_MAX_AGE,
+  path: "/",
+});
 
     return response;
   } catch (error) {
