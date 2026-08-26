@@ -401,13 +401,15 @@ export default function AdminUsersPage() {
           />
         </div>
 
-        {/* Filtres */}
+        {/* Filtres Rapides (AVEC HOMMES & FEMMES RÉINTÉGRÉS) */}
         <div className="flex flex-wrap gap-2 items-center">
           <FilterBtn current={filter} value="all" onClick={setFilter}>Tous</FilterBtn>
           <FilterBtn current={filter} value="active" onClick={setFilter}>✅ Actifs</FilterBtn>
           <FilterBtn current={filter} value="online" onClick={setFilter}>🟢 En ligne</FilterBtn>
           <FilterBtn current={filter} value="premium" onClick={setFilter}>💎 Premium</FilterBtn>
           <FilterBtn current={filter} value="banned" onClick={setFilter}>🚫 Bannis</FilterBtn>
+          <FilterBtn current={filter} value="male" onClick={setFilter}>👨 Hommes</FilterBtn>
+          <FilterBtn current={filter} value="female" onClick={setFilter}>👩 Femmes</FilterBtn>
         </div>
 
         {/* Liste utilisateurs */}
