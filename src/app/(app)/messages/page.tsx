@@ -4,6 +4,7 @@ import { useEffect, useState, useRef, useCallback, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { useUser } from "../layout";
 import Image from "next/image";
+import Link from "next/link";
 import {
   Heart,
   Send,
@@ -718,7 +719,7 @@ function MessagesContent() {
       {/* ZONE DE CHAT */}
       {selectedMatch ? (
         <div className="flex-1 flex flex-col bg-[#F3F4F8] relative">
-          {/* Header Chat */}
+                    {/* Header Chat */}
           <div className="relative z-10 px-3 py-3 bg-white/90 backdrop-blur border-b border-slate-100 flex items-center gap-3 shadow-sm">
             <button
               onClick={() => setSelectedMatch(null)}
@@ -728,7 +729,7 @@ function MessagesContent() {
             </button>
 
             {otherUser && (
-              <div className="flex items-center gap-3">
+              <Link href={`/discover/${otherUser.id}`} className="flex items-center gap-3 hover:opacity-80 transition group">
                 <Avatar
                   photoUrl={otherUser.photoUrl}
                   firstName={otherUser.firstName}
@@ -736,12 +737,12 @@ function MessagesContent() {
                   size={44}
                 />
                 <div>
-                  <p className="font-bold text-slate-900">{otherUser.firstName}</p>
+                  <p className="font-bold text-slate-900 group-hover:text-rose-500 transition">{otherUser.firstName}</p>
                   <p className="text-xs text-slate-500">
                     {otherUser.isOnline ? "En ligne" : "Hors ligne"}
                   </p>
                 </div>
-              </div>
+              </Link>
             )}
           </div>
 
