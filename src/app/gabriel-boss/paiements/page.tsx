@@ -50,7 +50,6 @@ export default function AdminPaymentsPage() {
     return () => clearInterval(interval);
   }, []);
 
-  // ✅ VALIDER LE PAIEMENT
   const handleValidate = async (paymentId: number) => {
     if (!confirm("Voulez-vous vraiment valider ce paiement et activer le service ?")) return;
     
@@ -77,27 +76,35 @@ export default function AdminPaymentsPage() {
     }
   };
 
-  // 📲 RELANCER SUR WHATSAPP
   const handleWhatsAppRelance = (item: PendingPayment) => {
     const name = item.user?.firstName || "Cher membre";
-    const phone = item.payment.clientPhone || item.user?.phone || "";
+    let rawPhone = item.payment.clientPhone || item.user?.phone || "";
 
-    const message = `Bonjour ${name} 👋 ! J'ai vu que tu souhaitais activer ton ${item.payment.plan.toUpperCase()} sur LoveLink. As-tu rencontré des difficultés pour effectuer le transfert MTN / Orange Money ? Je suis là pour t'aider à finaliser 😊`;
-
-    let whatsappUrl = "";
-    if (phone && phone.length >= 8) {
-      const cleanPhone = phone.replace(/[\s\-\+\(\)]/g, "");
-      const formatted = cleanPhone.startsWith("237") ? cleanPhone : `237${cleanPhone}`;
-      whatsappUrl = `https://wa.me/${formatted}?text=${encodeURIComponent(message)}`;
-    } else {
-      // Si pas de tel, ouvre WhatsApp sans numéro avec le texte prêt à être collé
-      whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
+    if (!rawPhone && item.user?.email && item.user.email.includes("@phone.lovelink237.com")) {
+      const match = item.user.email.match(/phone_(\d+)/);
+      if (match && match[1]) {
+        rawPhone = match[1];
+      }
     }
 
+    let cleanPhone = rawPhone.replace(/[\s\-\+\(\)]/g, "");
+
+    if (!cleanPhone) {
+      const inputPhone = prompt(`Saisis le numéro WhatsApp de ${name} (ex: 651387914) :`);
+      if (!inputPhone) return;
+      cleanPhone = inputPhone.replace(/[\s\-\+\(\)]/g, "");
+    }
+
+    if (cleanPhone.length === 9) {
+      cleanPhone = `237${cleanPhone}`;
+    }
+
+    const message = `Bonjour ${name} 👋 !\nJ'ai vu que tu souhaitais activer ton ${item.payment.plan.toUpperCase()} (${item.payment.billingPeriod}) sur LoveLink.\n\nAs-tu rencontré une difficulté pour effectuer le transfert MTN / Orange Money ? Je suis là si tu as besoin d'aide ! 😊`;
+
+    const whatsappUrl = `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(message)}`;
     window.open(whatsappUrl, "_blank");
   };
 
-  // ❌ ANNULER / PURGER UN PAIEMENT ABANDONNÉ
   const handleCancelPayment = async (paymentId: number) => {
     if (!confirm("Voulez-vous supprimer cette demande de paiement de la liste ?")) return;
     
@@ -159,7 +166,6 @@ export default function AdminPaymentsPage() {
                 key={payment.id}
                 className="bg-[#1e293b] border border-[#334155] rounded-2xl p-5 flex flex-col md:flex-row items-center justify-between gap-6 shadow-lg hover:border-slate-600 transition"
               >
-                {/* User Info */}
                 <div className="flex items-center gap-4 w-full md:w-auto">
                   <div className="w-14 h-14 rounded-full bg-slate-700 overflow-hidden flex-shrink-0">
                     {user?.photoUrl ? (
@@ -179,7 +185,6 @@ export default function AdminPaymentsPage() {
                   </div>
                 </div>
 
-                {/* Commande Info */}
                 <div className="flex-1 w-full flex items-center gap-4 bg-[#0f172a] rounded-xl p-3 border border-[#334155]">
                   <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${isBoost ? "bg-purple-500/20 text-purple-400" : "bg-yellow-500/20 text-yellow-400"}`}>
                     {isBoost ? <Zap size={20} /> : <Gem size={20} />}
@@ -195,9 +200,7 @@ export default function AdminPaymentsPage() {
                   </div>
                 </div>
 
-                {/* 3 BOUTONS D'ACTIONS (Valider, Relancer, Annuler) */}
                 <div className="flex items-center gap-2 w-full md:w-auto">
-                  {/* Bouton Relancer WhatsApp */}
                   <button
                     onClick={() => handleWhatsAppRelance(item)}
                     className="px-4 py-3 bg-green-600 hover:bg-green-500 text-white font-bold rounded-xl flex items-center justify-center gap-1.5 transition text-xs shadow-md"
@@ -207,7 +210,6 @@ export default function AdminPaymentsPage() {
                     Relancer
                   </button>
 
-                  {/* Bouton Valider */}
                   <button
                     onClick={() => handleValidate(payment.id)}
                     disabled={validatingId === payment.id}
@@ -217,7 +219,6 @@ export default function AdminPaymentsPage() {
                     {validatingId === payment.id ? "Validation..." : "Valider"}
                   </button>
 
-                  {/* Bouton Annuler */}
                   <button
                     onClick={() => handleCancelPayment(payment.id)}
                     className="p-3 bg-slate-800 hover:bg-red-950 text-slate-400 hover:text-red-400 rounded-xl transition"
