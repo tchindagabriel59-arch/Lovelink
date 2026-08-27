@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
-import { CheckCircle2, Clock, Zap, Gem, ShieldAlert, CreditCard, MessageCircle, XCircle } from "lucide-react";
+import { CheckCircle2, Clock, Zap, Gem, ShieldAlert, CreditCard, MessageCircle, Mail, XCircle } from "lucide-react";
 
 interface PendingPayment {
   payment: {
@@ -29,6 +29,7 @@ export default function AdminPaymentsPage() {
   const [payments, setPayments] = useState<PendingPayment[]>([]);
   const [loading, setLoading] = useState(true);
   const [validatingId, setValidatingId] = useState<number | null>(null);
+  const [relancingId, setRelancingId] = useState<number | null>(null);
 
   const fetchPayments = async () => {
     try {
@@ -50,6 +51,7 @@ export default function AdminPaymentsPage() {
     return () => clearInterval(interval);
   }, []);
 
+  // ✅ VALIDER LE PAIEMENT
   const handleValidate = async (paymentId: number) => {
     if (!confirm("Voulez-vous vraiment valider ce paiement et activer le service ?")) return;
     
@@ -69,42 +71,70 @@ export default function AdminPaymentsPage() {
       } else {
         alert(`❌ Erreur : ${data.error || "Impossible de valider."}`);
       }
-    } catch (err) {
+    } catch {
       alert("❌ Erreur réseau.");
     } finally {
       setValidatingId(null);
     }
   };
 
-  const handleWhatsAppRelance = (item: PendingPayment) => {
+  // 📲 RELANCER PAR WHATSAPP OU MAIL
+  const handleRelance = async (item: PendingPayment) => {
     const name = item.user?.firstName || "Cher membre";
+    const email = item.user?.email || "";
+    const isRealEmail = email && !email.includes("@phone.lovelink237.com");
+
     let rawPhone = item.payment.clientPhone || item.user?.phone || "";
+    if (!rawPhone && email.includes("@phone.lovelink237.com")) {
+      const match = email.match(/phone_(\d+)/);
+      if (match && match[1]) rawPhone = match[1];
+    }
 
-    if (!rawPhone && item.user?.email && item.user.email.includes("@phone.lovelink237.com")) {
-      const match = item.user.email.match(/phone_(\d+)/);
-      if (match && match[1]) {
-        rawPhone = match[1];
+    // SI LE CLIENT S'EST INSCRIT PAR TÉLÉPHONE -> WHATSAPP DIRECT
+    if (rawPhone) {
+      let cleanPhone = rawPhone.replace(/[\s\-\+\(\)]/g, "");
+      if (cleanPhone.length === 9) cleanPhone = `237${cleanPhone}`;
+
+      const message = `Bonjour ${name} 👋 !\nJ'ai vu que tu souhaitais activer ton ${item.payment.plan.toUpperCase()} sur LoveLink.\n\nAs-tu rencontré une difficulté pour effectuer le transfert MTN / Orange Money ? Je suis là si tu as besoin d'aide ! 😊`;
+      const whatsappUrl = `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(message)}`;
+      window.open(whatsappUrl, "_blank");
+      return;
+    }
+
+    // SI LE CLIENT S'EST INSCRIT PAR EMAIL -> ENVOI MAIL DE RELANCE + PUSH
+    if (isRealEmail) {
+      setRelancingId(item.payment.id);
+      try {
+        const res = await fetch("/api/admin/payments/relance", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ paymentId: item.payment.id }),
+        });
+
+        if (res.ok) {
+          alert(`📧 E-mail de relance + Push envoyés avec succès à ${name} (${email}) !`);
+        } else {
+          alert("❌ Erreur lors de l'envoi du mail de relance.");
+        }
+      } catch {
+        alert("Erreur réseau.");
+      } finally {
+        setRelancingId(null);
       }
+      return;
     }
 
-    let cleanPhone = rawPhone.replace(/[\s\-\+\(\)]/g, "");
-
-    if (!cleanPhone) {
-      const inputPhone = prompt(`Saisis le numéro WhatsApp de ${name} (ex: 651387914) :`);
-      if (!inputPhone) return;
-      cleanPhone = inputPhone.replace(/[\s\-\+\(\)]/g, "");
+    // SI VRAIMENT NADA -> DEMANDER LE NUMÉRO WHATSAPP
+    const inputPhone = prompt(`Saisis le numéro WhatsApp de ${name} (ex: 651387914) :`);
+    if (inputPhone) {
+      let cleanPhone = inputPhone.replace(/[\s\-\+\(\)]/g, "");
+      if (cleanPhone.length === 9) cleanPhone = `237${cleanPhone}`;
+      const message = `Bonjour ${name} 👋 ! J'ai vu que tu souhaitais activer ton ${item.payment.plan.toUpperCase()} sur LoveLink. As-tu besoin d'aide pour le paiement ? 😊`;
+      window.open(`https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(message)}`, "_blank");
     }
-
-    if (cleanPhone.length === 9) {
-      cleanPhone = `237${cleanPhone}`;
-    }
-
-    const message = `Bonjour ${name} 👋 !\nJ'ai vu que tu souhaitais activer ton ${item.payment.plan.toUpperCase()} (${item.payment.billingPeriod}) sur LoveLink.\n\nAs-tu rencontré une difficulté pour effectuer le transfert MTN / Orange Money ? Je suis là si tu as besoin d'aide ! 😊`;
-
-    const whatsappUrl = `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(message)}`;
-    window.open(whatsappUrl, "_blank");
   };
 
+  // ❌ ANNULER / PURGER
   const handleCancelPayment = async (paymentId: number) => {
     if (!confirm("Voulez-vous supprimer cette demande de paiement de la liste ?")) return;
     
@@ -140,7 +170,7 @@ export default function AdminPaymentsPage() {
             Paiements en attente
           </h1>
           <p className="text-slate-400 mt-1">
-            Validez les paiements reçus ou relancez les clients hésitants sur WhatsApp.
+            Validez les paiements reçus ou relancez les clients hésitants par Mail ou WhatsApp.
           </p>
         </div>
         <div className="bg-slate-800/50 border border-slate-700 px-4 py-2 rounded-xl flex items-center gap-2">
@@ -160,12 +190,14 @@ export default function AdminPaymentsPage() {
           {payments.map((item) => {
             const { payment, user } = item;
             const isBoost = payment.plan.toLowerCase().includes("boost");
+            const isPhoneUser = user?.email?.includes("@phone.lovelink237.com");
 
             return (
               <div
                 key={payment.id}
                 className="bg-[#1e293b] border border-[#334155] rounded-2xl p-5 flex flex-col md:flex-row items-center justify-between gap-6 shadow-lg hover:border-slate-600 transition"
               >
+                {/* User Info */}
                 <div className="flex items-center gap-4 w-full md:w-auto">
                   <div className="w-14 h-14 rounded-full bg-slate-700 overflow-hidden flex-shrink-0">
                     {user?.photoUrl ? (
@@ -185,6 +217,7 @@ export default function AdminPaymentsPage() {
                   </div>
                 </div>
 
+                {/* Commande Info */}
                 <div className="flex-1 w-full flex items-center gap-4 bg-[#0f172a] rounded-xl p-3 border border-[#334155]">
                   <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${isBoost ? "bg-purple-500/20 text-purple-400" : "bg-yellow-500/20 text-yellow-400"}`}>
                     {isBoost ? <Zap size={20} /> : <Gem size={20} />}
@@ -200,16 +233,36 @@ export default function AdminPaymentsPage() {
                   </div>
                 </div>
 
+                {/* 3 BOUTONS D'ACTIONS */}
                 <div className="flex items-center gap-2 w-full md:w-auto">
+                  
+                  {/* BOUTON RELANCE INTELLIGENT (WhatsApp pour Phone / Email pour Gmail) */}
                   <button
-                    onClick={() => handleWhatsAppRelance(item)}
-                    className="px-4 py-3 bg-green-600 hover:bg-green-500 text-white font-bold rounded-xl flex items-center justify-center gap-1.5 transition text-xs shadow-md"
-                    title="Relancer l'utilisateur sur WhatsApp"
+                    onClick={() => handleRelance(item)}
+                    disabled={relancingId === payment.id}
+                    className={`px-4 py-3 font-bold rounded-xl flex items-center justify-center gap-1.5 transition text-xs shadow-md text-white ${
+                      isPhoneUser 
+                        ? "bg-green-600 hover:bg-green-500" 
+                        : "bg-blue-600 hover:bg-blue-500"
+                    }`}
+                    title={isPhoneUser ? "Relancer sur WhatsApp" : "Envoyer un e-mail de relance + Push"}
                   >
-                    <MessageCircle size={16} />
-                    Relancer
+                    {relancingId === payment.id ? (
+                      "Envoi..."
+                    ) : isPhoneUser ? (
+                      <>
+                        <MessageCircle size={16} />
+                        WhatsApp
+                      </>
+                    ) : (
+                      <>
+                        <Mail size={16} />
+                        Relancer Mail
+                      </>
+                    )}
                   </button>
 
+                  {/* Bouton Valider */}
                   <button
                     onClick={() => handleValidate(payment.id)}
                     disabled={validatingId === payment.id}
@@ -219,6 +272,7 @@ export default function AdminPaymentsPage() {
                     {validatingId === payment.id ? "Validation..." : "Valider"}
                   </button>
 
+                  {/* Bouton Annuler */}
                   <button
                     onClick={() => handleCancelPayment(payment.id)}
                     className="p-3 bg-slate-800 hover:bg-red-950 text-slate-400 hover:text-red-400 rounded-xl transition"
