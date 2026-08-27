@@ -24,7 +24,6 @@ import {
   Pause,
   Trash2,
 } from "lucide-react";
-import Link from "next/link";
 
 interface MatchData {
   matchId: number;
@@ -719,7 +718,7 @@ function MessagesContent() {
       {/* ZONE DE CHAT */}
       {selectedMatch ? (
         <div className="flex-1 flex flex-col bg-[#F3F4F8] relative">
-                    {/* Header Chat */}
+          {/* Header Chat */}
           <div className="relative z-10 px-3 py-3 bg-white/90 backdrop-blur border-b border-slate-100 flex items-center gap-3 shadow-sm">
             <button
               onClick={() => setSelectedMatch(null)}
