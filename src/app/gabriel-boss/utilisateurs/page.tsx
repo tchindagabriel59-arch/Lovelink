@@ -151,6 +151,14 @@ export default function AdminUsersPage() {
   const [premiumPlan, setPremiumPlan] = useState<"premium" | "gold">("premium");
   const [premiumDuration, setPremiumDuration] = useState<string>("1month");
   const [savingPremium, setSavingPremium] = useState(false);
+    const [resetResult, setResetResult] = useState<{
+    password: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    phone: string | null;
+  } | null>(null);
+  const [resettingPassword, setResettingPassword] = useState(false);
 
   const fetchUsers = useCallback(async () => {
     try {
@@ -179,25 +187,43 @@ export default function AdminUsersPage() {
     fetchUsers();
   }, [fetchUsers]);
 
-  // 🔑 REINITIALISER LE MOT DE PASSE DE L'UTILISATEUR
+    // 🔑 REINITIALISER LE MOT DE PASSE (génération auto)
   const handleAdminResetPassword = async (userId: number) => {
-    const newPass = prompt("Saisis le nouveau mot de passe temporaire pour cet utilisateur :");
-    if (!newPass || newPass.trim().length < 4) return;
+    if (
+      !confirm(
+        "Générer un nouveau mot de passe temporaire pour cet utilisateur ?"
+      )
+    ) {
+      return;
+    }
 
+    setResettingPassword(true);
     try {
       const res = await fetch("/api/admin/users/reset-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ targetUserId: userId, newPassword: newPass.trim() }),
+        // Plus besoin d'envoyer newPassword → l'API génère tout seule
+        body: JSON.stringify({ targetUserId: Number(userId) }),
       });
 
-      if (res.ok) {
-        alert(`✅ Mot de passe changé avec succès ! Communique "${newPass.trim()}" au client sur WhatsApp.`);
-      } else {
-        alert("❌ Erreur lors du changement de mot de passe.");
+      const data = await res.json();
+
+      if (!res.ok) {
+        alert("❌ " + (data.error || "Erreur lors du reset"));
+        return;
       }
+
+      setResetResult({
+        password: data.temporaryPassword,
+        firstName: data.user.firstName,
+        lastName: data.user.lastName,
+        email: data.user.email,
+        phone: data.user.phone || null,
+      });
     } catch {
       alert("❌ Erreur réseau.");
+    } finally {
+      setResettingPassword(false);
     }
   };
 
@@ -479,12 +505,15 @@ export default function AdminUsersPage() {
                 <div className="grid grid-cols-2 gap-3">
                   
                   {/* 🔑 RESET PASSWORD WHATSAPP */}
-                  <button
+                                    <button
                     onClick={() => handleAdminResetPassword(selectedUser.id)}
-                    className="col-span-2 py-3.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black rounded-xl flex items-center justify-center gap-2 transition shadow-lg"
+                    disabled={resettingPassword}
+                    className="col-span-2 py-3.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-slate-950 font-black rounded-xl flex items-center justify-center gap-2 transition shadow-lg"
                   >
                     <KeyRound className="w-5 h-5" />
-                    Réinitialiser le mot de passe (WhatsApp Support)
+                    {resettingPassword
+                      ? "Génération..."
+                      : "🔑 Générer un mot de passe temporaire"}
                   </button>
 
                   <button
@@ -534,6 +563,82 @@ function FilterBtn({ current, value, onClick, children }: { current: string; val
     </button>
   );
 }
+
+      {/* 🔑 MODAL MOT DE PASSE GÉNÉRÉ */}
+      {resetResult && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4">
+          <div className="bg-slate-900 border border-amber-500/40 rounded-2xl max-w-md w-full p-6 shadow-2xl">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-bold flex items-center gap-2">
+                <KeyRound className="w-5 h-5 text-amber-400" />
+                Mot de passe temporaire
+              </h3>
+              <button
+                onClick={() => setResetResult(null)}
+                className="p-2 hover:bg-slate-800 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-sm text-slate-400 mb-4">
+              Pour{" "}
+              <span className="text-white font-semibold">
+                {resetResult.firstName} {resetResult.lastName}
+              </span>
+            </p>
+
+            <div className="bg-slate-950 border border-amber-500/30 rounded-xl p-4 text-center mb-4">
+              <p className="text-xs text-slate-500 mb-2">
+                À envoyer au client (une seule fois)
+              </p>
+              <p className="text-3xl font-black tracking-wider text-amber-400 select-all">
+                {resetResult.password}
+              </p>
+            </div>
+
+            <div className="grid gap-2">
+              <button
+                onClick={async () => {
+                  await navigator.clipboard.writeText(resetResult.password);
+                  alert("✅ Mot de passe copié !");
+                }}
+                className="w-full py-3 bg-slate-800 hover:bg-slate-700 rounded-xl font-bold transition"
+              >
+                📋 Copier le mot de passe
+              </button>
+
+              <a
+                href={`https://wa.me/${
+                  resetResult.phone
+                    ? resetResult.phone.startsWith("237")
+                      ? resetResult.phone
+                      : "237" + resetResult.phone
+                    : ""
+                }?text=${encodeURIComponent(
+                  `Salut ${resetResult.firstName} 👋\n\nVoici ton nouveau mot de passe LoveLink :\n\n*${resetResult.password}*\n\nConnecte-toi sur https://lovelink237.com puis change-le dans ton profil si tu veux.\n\n— Support LoveLink`
+                )}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full py-3 bg-green-500 hover:bg-green-600 text-white rounded-xl font-bold text-center transition"
+              >
+                💬 Envoyer via WhatsApp
+              </a>
+
+              <button
+                onClick={() => setResetResult(null)}
+                className="w-full py-3 border border-slate-700 text-slate-400 hover:text-white rounded-xl font-semibold transition"
+              >
+                Fermer
+              </button>
+            </div>
+
+            <p className="text-[11px] text-slate-500 mt-4 text-center">
+              ⚠️ Ce mot de passe ne sera plus réaffiché après fermeture.
+            </p>
+          </div>
+        </div>
+      )}
 
 // 👑 LIGNE UTILISATEUR COMPLETE AVEC TOUTES LES STATS VISIBLES
 function UserRow({ user, onView }: { user: UserItem; onView: () => void }) {
