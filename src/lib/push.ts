@@ -8,7 +8,7 @@ const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || "";
 const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY || "";
 let vapidEmail = process.env.VAPID_EMAIL || "mailto:lovelink237@gmail.com";
 
-// 🛡️ SÉCURISATION AUTOMATIQUE DU FORMAT MAILTO
+// 🛡️ SÉCURISATION AUTOMATIQUE DU FORMAT MAILTO (Correction Erreur Vercel)
 if (vapidEmail && !vapidEmail.startsWith("mailto:") && !vapidEmail.startsWith("http")) {
   vapidEmail = `mailto:${vapidEmail}`;
 }
@@ -85,9 +85,10 @@ export async function sendPushToUser(
 }
 
 /**
- * Templates de notifications (N'EN SUPPRIME AUCUN)
+ * 📢 TOUS LES TEMPLATES DE NOTIFICATIONS (Synchronisés avec tes fichiers Cron)
  */
 export const PushTemplates = {
+  // --- INTERACTIONS ---
   like: (fromName: string) => ({
     title: "💕 Nouveau like !",
     body: `${fromName} t'a liké !`,
@@ -120,6 +121,7 @@ export const PushTemplates = {
     url: "/messages",
   }),
 
+  // --- COMPTE & SERVICES ---
   verified: () => ({
     title: "✅ Profil Vérifié !",
     body: "Félicitations ! Ton badge bleu est actif 💙",
@@ -136,7 +138,7 @@ export const PushTemplates = {
     url: "/discover",
   }),
 
-  // 🔄 TEMPLATES POUR LES RELANCES (CRON JOBS)
+  // --- RELANCES : PROFILS INCOMPLETS ---
   newProfiles: (count: number) => ({
     title: "🔥 De nouveaux profils !",
     body: `${count} personne${count > 1 ? "s viennent" : " vient"} de nous rejoindre.`,
@@ -167,5 +169,22 @@ export const PushTemplates = {
     icon: "/icon",
     tag: "incomplete_profile",
     url: "/profile",
+  }),
+
+  // --- RELANCES : EXPIRATION ABONNEMENT ---
+  premiumExpiring3d: () => ({
+    title: "💎 Plus que 3 jours !",
+    body: "Ton abonnement Premium expire bientôt. Renouvelle pour garder tes avantages ✨",
+    icon: "/icon",
+    tag: "premium_expiry",
+    url: "/premium",
+  }),
+
+  premiumExpiring1d: () => ({
+    title: "⚠️ Dernier jour Premium !",
+    body: "Ton abonnement expire demain. Ne perds pas tes matchs en cours ! 🚀",
+    icon: "/icon",
+    tag: "premium_expiry",
+    url: "/premium",
   }),
 };
