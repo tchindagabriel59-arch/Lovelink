@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { users, likes } from "@/db/schema";
-import { eq, and, notInArray, ne, sql, desc } from "drizzle-orm";
+import { eq, and, notInArray, ne, sql, desc, or, isNull, gte, lte } from "drizzle-orm";
 import { getCurrentUserId } from "@/lib/auth";
 
 export async function GET(req: NextRequest) {
@@ -11,7 +11,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
     }
 
-    // 1. Charger les préférences de l'utilisateur actuel
+    // 1. Préférences user actuel
     const [currentUser] = await db
       .select({
         id: users.id,
@@ -19,6 +19,7 @@ export async function GET(req: NextRequest) {
         prefAgeMin: users.prefAgeMin,
         prefAgeMax: users.prefAgeMax,
         isPremium: users.isPremium,
+        birthDate: users.birthDate,
       })
       .from(users)
       .where(eq(users.id, userId))
@@ -28,32 +29,51 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Utilisateur introuvable" }, { status: 404 });
     }
 
-    // 2. Récupérer les ID des personnes déjà likées ou passées
+    // 2. Déjà likés / passés
     const interactedRecords = await db
       .select({ toUserId: likes.toUserId })
       .from(likes)
       .where(eq(likes.fromUserId, userId));
 
-    const interactedIds = interactedRecords.map((record) => record.toUserId);
-    interactedIds.push(userId); // Exclure son propre profil
+    const interactedIds = interactedRecords.map((r) => r.toUserId);
+    // Toujours s'exclure soi-même
+    if (!interactedIds.includes(userId)) {
+      interactedIds.push(userId);
+    }
 
-    // 3. Lire le filtre depuis l'URL
-    const searchParams = req.nextUrl.searchParams;
-    const filter = searchParams.get("filter") || "all";
+    // 3. Filtre URL
+    const filter = req.nextUrl.searchParams.get("filter") || "all";
 
-    // 4. Conditions de sélection
+    // 4. Conditions
     const conditions: any[] = [
-      ne(users.isBanned, true), // Exclure les comptes bannis
+      // Pas banni (null ou false OK)
+      or(eq(users.isBanned, false), isNull(users.isBanned)),
+      // Pas en mode incognito
+      or(eq(users.isIncognito, false), isNull(users.isIncognito)),
     ];
 
     if (interactedIds.length > 0) {
       conditions.push(notInArray(users.id, interactedIds));
     }
 
+    // Genre préféré
     if (currentUser.prefGender && currentUser.prefGender !== "all") {
       conditions.push(eq(users.gender, currentUser.prefGender as any));
     }
 
+    // Âge (calcul SQL depuis birth_date YYYY-MM-DD)
+    const ageMin = currentUser.prefAgeMin ?? 18;
+    const ageMax = currentUser.prefAgeMax ?? 99;
+    if (ageMin > 18 || ageMax < 99) {
+      conditions.push(
+        sql`EXTRACT(YEAR FROM AGE(CURRENT_DATE, TO_DATE(${users.birthDate}, 'YYYY-MM-DD'))) >= ${ageMin}`
+      );
+      conditions.push(
+        sql`EXTRACT(YEAR FROM AGE(CURRENT_DATE, TO_DATE(${users.birthDate}, 'YYYY-MM-DD'))) <= ${ageMax}`
+      );
+    }
+
+    // Filtres UI
     if (filter === "verified") {
       conditions.push(eq(users.isVerified, true));
     } else if (filter === "online") {
@@ -64,7 +84,7 @@ export async function GET(req: NextRequest) {
       conditions.push(sql`${users.createdAt} > NOW() - INTERVAL '7 days'`);
     }
 
-    // 5. Requête SQL d'exploration optimisée
+    // 5. Requête — colonnes RÉELLES du schema
     const discoverProfiles = await db
       .select({
         id: users.id,
@@ -86,33 +106,40 @@ export async function GET(req: NextRequest) {
         lastSeen: users.lastSeen,
         isPremium: users.isPremium,
         isVerified: users.isVerified,
-        // 🚀 Lecture SQL brute pour contourner le manque de type TypeScript
-        isBoosted: sql<boolean>`COALESCE(is_boosted, false)`,
-        boostExpiresAt: sql<Date | null>`boost_expires_at`,
+        // ✅ vrai champ schema
+        boostEndAt: users.boostEndAt,
       })
       .from(users)
       .where(and(...conditions))
       .orderBy(
-        // Priorité 1 : Profils boostés en cours de validité
-        sql`CASE WHEN is_boosted = true AND boost_expires_at > NOW() THEN 1 ELSE 0 END DESC`,
-        // Priorité 2 : Activité récente
+        // Boost actif = boost_end_at > maintenant
+        sql`CASE WHEN ${users.boostEndAt} IS NOT NULL AND ${users.boostEndAt} > NOW() THEN 1 ELSE 0 END DESC`,
         desc(users.lastSeen)
       )
-      .limit(15);
+      .limit(20);
 
-    // 6. Vérifier les likes reçus
+    // 6. Likes reçus
     const myReceivedLikes = await db
-      .select({ fromUserId: likes.fromUserId, isSuperLike: likes.isSuperLike })
+      .select({
+        fromUserId: likes.fromUserId,
+        isSuperLike: likes.isSuperLike,
+      })
       .from(likes)
-      .where(eq(likes.toUserId, userId));
+      .where(
+        and(eq(likes.toUserId, userId), eq(likes.isLike, true))
+      );
 
     const finalProfiles = discoverProfiles.map((p) => {
       const receivedLike = myReceivedLikes.find((l) => l.fromUserId === p.id);
+      const isBoosted =
+        !!p.boostEndAt && new Date(p.boostEndAt).getTime() > Date.now();
 
       return {
         ...p,
+        isBoosted,
         hasLikedMe: !!receivedLike,
         hasSuperLikedMe: receivedLike?.isSuperLike || false,
+        // Photos galerie réservées Premium
         photo1Url: currentUser.isPremium ? p.photo1Url : null,
         photo2Url: currentUser.isPremium ? p.photo2Url : null,
         photo3Url: currentUser.isPremium ? p.photo3Url : null,
@@ -120,9 +147,18 @@ export async function GET(req: NextRequest) {
       };
     });
 
-    return NextResponse.json({ profiles: finalProfiles });
+    return NextResponse.json({
+      profiles: finalProfiles,
+      count: finalProfiles.length,
+    });
   } catch (error) {
     console.error("Erreur API Discover:", error);
-    return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
+    return NextResponse.json(
+      {
+        error: "Erreur serveur",
+        details: error instanceof Error ? error.message : String(error),
+      },
+      { status: 500 }
+    );
   }
 }
