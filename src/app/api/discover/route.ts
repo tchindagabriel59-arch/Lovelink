@@ -28,32 +28,35 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Utilisateur introuvable" }, { status: 404 });
     }
 
-    // 2. Récupérer TOUS les ID des personnes déjà likées ou passées (Pour ne plus les voir)
+    // 2. Récupérer les ID des personnes déjà likées ou passées
     const interactedRecords = await db
       .select({ toUserId: likes.toUserId })
       .from(likes)
       .where(eq(likes.fromUserId, userId));
 
     const interactedIds = interactedRecords.map((record) => record.toUserId);
-    // On ajoute son propre ID pour ne pas se voir soi-même
-    interactedIds.push(userId); 
+    interactedIds.push(userId); // S'exclure soi-même
 
-    // 3. Lire le filtre demandé par le frontend (Nouveaux, Premium, En ligne, etc.)
+    // 3. Lire les filtres
     const searchParams = req.nextUrl.searchParams;
     const filter = searchParams.get("filter") || "all";
 
-    // 4. Construire la requête SQL dynamiquement et de façon OPTIMISÉE
-    const conditions = [
-      notInArray(users.id, interactedIds), // Exclure les gens déjà vus
-      ne(users.isBanned, true),            // Exclure les bannis
+    // 4. Conditions de base
+    const conditions: any[] = [
+      ne(users.isBanned, true), // Exclure les bannis
     ];
 
-    // Appliquer le filtre de genre si ce n'est pas "all"
-    if (currentUser.prefGender && currentUser.prefGender !== "all") {
-      conditions.push(eq(users.gender, currentUser.prefGender));
+    // Sécurité SQL Drizzle : ne pas exécuter notInArray si la liste est vide
+    if (interactedIds.length > 0) {
+      conditions.push(notInArray(users.id, interactedIds));
     }
 
-    // Appliquer les filtres spécifiques du menu
+    // Appliquer le filtre de genre si ce n'est pas "all" (Cast 'as any' pour corriger l'erreur TypeScript)
+    if (currentUser.prefGender && currentUser.prefGender !== "all") {
+      conditions.push(eq(users.gender, currentUser.prefGender as any));
+    }
+
+    // Filtres spécifiques
     if (filter === "verified") {
       conditions.push(eq(users.isVerified, true));
     } else if (filter === "online") {
@@ -61,11 +64,10 @@ export async function GET(req: NextRequest) {
     } else if (filter === "premium") {
       conditions.push(eq(users.isPremium, true));
     } else if (filter === "new") {
-      // Les inscrits des 7 derniers jours
       conditions.push(sql`${users.createdAt} > NOW() - INTERVAL '7 days'`);
     }
 
-    // 5. Exécuter la requête optimisée (Limité à 15 profils pour économiser le CPU Neon)
+    // 5. Exécuter la requête
     const discoverProfiles = await db
       .select({
         id: users.id,
@@ -93,14 +95,12 @@ export async function GET(req: NextRequest) {
       .from(users)
       .where(and(...conditions))
       .orderBy(
-        // Priorité 1 : Les profils BOOSTÉS (Si le boost n'est pas expiré)
         sql`CASE WHEN ${users.isBoosted} = true AND ${users.boostExpiresAt} > NOW() THEN 1 ELSE 0 END DESC`,
-        // Priorité 2 : Les profils en ligne récemment
         desc(users.lastSeen)
       )
-      .limit(15); // 👈 15 max à la fois pour la vitesse !
+      .limit(15);
 
-    // 6. Vérifier qui m'a déjà liké (Pour afficher le badge "T'a liké")
+    // 6. Vérifier les likes reçus
     const myReceivedLikes = await db
       .select({ fromUserId: likes.fromUserId, isSuperLike: likes.isSuperLike })
       .from(likes)
@@ -113,7 +113,6 @@ export async function GET(req: NextRequest) {
         ...p,
         hasLikedMe: !!receivedLike,
         hasSuperLikedMe: receivedLike?.isSuperLike || false,
-        // Sécurité : On masque les photos 1 à 4 si l'utilisateur actuel n'est PAS premium
         photo1Url: currentUser.isPremium ? p.photo1Url : null,
         photo2Url: currentUser.isPremium ? p.photo2Url : null,
         photo3Url: currentUser.isPremium ? p.photo3Url : null,
