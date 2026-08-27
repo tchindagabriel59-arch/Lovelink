@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
-import { CheckCircle2, Clock, Zap, Gem, ShieldAlert, CreditCard } from "lucide-react";
+import { CheckCircle2, Clock, Zap, Gem, ShieldAlert, CreditCard, MessageCircle, XCircle } from "lucide-react";
 
 interface PendingPayment {
   payment: {
@@ -18,8 +18,10 @@ interface PendingPayment {
   user: {
     id: number;
     firstName: string;
+    lastName: string;
     photoUrl: string | null;
     email: string | null;
+    phone?: string | null;
   } | null;
 }
 
@@ -48,8 +50,9 @@ export default function AdminPaymentsPage() {
     return () => clearInterval(interval);
   }, []);
 
-    const handleValidate = async (paymentId: number) => {
-    if (!confirm("Voulez-vous vraiment valider ce paiement et activer le service pour l'utilisateur ?")) return;
+  // ✅ VALIDER LE PAIEMENT
+  const handleValidate = async (paymentId: number) => {
+    if (!confirm("Voulez-vous vraiment valider ce paiement et activer le service ?")) return;
     
     setValidatingId(paymentId);
     try {
@@ -73,6 +76,46 @@ export default function AdminPaymentsPage() {
       setValidatingId(null);
     }
   };
+
+  // 📲 RELANCER SUR WHATSAPP
+  const handleWhatsAppRelance = (item: PendingPayment) => {
+    const name = item.user?.firstName || "Cher membre";
+    const phone = item.payment.clientPhone || item.user?.phone || "";
+
+    const message = `Bonjour ${name} 👋 ! J'ai vu que tu souhaitais activer ton ${item.payment.plan.toUpperCase()} sur LoveLink. As-tu rencontré des difficultés pour effectuer le transfert MTN / Orange Money ? Je suis là pour t'aider à finaliser 😊`;
+
+    let whatsappUrl = "";
+    if (phone && phone.length >= 8) {
+      const cleanPhone = phone.replace(/[\s\-\+\(\)]/g, "");
+      const formatted = cleanPhone.startsWith("237") ? cleanPhone : `237${cleanPhone}`;
+      whatsappUrl = `https://wa.me/${formatted}?text=${encodeURIComponent(message)}`;
+    } else {
+      // Si pas de tel, ouvre WhatsApp sans numéro avec le texte prêt à être collé
+      whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
+    }
+
+    window.open(whatsappUrl, "_blank");
+  };
+
+  // ❌ ANNULER / PURGER UN PAIEMENT ABANDONNÉ
+  const handleCancelPayment = async (paymentId: number) => {
+    if (!confirm("Voulez-vous supprimer cette demande de paiement de la liste ?")) return;
+    
+    try {
+      const res = await fetch(`/api/admin/payments?id=${paymentId}`, {
+        method: "DELETE",
+      });
+
+      if (res.ok) {
+        setPayments((prev) => prev.filter((p) => p.payment.id !== paymentId));
+      } else {
+        alert("Erreur lors de la suppression.");
+      }
+    } catch {
+      alert("Erreur réseau.");
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[50vh]">
@@ -90,7 +133,7 @@ export default function AdminPaymentsPage() {
             Paiements en attente
           </h1>
           <p className="text-slate-400 mt-1">
-            Validez les transferts MTN / Orange Money manuellement après réception sur WhatsApp.
+            Validez les paiements reçus ou relancez les clients hésitants sur WhatsApp.
           </p>
         </div>
         <div className="bg-slate-800/50 border border-slate-700 px-4 py-2 rounded-xl flex items-center gap-2">
@@ -103,12 +146,14 @@ export default function AdminPaymentsPage() {
         <div className="bg-[#1e293b] border border-[#334155] rounded-3xl p-12 text-center shadow-xl">
           <ShieldAlert className="w-16 h-16 text-emerald-500 mx-auto mb-4 opacity-50" />
           <h3 className="text-xl font-bold text-slate-200 mb-2">Aucun paiement en attente</h3>
-          <p className="text-slate-500">Tous les services ont été validés !</p>
+          <p className="text-slate-500">Toutes les demandes ont été traitées !</p>
         </div>
       ) : (
         <div className="grid gap-4">
-          {payments.map(({ payment, user }) => {
-            const isBoost = payment.plan === "boost";
+          {payments.map((item) => {
+            const { payment, user } = item;
+            const isBoost = payment.plan.toLowerCase().includes("boost");
+
             return (
               <div
                 key={payment.id}
@@ -126,10 +171,10 @@ export default function AdminPaymentsPage() {
                     )}
                   </div>
                   <div>
-                    <h3 className="font-bold text-lg text-slate-100">{user?.firstName || "Utilisateur"}</h3>
-                    <p className="text-sm text-slate-400">ID: {user?.id} • Email: {user?.email || "—"}</p>
+                    <h3 className="font-bold text-lg text-slate-100">{user?.firstName || "Utilisateur"} {user?.lastName || ""}</h3>
+                    <p className="text-xs text-slate-400">ID: {user?.id} • {user?.email || "—"}</p>
                     <p className="text-xs text-slate-500 mt-0.5">
-                      Demande créée le {new Date(payment.createdAt).toLocaleString("fr-FR")}
+                      Demande : {new Date(payment.createdAt).toLocaleString("fr-FR")}
                     </p>
                   </div>
                 </div>
@@ -143,30 +188,45 @@ export default function AdminPaymentsPage() {
                     <p className="text-sm font-bold text-white uppercase tracking-wider">
                       {payment.plan} ({payment.billingPeriod})
                     </p>
-                    <p className="text-xs text-slate-400">Mode : {payment.paymentMethod === "manual_cm" ? "MTN/Orange CM" : payment.paymentMethod}</p>
+                    <p className="text-xs text-slate-400">Mode : {payment.paymentMethod}</p>
                   </div>
                   <div className="ml-auto text-right">
                     <p className="text-xl font-black text-emerald-400">{payment.amount} {payment.currency}</p>
                   </div>
                 </div>
 
-                {/* Actions */}
-                <div className="w-full md:w-auto">
+                {/* 3 BOUTONS D'ACTIONS (Valider, Relancer, Annuler) */}
+                <div className="flex items-center gap-2 w-full md:w-auto">
+                  {/* Bouton Relancer WhatsApp */}
+                  <button
+                    onClick={() => handleWhatsAppRelance(item)}
+                    className="px-4 py-3 bg-green-600 hover:bg-green-500 text-white font-bold rounded-xl flex items-center justify-center gap-1.5 transition text-xs shadow-md"
+                    title="Relancer l'utilisateur sur WhatsApp"
+                  >
+                    <MessageCircle size={16} />
+                    Relancer
+                  </button>
+
+                  {/* Bouton Valider */}
                   <button
                     onClick={() => handleValidate(payment.id)}
                     disabled={validatingId === payment.id}
-                    className="w-full md:w-auto px-6 py-3 bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-400 hover:to-green-500 text-white font-bold rounded-xl flex items-center justify-center gap-2 transition shadow-lg shadow-emerald-500/20 disabled:opacity-50"
+                    className="px-5 py-3 bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-400 hover:to-green-500 text-white font-bold rounded-xl flex items-center justify-center gap-1.5 transition text-xs shadow-md shadow-emerald-500/20 disabled:opacity-50"
                   >
-                    {validatingId === payment.id ? (
-                      "Validation..."
-                    ) : (
-                      <>
-                        <CheckCircle2 size={20} />
-                        Valider
-                      </>
-                    )}
+                    <CheckCircle2 size={16} />
+                    {validatingId === payment.id ? "Validation..." : "Valider"}
+                  </button>
+
+                  {/* Bouton Annuler */}
+                  <button
+                    onClick={() => handleCancelPayment(payment.id)}
+                    className="p-3 bg-slate-800 hover:bg-red-950 text-slate-400 hover:text-red-400 rounded-xl transition"
+                    title="Supprimer cette demande"
+                  >
+                    <XCircle size={16} />
                   </button>
                 </div>
+
               </div>
             );
           })}
