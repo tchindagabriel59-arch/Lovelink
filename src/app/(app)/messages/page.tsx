@@ -24,6 +24,9 @@ import {
   Pause,
   Trash2,
   AlertTriangle,
+  Lock,
+  Unlock, // 👈 Ajout de l'icône Unlock
+  X,
 } from "lucide-react";
 
 interface MatchData {
@@ -213,6 +216,14 @@ function Avatar({
   );
 }
 
+export default function MessagesPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center min-h-screen">Chargement...</div>}>
+      <MessagesContent />
+    </Suspense>
+  );
+}
+
 function MessagesContent() {
   const searchParams = useSearchParams();
   const { user } = useUser();
@@ -248,6 +259,12 @@ function MessagesContent() {
   const lastMessageIdRef = useRef<number | null>(null);
   const shouldScrollRef = useRef(true);
   const lastMatchesHashRef = useRef<string>("");
+
+  // 🛡️ PROGRESSION ANTI-CONTACT (Sur 30 messages réels)
+  const realMessageCount = chatMessages.filter(m => m.senderId !== 0).length;
+  const progressTarget = 30;
+  const progressPct = Math.min(100, (realMessageCount / progressTarget) * 100);
+  const isContactUnlocked = realMessageCount >= progressTarget;
 
   const scrollToBottom = useCallback((smooth = true) => {
     messagesEndRef.current?.scrollIntoView({
@@ -488,7 +505,6 @@ function MessagesContent() {
     audioChunksRef.current = [];
   };
 
-  // 📝 GESTION DE L'ENVOI DE MESSAGE ET DU FILTRE ANTI-CONTACT
   async function handleSend(e: React.FormEvent) {
     e.preventDefault();
     if (!newMessage.trim() || !selectedMatch || sending) return;
@@ -512,13 +528,13 @@ function MessagesContent() {
         shouldScrollRef.current = true;
         fetchMatchesList();
       } else {
-        // 🛡️ SI LE MESSAGE EST BLOQUÉ PAR SÉCURITÉ (MOINS DE 30 MESSAGES)
+        // 🛡️ SI LE MESSAGE EST BLOQUÉ PAR SÉCURITÉ
         if (data.code === "CONTACT_BLOCKED") {
           setChatMessages((prev) => [
             ...prev,
             {
               id: Date.now(),
-              senderId: 0, // 0 = Message système
+              senderId: 0, // Message système local (non sauvegardé en BDD)
               content: data.error,
               isRead: true,
               createdAt: new Date().toISOString(),
@@ -526,8 +542,7 @@ function MessagesContent() {
           ]);
           shouldScrollRef.current = true;
         } else {
-          setNewMessage(messageToSend); // Remet le texte si autre erreur
-          alert(data.error || "Erreur d'envoi");
+          setNewMessage(messageToSend);
         }
       }
     } catch {
@@ -536,6 +551,11 @@ function MessagesContent() {
       setSending(false);
     }
   }
+
+  // ❌ SUPPRIMER UN MESSAGE SYSTÈME
+  const dismissSystemMessage = (msgId: number) => {
+    setChatMessages((prev) => prev.filter((msg) => msg.id !== msgId));
+  };
 
   async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -737,31 +757,65 @@ function MessagesContent() {
       {/* ZONE DE CHAT */}
       {selectedMatch ? (
         <div className="flex-1 flex flex-col bg-[#F3F4F8] relative">
+          
           {/* Header Chat */}
-          <div className="relative z-10 px-3 py-3 bg-white/90 backdrop-blur border-b border-slate-100 flex items-center gap-3 shadow-sm">
-            <button
-              onClick={() => setSelectedMatch(null)}
-              className="p-2 text-slate-500 hover:bg-slate-100 rounded-full"
-            >
-              <ArrowLeft className="w-5 h-5" />
-            </button>
+          <div className="relative z-10 px-3 py-3 bg-white/90 backdrop-blur border-b border-slate-100 flex items-center justify-between shadow-sm">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setSelectedMatch(null)}
+                className="p-2 text-slate-500 hover:bg-slate-100 rounded-full md:hidden"
+              >
+                <ArrowLeft className="w-5 h-5" />
+              </button>
 
-            {otherUser && (
-              <Link href={`/discover/${otherUser.id}`} className="flex items-center gap-3 hover:opacity-80 transition group">
-                <Avatar
-                  photoUrl={otherUser.photoUrl}
-                  firstName={otherUser.firstName}
-                  userId={otherUser.id}
-                  size={44}
+              {otherUser && (
+                <Link href={`/discover/${otherUser.id}`} className="flex items-center gap-3 hover:opacity-80 transition group">
+                  <Avatar
+                    photoUrl={otherUser.photoUrl}
+                    firstName={otherUser.firstName}
+                    userId={otherUser.id}
+                    size={44}
+                  />
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <p className="font-bold text-slate-900 group-hover:text-rose-500 transition">{otherUser.firstName}</p>
+                      {otherUser.isVerified && <BadgeCheck className="w-3.5 h-3.5 text-blue-500 fill-blue-500" />}
+                      {otherUser.isPremium && <Crown className="w-3.5 h-3.5 text-yellow-500 fill-yellow-500" />}
+                    </div>
+                    <p className="text-xs text-slate-500">
+                      {otherUser.isOnline ? (
+                        <span className="text-emerald-600 font-medium">En ligne</span>
+                      ) : (
+                        "Hors ligne"
+                      )}
+                    </p>
+                  </div>
+                </Link>
+              )}
+            </div>
+
+            {/* 🛡️ JAUGE CIRCULAIRE ANTI-CONTACT */}
+            <div className="relative flex items-center justify-center w-9 h-9 group flex-shrink-0" title={isContactUnlocked ? "Échange de contacts autorisé ✨" : `${realMessageCount}/${progressTarget} messages pour débloquer les contacts`}>
+              <svg className="w-9 h-9 -rotate-90 transform">
+                <circle cx="18" cy="18" r="15" stroke="currentColor" strokeWidth="2.5" fill="transparent" className="text-slate-200" />
+                <circle 
+                  cx="18" cy="18" r="15" 
+                  stroke="currentColor" 
+                  strokeWidth="2.5" 
+                  fill="transparent"
+                  strokeDasharray={2 * Math.PI * 15}
+                  strokeDashoffset={2 * Math.PI * 15 - (progressPct / 100) * 2 * Math.PI * 15}
+                  className={`${isContactUnlocked ? "text-emerald-500" : "text-amber-500"} transition-all duration-700 ease-out`}
                 />
-                <div>
-                  <p className="font-bold text-slate-900 group-hover:text-rose-500 transition">{otherUser.firstName}</p>
-                  <p className="text-xs text-slate-500">
-                    {otherUser.isOnline ? "En ligne" : "Hors ligne"}
-                  </p>
-                </div>
-              </Link>
-            )}
+              </svg>
+              <div className={`absolute flex items-center justify-center w-6 h-6 rounded-full bg-white shadow-sm border ${isContactUnlocked ? "border-emerald-200 text-emerald-500" : "border-amber-200 text-amber-500"}`}>
+                {isContactUnlocked ? <Unlock className="w-3 h-3" /> : <Lock className="w-3 h-3" />}
+              </div>
+              
+              <div className="absolute top-11 right-0 bg-slate-800 text-white text-[10px] px-2.5 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition shadow-lg whitespace-nowrap z-50 pointer-events-none">
+                {isContactUnlocked ? "Contacts débloqués ✨" : `${realMessageCount}/${progressTarget} msgs pour débloquer`}
+              </div>
+            </div>
           </div>
 
           {/* Chat Messages */}
@@ -773,19 +827,29 @@ function MessagesContent() {
                 const isMine = msg.senderId === user?.id;
                 const isSystem = msg.senderId === 0;
 
-                // 🛡️ ALERTE SYSTÈME ANTI-CONTACT DANS LE CHAT
+                // 🛡️ ALERTE SYSTÈME ANTI-CONTACT DANS LE CHAT (Avec Croix)
                 if (isSystem) {
                   return (
-                    <div key={msg.id} className="flex justify-center mt-4 mb-2 animate-in zoom-in-95">
-                      <div className="bg-amber-100 border-2 border-amber-300 text-amber-900 text-xs px-5 py-3 rounded-2xl text-center max-w-[85%] font-bold shadow-lg shadow-amber-500/20 whitespace-pre-wrap flex items-center gap-2">
-                        <AlertTriangle className="w-5 h-5 flex-shrink-0 text-amber-600" />
-                        <span>{msg.content}</span>
+                    <div key={msg.id} className="flex justify-center mt-6 mb-4 animate-in zoom-in-95">
+                      <div className="relative bg-amber-50 border-2 border-amber-300 text-amber-900 text-xs px-5 py-4 rounded-2xl text-center max-w-[85%] font-bold shadow-lg shadow-amber-500/10 flex flex-col items-center gap-2">
+                        <button
+                          onClick={() => dismissSystemMessage(msg.id)}
+                          className="absolute -top-2 -right-2 bg-amber-200 hover:bg-amber-300 text-amber-800 rounded-full p-1 shadow-sm transition"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                        <div className="flex items-center gap-2 mb-1">
+                          <AlertTriangle className="w-5 h-5 flex-shrink-0 text-amber-500" />
+                          <span className="text-sm">Sécurité LoveLink</span>
+                        </div>
+                        <span className="font-medium text-amber-800 whitespace-pre-wrap">
+                          {msg.content.replace("🛡️ Sécurité LoveLink : ", "")}
+                        </span>
                       </div>
                     </div>
                   );
                 }
 
-                // MESSAGE NORMAL
                 return (
                   <div
                     key={msg.id}
@@ -908,7 +972,7 @@ function MessagesContent() {
                 {/* 🤖 BOUTON GABI AI */}
                 <button
                   type="button"
-                  onClick={getGabiSuggestions}
+                  onClick={getNdoloSuggestions}
                   className="p-2.5 rounded-full bg-gradient-to-r from-purple-600 to-indigo-600 text-amber-300 hover:scale-105 transition shadow-md flex items-center gap-1 text-xs font-bold flex-shrink-0"
                   title="Conseils Gabi AI"
                 >
@@ -970,13 +1034,5 @@ function MessagesContent() {
         </div>
       )}
     </div>
-  );
-}
-
-export default function MessagesPage() {
-  return (
-    <Suspense fallback={<div className="flex items-center justify-center min-h-screen">Chargement...</div>}>
-      <MessagesContent />
-    </Suspense>
   );
 }
