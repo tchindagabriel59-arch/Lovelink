@@ -42,6 +42,7 @@ interface LikeReceived {
 }
 
 function getAge(birthDate: string): number {
+  if (!birthDate) return 0;
   const today = new Date();
   const birth = new Date(birthDate);
   let age = today.getFullYear() - birth.getFullYear();
@@ -87,7 +88,7 @@ export default function LikesRecusPage() {
   }
 
   async function handleLikeBack(userId: number, firstName: string, photoUrl: string | null) {
-    if (!isPremium) return; // Bloqué pour non-Premium
+    if (!isPremium) return;
     setProcessing(userId);
     try {
       const res = await fetch("/api/like", {
@@ -111,7 +112,7 @@ export default function LikesRecusPage() {
   }
 
   async function handlePass(userId: number) {
-    if (!isPremium) return; // Bloqué pour non-Premium
+    if (!isPremium) return;
     setProcessing(userId);
     try {
       const res = await fetch("/api/like", {
@@ -150,8 +151,8 @@ export default function LikesRecusPage() {
       
       {/* Match Popup */}
       {matchPopup && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
-          <div className="bg-white rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl mx-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="bg-white rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl">
             <div className="relative w-32 h-32 mx-auto mb-4">
               {matchPopup.photoUrl ? (
                 <img
@@ -364,7 +365,7 @@ function ProfileCard({
   const isPremium = like.user.isPremium;
 
   return (
-    <div className={`relative bg-white rounded-2xl overflow-hidden shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 ${
+    <div className={`group relative bg-white rounded-2xl overflow-hidden shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 ${
       isPremium 
         ? "ring-2 ring-yellow-400 shadow-yellow-500/20" 
         : isSuperLike 
@@ -390,19 +391,19 @@ function ProfileCard({
         </div>
       )}
 
-      {/* Photo */}
-      <div className={`aspect-square bg-gradient-to-br ${gradient} relative overflow-hidden ${isPremium && !isLocked ? "mt-5" : ""}`}>
+      {/* 🔗 LIEN VERS LE PROFIL PUBLIC */}
+      <Link href={isLocked ? "/premium" : `/discover/${like.user.id}`} className="block relative aspect-square overflow-hidden bg-gradient-to-br group cursor-pointer">
         {like.user.photoUrl ? (
           <img
             src={like.user.photoUrl}
             alt={like.user.firstName}
-            className={`w-full h-full object-cover transition-all ${
+            className={`w-full h-full object-cover transition-transform duration-500 group-hover:scale-110 ${
               isLocked ? "blur-2xl scale-110" : ""
             }`}
           />
         ) : (
-          <div className="w-full h-full flex items-center justify-center">
-            <span className={`text-6xl font-bold text-white/80 ${isLocked ? "blur-xl" : ""}`}>
+          <div className={`w-full h-full flex items-center justify-center ${gradient}`}>
+            <span className={`text-6xl font-bold text-white/80 transition-transform duration-500 group-hover:scale-110 ${isLocked ? "blur-xl" : ""}`}>
               {like.user.firstName.charAt(0)}
             </span>
           </div>
@@ -410,10 +411,7 @@ function ProfileCard({
 
         {/* 🔒 OVERLAY DE VERROUILLAGE */}
         {isLocked && (
-          <Link
-            href="/premium"
-            className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-gradient-to-br from-yellow-500/40 via-orange-500/40 to-yellow-500/40 backdrop-blur-sm cursor-pointer hover:from-yellow-500/60 hover:to-orange-500/60 transition-all"
-          >
+          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-gradient-to-br from-yellow-500/40 via-orange-500/40 to-yellow-500/40 backdrop-blur-sm group-hover:from-yellow-500/60 group-hover:to-orange-500/60 transition-all">
             <div className="w-14 h-14 bg-white rounded-full flex items-center justify-center shadow-2xl mb-2">
               <Lock className="w-7 h-7 text-orange-500" />
             </div>
@@ -423,15 +421,15 @@ function ProfileCard({
                 Voir avec Premium
               </p>
             </div>
-          </Link>
+          </div>
         )}
 
         {/* En ligne */}
         {like.user.isOnline && !isLocked && (
-          <div className="absolute bottom-3 right-3 w-3 h-3 bg-green-500 rounded-full border-2 border-white" />
+          <div className="absolute bottom-3 right-3 w-3 h-3 bg-green-500 rounded-full border-2 border-white z-20" />
         )}
 
-        {/* Overlay avec nom (masqué si verrouillé) */}
+        {/* Overlay avec nom */}
         {!isLocked && (
           <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-3 z-10">
            <div className="flex items-center gap-1.5">
@@ -465,9 +463,9 @@ function ProfileCard({
             </p>
           </div>
         )}
-      </div>
+      </Link>
 
-      {/* Info */}
+      {/* Info et boutons en dessous */}
       <div className="p-3">
         {!isLocked && like.user.occupation && (
           <p className="text-xs text-slate-600 flex items-center gap-1 mb-2 truncate">
@@ -487,8 +485,8 @@ function ProfileCard({
           </div>
         )}
 
-        {/* Boutons */}
-        <div className="flex gap-2">
+        {/* Boutons (Ne sont pas enveloppés dans un lien pour rester cliquables) */}
+        <div className="flex gap-2 relative z-30">
           {isLocked ? (
             <Link
               href="/premium"
@@ -501,7 +499,7 @@ function ProfileCard({
             <>
               <button
                 onClick={() => onPass(like.user.id)}
-                disabled={processing}
+                disabled={processing === like.user.id}
                 className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-slate-600 hover:text-slate-800 transition disabled:opacity-50 flex items-center justify-center"
                 title="Passer"
               >
@@ -509,7 +507,7 @@ function ProfileCard({
               </button>
               <button
                 onClick={() => onLikeBack(like.user.id, like.user.firstName, like.user.photoUrl)}
-                disabled={processing}
+                disabled={processing === like.user.id}
                 className={`flex-1 py-2 rounded-lg text-white transition disabled:opacity-50 flex items-center justify-center hover:shadow-lg ${
                   isPremium
                     ? "bg-gradient-to-r from-yellow-500 to-orange-500 hover:shadow-orange-500/30"
