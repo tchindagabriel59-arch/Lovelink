@@ -46,6 +46,29 @@ export async function GET() {
   }
 }
 
+// 3️⃣ DELETE : Supprimer un paiement annulé / ignoré
+export async function DELETE(req: NextRequest) {
+  try {
+    const adminId = await getCurrentUserId();
+    if (!adminId) return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
+
+    const [admin] = await db.select().from(users).where(eq(users.id, adminId)).limit(1);
+    if (!(admin as any)?.isAdmin) return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
+
+    const { searchParams } = new URL(req.url);
+    const paymentId = searchParams.get("id");
+
+    if (!paymentId) return NextResponse.json({ error: "ID manquant" }, { status: 400 });
+
+    await db.delete(payments).where(eq(payments.id, parseInt(paymentId)));
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error("Erreur DELETE payment:", error);
+    return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
+  }
+}
+
 // 2️⃣ POST : Valider un paiement + Push
 export async function POST(req: NextRequest) {
   try {
