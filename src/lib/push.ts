@@ -66,36 +66,26 @@ export async function sendPushToUser(
           );
           sent++;
           return { success: true };
-        } catch (err: unknown) {
+        } catch (err: any) {
           failed++;
-          const error = err as { statusCode?: number };
-
-          if (error.statusCode === 410 || error.statusCode === 404) {
-            console.log("[Push] Suppression abonnement expiré:", sub.endpoint);
+          if (err.statusCode === 410 || err.statusCode === 404) {
             await db
               .delete(pushSubscriptions)
               .where(eq(pushSubscriptions.id, sub.id));
-          } else {
-            console.error("[Push] Erreur envoi:", err);
           }
           return { success: false };
         }
       })
     );
 
-    return {
-      success: sent > 0,
-      sent,
-      failed,
-    };
+    return { success: sent > 0, sent, failed };
   } catch (error) {
-    console.error("[Push] Erreur globale:", error);
     return { success: false, sent: 0, failed: 0 };
   }
 }
 
 /**
- * Templates de notifications prêts à l'emploi
+ * Templates de notifications (N'EN SUPPRIME AUCUN)
  */
 export const PushTemplates = {
   like: (fromName: string) => ({
@@ -144,5 +134,38 @@ export const PushTemplates = {
     icon: "/icon",
     tag: "boost",
     url: "/discover",
+  }),
+
+  // 🔄 TEMPLATES POUR LES RELANCES (CRON JOBS)
+  newProfiles: (count: number) => ({
+    title: "🔥 De nouveaux profils !",
+    body: `${count} personne${count > 1 ? "s viennent" : " vient"} de nous rejoindre.`,
+    icon: "/icon",
+    tag: "new_profiles",
+    url: "/discover",
+  }),
+
+  incompleteProfile3d: () => ({
+    title: "📸 Ton profil t'attend !",
+    body: "Ajoute une photo pour commencer à matcher 💕",
+    icon: "/icon",
+    tag: "incomplete_profile",
+    url: "/profile",
+  }),
+
+  incompleteProfile7d: () => ({
+    title: "🎁 7 jours Premium OFFERTS !",
+    body: "Complète ton profil aujourd'hui pour en profiter !",
+    icon: "/icon",
+    tag: "incomplete_profile",
+    url: "/profile",
+  }),
+
+  incompleteProfile14d: () => ({
+    title: "💔 On va bientôt te supprimer...",
+    body: "Dernière chance ! Complète ton profil vite 😢",
+    icon: "/icon",
+    tag: "incomplete_profile",
+    url: "/profile",
   }),
 };
