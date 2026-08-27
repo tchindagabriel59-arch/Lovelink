@@ -150,7 +150,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!user) return;
-    const interval = setInterval(fetchCounts, 30000);
+    
+    // 🛡️ OPTIMISATION CPU : Passage de 30 secondes à 60 secondes (1 minute)
+    // Cela divise par 2 la charge sur la base de données !
+    const interval = setInterval(fetchCounts, 60000);
+    
     return () => clearInterval(interval);
   }, [user, fetchCounts]);
 
@@ -299,6 +303,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               <Heart className="w-8 h-8 text-rose-500 fill-rose-500" />
               <span className="text-2xl font-bold gradient-text">LoveLink</span>
             </Link>
+
+            {/* Une seule cloche de notifications */}
             <Notifications />
           </div>
 
