@@ -151,7 +151,9 @@ export default function AdminUsersPage() {
   const [premiumPlan, setPremiumPlan] = useState<"premium" | "gold">("premium");
   const [premiumDuration, setPremiumDuration] = useState<string>("1month");
   const [savingPremium, setSavingPremium] = useState(false);
-    const [resetResult, setResetResult] = useState<{
+
+  // ✅ STATES RESET PASSWORD (manquaient → erreur build)
+  const [resetResult, setResetResult] = useState<{
     password: string;
     firstName: string;
     lastName: string;
@@ -187,7 +189,7 @@ export default function AdminUsersPage() {
     fetchUsers();
   }, [fetchUsers]);
 
-    // 🔑 REINITIALISER LE MOT DE PASSE (génération auto)
+  // 🔑 REINITIALISER LE MOT DE PASSE (génération auto)
   const handleAdminResetPassword = async (userId: number) => {
     if (
       !confirm(
@@ -202,7 +204,6 @@ export default function AdminUsersPage() {
       const res = await fetch("/api/admin/users/reset-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        // Plus besoin d'envoyer newPassword → l'API génère tout seule
         body: JSON.stringify({ targetUserId: Number(userId) }),
       });
 
@@ -319,28 +320,8 @@ export default function AdminUsersPage() {
     }
   }
 
-  const resetFilters = () => {
-    setSearch("");
-    setFilter("all");
-    setCityFilter("");
-    setAgeFilter("all");
-    setDateFilter("all");
-    setSortBy("recent");
-  };
-
-  const activeFiltersCount = useMemo(() => {
-    let count = 0;
-    if (filter !== "all") count++;
-    if (cityFilter) count++;
-    if (ageFilter !== "all") count++;
-    if (dateFilter !== "all") count++;
-    if (sortBy !== "recent") count++;
-    return count;
-  }, [filter, cityFilter, ageFilter, dateFilter, sortBy]);
-
-  // 🔍 RECHERCHE UNIVERSELLE + FILTRAGE
   const filteredUsers = useMemo(() => {
-    let result = users.filter((u) => {
+    return users.filter((u) => {
       const q = search.toLowerCase().trim();
       const searchMatch =
         q === "" ||
@@ -352,17 +333,32 @@ export default function AdminUsersPage() {
       if (!searchMatch) return false;
 
       switch (filter) {
-        case "banned": if (!u.isBanned) return false; break;
-        case "admin": if (!u.isAdmin) return false; break;
-        case "premium": if (!u.isPremium) return false; break;
-        case "online": if (!u.isOnline) return false; break;
-        case "male": if (u.gender !== "male") return false; break;
-        case "female": if (u.gender !== "female") return false; break;
-        case "active": if (u.isBanned) return false; break;
+        case "banned":
+          if (!u.isBanned) return false;
+          break;
+        case "admin":
+          if (!u.isAdmin) return false;
+          break;
+        case "premium":
+          if (!u.isPremium) return false;
+          break;
+        case "online":
+          if (!u.isOnline) return false;
+          break;
+        case "male":
+          if (u.gender !== "male") return false;
+          break;
+        case "female":
+          if (u.gender !== "female") return false;
+          break;
+        case "active":
+          if (u.isBanned) return false;
+          break;
       }
 
       if (cityFilter) {
-        if ((u.city || "").toLowerCase().trim() !== cityFilter.toLowerCase()) return false;
+        if ((u.city || "").toLowerCase().trim() !== cityFilter.toLowerCase())
+          return false;
       }
 
       if (ageFilter !== "all") {
@@ -375,18 +371,19 @@ export default function AdminUsersPage() {
 
       return true;
     });
+  }, [users, search, filter, cityFilter, ageFilter]);
 
-    return result;
-  }, [users, search, filter, cityFilter, ageFilter, dateFilter, sortBy]);
-
-  const stats = useMemo(() => ({
-    total: users.length,
-    active: users.filter((u) => !u.isBanned).length,
-    banned: users.filter((u) => u.isBanned).length,
-    admins: users.filter((u) => u.isAdmin).length,
-    premium: users.filter((u) => u.isPremium).length,
-    online: users.filter((u) => u.isOnline).length,
-  }), [users]);
+  const stats = useMemo(
+    () => ({
+      total: users.length,
+      active: users.filter((u) => !u.isBanned).length,
+      banned: users.filter((u) => u.isBanned).length,
+      admins: users.filter((u) => u.isAdmin).length,
+      premium: users.filter((u) => u.isPremium).length,
+      online: users.filter((u) => u.isOnline).length,
+    }),
+    [users]
+  );
 
   if (loading) return <UsersSkeleton />;
 
@@ -409,7 +406,6 @@ export default function AdminUsersPage() {
       </header>
 
       <main className="max-w-7xl mx-auto p-6 space-y-6">
-        {/* STATISTIQUES EN HAUT */}
         <div className="grid grid-cols-3 lg:grid-cols-6 gap-3">
           <MiniStat label="Total" value={stats.total} color="bg-blue-500/10 text-blue-400" />
           <MiniStat label="✅ Actifs" value={stats.active} color="bg-green-500/10 text-green-400" />
@@ -419,7 +415,6 @@ export default function AdminUsersPage() {
           <MiniStat label="🚫 Bannis" value={stats.banned} color="bg-red-500/10 text-red-400" />
         </div>
 
-        {/* 🔍 BARRE DE RECHERCHE UNIVERSELLE */}
         <div className="relative">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-rose-500" />
           <input
@@ -431,7 +426,6 @@ export default function AdminUsersPage() {
           />
         </div>
 
-        {/* FILTRES RAPIDES (HOMMES & FEMMES INCLUS) */}
         <div className="flex flex-wrap gap-2 items-center">
           <FilterBtn current={filter} value="all" onClick={setFilter}>Tous</FilterBtn>
           <FilterBtn current={filter} value="active" onClick={setFilter}>✅ Actifs</FilterBtn>
@@ -443,7 +437,6 @@ export default function AdminUsersPage() {
           <FilterBtn current={filter} value="female" onClick={setFilter}>👩 Femmes</FilterBtn>
         </div>
 
-        {/* LISTE DES UTILISATEURS AVEC STATS VISIBLES */}
         <div className="grid gap-3">
           {filteredUsers.length === 0 ? (
             <div className="text-center py-12 bg-slate-900 border border-slate-800 rounded-2xl">
@@ -464,7 +457,10 @@ export default function AdminUsersPage() {
           <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-3xl w-full my-8">
             <div className="p-6 border-b border-slate-800 flex items-center justify-between">
               <h2 className="text-xl font-bold">Profil utilisateur</h2>
-              <button onClick={() => setSelectedUser(null)} className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white">
+              <button
+                onClick={() => setSelectedUser(null)}
+                className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -479,19 +475,34 @@ export default function AdminUsersPage() {
                 />
                 <div className="flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="text-2xl font-bold">{selectedUser.firstName} {selectedUser.lastName}</h3>
-                    {selectedUser.isAdmin && <span className="px-2 py-0.5 bg-purple-500/20 text-purple-400 rounded-full text-xs font-bold">👑 ADMIN</span>}
-                    {selectedUser.isPremium && <span className="px-2 py-0.5 bg-amber-500/20 text-amber-400 rounded-full text-xs font-bold">💎 PREMIUM</span>}
-                    {selectedUser.isBanned && <span className="px-2 py-0.5 bg-red-500/20 text-red-400 rounded-full text-xs font-bold">🚫 BANNI</span>}
+                    <h3 className="text-2xl font-bold">
+                      {selectedUser.firstName} {selectedUser.lastName}
+                    </h3>
+                    {selectedUser.isAdmin && (
+                      <span className="px-2 py-0.5 bg-purple-500/20 text-purple-400 rounded-full text-xs font-bold">
+                        👑 ADMIN
+                      </span>
+                    )}
+                    {selectedUser.isPremium && (
+                      <span className="px-2 py-0.5 bg-amber-500/20 text-amber-400 rounded-full text-xs font-bold">
+                        💎 PREMIUM
+                      </span>
+                    )}
+                    {selectedUser.isBanned && (
+                      <span className="px-2 py-0.5 bg-red-500/20 text-red-400 rounded-full text-xs font-bold">
+                        🚫 BANNI
+                      </span>
+                    )}
                   </div>
                   <p className="text-slate-400 text-sm mt-1">{selectedUser.email}</p>
                   <p className="text-xs text-slate-500 mt-1">
-                    {selectedUser.gender === "male" ? "👨 Homme" : "👩 Femme"} • {getAge(selectedUser.birthDate)} ans • {selectedUser.city || "Cameroun"}
+                    {selectedUser.gender === "male" ? "👨 Homme" : "👩 Femme"} •{" "}
+                    {getAge(selectedUser.birthDate)} ans •{" "}
+                    {selectedUser.city || "Cameroun"}
                   </p>
                 </div>
               </div>
 
-              {/* STATS BOBOXES */}
               <div className="grid grid-cols-4 gap-3 text-center">
                 <StatBox icon="❤️" label="Likes donnés" value={selectedUser.stats?.likesGiven || 0} />
                 <StatBox icon="💖" label="Likes reçus" value={selectedUser.stats?.likesReceived || 0} />
@@ -499,13 +510,10 @@ export default function AdminUsersPage() {
                 <StatBox icon="💬" label="Messages" value={selectedUser.stats?.messages || 0} />
               </div>
 
-              {/* ACTIONS ADMIN */}
               <div className="border-t border-slate-800 pt-6">
                 <p className="text-sm font-semibold mb-3">⚡ Actions administrateur</p>
                 <div className="grid grid-cols-2 gap-3">
-                  
-                  {/* 🔑 RESET PASSWORD WHATSAPP */}
-                                    <button
+                  <button
                     onClick={() => handleAdminResetPassword(selectedUser.id)}
                     disabled={resettingPassword}
                     className="col-span-2 py-3.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-slate-950 font-black rounded-xl flex items-center justify-center gap-2 transition shadow-lg"
@@ -517,14 +525,22 @@ export default function AdminUsersPage() {
                   </button>
 
                   <button
-                    onClick={() => toggleRole(selectedUser.id, "isBanned", !selectedUser.isBanned)}
+                    onClick={() =>
+                      toggleRole(selectedUser.id, "isBanned", !selectedUser.isBanned)
+                    }
                     className="px-4 py-3 bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30 rounded-xl font-semibold"
                   >
                     {selectedUser.isBanned ? "Débannir" : "Bannir"}
                   </button>
 
                   <button
-                    onClick={() => toggleRole(selectedUser.id, "isPremium", !selectedUser.isPremium)}
+                    onClick={() =>
+                      toggleRole(
+                        selectedUser.id,
+                        "isPremium",
+                        !selectedUser.isPremium
+                      )
+                    }
                     className="px-4 py-3 bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 border border-amber-500/30 rounded-xl font-semibold"
                   >
                     {selectedUser.isPremium ? "Retirer Premium" : "Rendre Premium"}
@@ -542,27 +558,6 @@ export default function AdminUsersPage() {
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-function MiniStat({ label, value, color }: { label: string; value: number; color: string }) {
-  return (
-    <div className={`p-3 rounded-xl ${color} border border-current/20`}>
-      <p className="text-xs opacity-70">{label}</p>
-      <p className="text-2xl font-bold mt-1">{value}</p>
-    </div>
-  );
-}
-
-function FilterBtn({ current, value, onClick, children }: { current: string; value: string; onClick: (v: string) => void; children: React.ReactNode }) {
-  const isActive = current === value;
-  return (
-    <button onClick={() => onClick(value)} className={`px-4 py-2 rounded-lg text-sm font-medium transition ${isActive ? "bg-purple-600 text-white" : "bg-slate-800 text-slate-400 hover:bg-slate-700"}`}>
-      {children}
-    </button>
-  );
-}
 
       {/* 🔑 MODAL MOT DE PASSE GÉNÉRÉ */}
       {resetResult && (
@@ -639,8 +634,53 @@ function FilterBtn({ current, value, onClick, children }: { current: string; val
           </div>
         </div>
       )}
+    </div>
+  );
+}
 
-// 👑 LIGNE UTILISATEUR COMPLETE AVEC TOUTES LES STATS VISIBLES
+function MiniStat({
+  label,
+  value,
+  color,
+}: {
+  label: string;
+  value: number;
+  color: string;
+}) {
+  return (
+    <div className={`p-3 rounded-xl ${color} border border-current/20`}>
+      <p className="text-xs opacity-70">{label}</p>
+      <p className="text-2xl font-bold mt-1">{value}</p>
+    </div>
+  );
+}
+
+function FilterBtn({
+  current,
+  value,
+  onClick,
+  children,
+}: {
+  current: string;
+  value: string;
+  onClick: (v: string) => void;
+  children: React.ReactNode;
+}) {
+  const isActive = current === value;
+  return (
+    <button
+      onClick={() => onClick(value)}
+      className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+        isActive
+          ? "bg-purple-600 text-white"
+          : "bg-slate-800 text-slate-400 hover:bg-slate-700"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
 function UserRow({ user, onView }: { user: UserItem; onView: () => void }) {
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 hover:border-purple-500/50 transition shadow-md">
@@ -662,9 +702,21 @@ function UserRow({ user, onView }: { user: UserItem; onView: () => void }) {
             <p className="font-bold text-base text-white truncate">
               {user.firstName} {user.lastName}
             </p>
-            {user.isAdmin && <span className="text-purple-400 text-xs font-bold bg-purple-500/10 px-2 py-0.5 rounded-full border border-purple-500/20">👑 Admin</span>}
-            {user.isPremium && <span className="text-amber-400 text-xs font-bold bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20">💎 Premium</span>}
-            {user.isBanned && <span className="text-red-400 text-xs font-bold bg-red-500/10 px-2 py-0.5 rounded-full border border-red-500/20">🚫 Banni</span>}
+            {user.isAdmin && (
+              <span className="text-purple-400 text-xs font-bold bg-purple-500/10 px-2 py-0.5 rounded-full border border-purple-500/20">
+                👑 Admin
+              </span>
+            )}
+            {user.isPremium && (
+              <span className="text-amber-400 text-xs font-bold bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20">
+                💎 Premium
+              </span>
+            )}
+            {user.isBanned && (
+              <span className="text-red-400 text-xs font-bold bg-red-500/10 px-2 py-0.5 rounded-full border border-red-500/20">
+                🚫 Banni
+              </span>
+            )}
           </div>
           <p className="text-xs text-slate-400 truncate mt-0.5">{user.email}</p>
           <div className="flex items-center gap-3 text-xs text-slate-500 mt-1">
@@ -678,19 +730,28 @@ function UserRow({ user, onView }: { user: UserItem; onView: () => void }) {
           </div>
         </div>
 
-        {/* 📊 STATS EN DIRECT (RESTAURÉES SUR CHAQUE LIGNE) */}
         <div className="hidden lg:flex items-center gap-5 text-xs text-slate-400 px-4 border-l border-r border-slate-800">
-          <div className="text-center" title="Likes donnés">
-            <p className="text-slate-500 flex items-center justify-center gap-1"><Heart size={12} className="text-rose-500" /> Likes</p>
-            <p className="font-bold text-slate-200 text-sm mt-0.5">{user.stats?.likesGiven || 0}</p>
+          <div className="text-center">
+            <p className="text-slate-500 flex items-center justify-center gap-1">
+              <Heart size={12} className="text-rose-500" /> Likes
+            </p>
+            <p className="font-bold text-slate-200 text-sm mt-0.5">
+              {user.stats?.likesGiven || 0}
+            </p>
           </div>
-          <div className="text-center" title="Matchs">
+          <div className="text-center">
             <p className="text-slate-500">💑 Matchs</p>
-            <p className="font-bold text-slate-200 text-sm mt-0.5">{user.stats?.matches || 0}</p>
+            <p className="font-bold text-slate-200 text-sm mt-0.5">
+              {user.stats?.matches || 0}
+            </p>
           </div>
-          <div className="text-center" title="Messages envoyés">
-            <p className="text-slate-500 flex items-center justify-center gap-1"><MessageCircle size={12} className="text-purple-400" /> Msgs</p>
-            <p className="font-bold text-slate-200 text-sm mt-0.5">{user.stats?.messages || 0}</p>
+          <div className="text-center">
+            <p className="text-slate-500 flex items-center justify-center gap-1">
+              <MessageCircle size={12} className="text-purple-400" /> Msgs
+            </p>
+            <p className="font-bold text-slate-200 text-sm mt-0.5">
+              {user.stats?.messages || 0}
+            </p>
           </div>
         </div>
 
@@ -706,7 +767,15 @@ function UserRow({ user, onView }: { user: UserItem; onView: () => void }) {
   );
 }
 
-function StatBox({ icon, label, value }: { icon: string; label: string; value: number }) {
+function StatBox({
+  icon,
+  label,
+  value,
+}: {
+  icon: string;
+  label: string;
+  value: number;
+}) {
   return (
     <div className="text-center p-3 bg-slate-800/50 rounded-xl border border-slate-700/50">
       <div className="text-2xl">{icon}</div>
