@@ -1,50 +1,47 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter, useParams } from "next/navigation";
+import { useEffect, useState, use } from "react";
+import { useRouter } from "next/navigation";
 import Image from "next/image";
+import Link from "next/link";
+import { useUser } from "../../layout";
 import {
-  Heart,
-  X,
-  MapPin,
-  Briefcase,
   ArrowLeft,
-  ChevronLeft,
-  ChevronRight,
-  Crown,
+  MapPin,
   BadgeCheck,
-  Star,
-  Sparkles,
-  Loader2,
+  Crown,
+  Images,
+  Info,
+  Briefcase,
+  Heart,
+  MessageCircle,
 } from "lucide-react";
 
-interface Profile {
+interface PublicProfile {
   id: number;
   firstName: string;
+  lastName: string;
   birthDate: string;
-  bio: string | null;
-  city: string | null;
-  country: string | null;
-  photoUrl: string | null;
-  photo1Url: string | null;
-  photo2Url: string | null;
-  photo3Url: string | null;
-  photo4Url: string | null;
-  interests: string | null;
-  occupation: string | null;
+  gender: string;
+  city: string;
+  country: string;
+  bio: string;
+  interests: string;
+  occupation: string;
+  maritalStatus: string;
+  photoUrl: string;
+  photo1Url: string;
+  photo2Url: string;
+  photo3Url: string;
+  photo4Url: string;
   isOnline: boolean;
-  isPremium: boolean;
+  lastSeen: string;
   isVerified: boolean;
-  distance: number | null;
-  prompt1Question: string | null;
-  prompt1Answer: string | null;
-  prompt2Question: string | null;
-  prompt2Answer: string | null;
-  prompt3Question: string | null;
-  prompt3Answer: string | null;
+  isPremium: boolean;
 }
 
 function getAge(birthDate: string): number {
+  if (!birthDate) return 0;
   const today = new Date();
   const birth = new Date(birthDate);
   let age = today.getFullYear() - birth.getFullYear();
@@ -53,317 +50,232 @@ function getAge(birthDate: string): number {
   return age;
 }
 
-export default function ProfileDetailPage() {
+export default function PublicProfilePage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
   const router = useRouter();
-  const params = useParams();
-  const profileId = params.id;
-
-  const [profile, setProfile] = useState<Profile | null>(null);
+  const { id } = use(params);
+  const { user: currentUser } = useUser();
+  const [profile, setProfile] = useState<PublicProfile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [currentPhoto, setCurrentPhoto] = useState(0);
-  const [acting, setActing] = useState(false);
+  const [activePhoto, setActivePhoto] = useState<string>("");
 
   useEffect(() => {
-    fetchProfile();
-  }, [profileId]);
-
-  async function fetchProfile() {
-    try {
-      const res = await fetch(`/api/discover/${profileId}`);
-      if (res.ok) {
-        const data = await res.json();
-        setProfile(data.profile);
-      } else {
-        router.push("/discover");
+    async function fetchProfile() {
+      try {
+        const res = await fetch(`/api/users/${id}`);
+        if (res.ok) {
+          const data = await res.json();
+          setProfile(data.user);
+          setActivePhoto(data.user.photoUrl);
+        }
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoading(false);
       }
-    } catch {
-      router.push("/discover");
-    } finally {
-      setLoading(false);
     }
-  }
-
-  async function handleAction(isLike: boolean) {
-    if (!profile || acting) return;
-    setActing(true);
-    try {
-      await fetch("/api/like", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ toUserId: profile.id, isLike }),
-      });
-      router.push("/discover");
-    } catch {
-      setActing(false);
-    }
-  }
-
-  async function handleSuperLike() {
-    if (!profile || acting) return;
-    setActing(true);
-    try {
-      await fetch("/api/like", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          toUserId: profile.id,
-          isLike: true,
-          isSuperLike: true,
-        }),
-      });
-      router.push("/discover");
-    } catch {
-      setActing(false);
-    }
-  }
+    fetchProfile();
+  }, [id]);
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <Loader2 className="w-12 h-12 text-rose-500 animate-spin" />
+      <div className="min-h-screen bg-[#F7F8FC] flex items-center justify-center">
+        <div className="w-10 h-10 border-4 border-rose-500 border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
 
   if (!profile) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <p className="text-slate-600">Profil introuvable</p>
+      <div className="min-h-screen bg-[#F7F8FC] flex flex-col items-center justify-center p-4">
+        <p className="text-slate-500 font-bold mb-4">Profil introuvable</p>
+        <button onClick={() => router.back()} className="px-6 py-2 bg-rose-500 text-white rounded-full font-bold">
+          Retour
+        </button>
       </div>
     );
   }
 
-  const photos = [
+  // Rassembler toutes les photos existantes
+  const allPhotos = [
     profile.photoUrl,
     profile.photo1Url,
     profile.photo2Url,
     profile.photo3Url,
     profile.photo4Url,
-  ].filter((p): p is string => !!p);
+  ].filter(Boolean);
 
-  const interests = profile.interests ? profile.interests.split(",").map(i => i.trim()).filter(Boolean) : [];
+  const isPremium = currentUser?.isPremium;
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-32">
-      {/* Header sticky avec bouton retour */}
-      <div className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-slate-100">
-        <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between">
+    <div className="min-h-[calc(100vh-64px)] bg-[#F7F8FC] pb-24">
+      <div className="max-w-md mx-auto bg-white min-h-screen shadow-sm relative">
+        
+        {/* Header Retour */}
+        <div className="sticky top-0 z-40 bg-white/90 backdrop-blur border-b border-slate-100 px-4 py-3 flex items-center">
           <button
             onClick={() => router.back()}
-            className="p-2 hover:bg-slate-100 rounded-full transition"
+            className="flex items-center gap-2 px-4 py-2 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-xl font-bold text-sm transition"
           >
-            <ArrowLeft className="w-6 h-6 text-slate-700" />
+            <ArrowLeft className="w-4 h-4" />
+            Retour aux profils
           </button>
-          <h1 className="font-bold text-slate-900">Profil</h1>
-          <div className="w-10" />
         </div>
-      </div>
 
-      <div className="max-w-2xl mx-auto">
-        {/* CARROUSEL PHOTOS */}
-        <div className="relative aspect-square bg-slate-200 overflow-hidden">
-          {photos.length > 0 ? (
-            <img
-              src={photos[currentPhoto]}
+        {/* Photo Principale */}
+        <div className="w-full aspect-[4/5] relative bg-slate-100">
+          {activePhoto ? (
+            <Image
+              src={activePhoto}
               alt={profile.firstName}
-              className="w-full h-full object-cover"
+              fill
+              className="object-cover"
+              priority
             />
           ) : (
-            <div className="w-full h-full bg-gradient-to-br from-rose-400 to-purple-500 flex items-center justify-center">
-              <span className="text-9xl font-bold text-white">
-                {profile.firstName.charAt(0)}
-              </span>
+            <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-rose-400 to-purple-500 text-white text-6xl font-black">
+              {profile.firstName.charAt(0)}
             </div>
           )}
-
-          {/* Segments photos */}
-          {photos.length > 1 && (
-            <div className="absolute top-3 left-3 right-3 flex gap-1 z-10">
-              {photos.map((_, i) => (
-                <div
-                  key={i}
-                  className={`flex-1 h-1 rounded-full ${
-                    i === currentPhoto ? "bg-white" : "bg-white/40"
-                  }`}
-                />
-              ))}
-            </div>
-          )}
-
-          {/* Boutons navigation photos */}
-          {photos.length > 1 && currentPhoto > 0 && (
-            <button
-              onClick={() => setCurrentPhoto(currentPhoto - 1)}
-              className="absolute left-2 top-1/2 -translate-y-1/2 w-10 h-10 bg-white/90 hover:bg-white rounded-full flex items-center justify-center shadow-lg"
-            >
-              <ChevronLeft className="w-6 h-6 text-slate-700" />
-            </button>
-          )}
-          {photos.length > 1 && currentPhoto < photos.length - 1 && (
-            <button
-              onClick={() => setCurrentPhoto(currentPhoto + 1)}
-              className="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 bg-white/90 hover:bg-white rounded-full flex items-center justify-center shadow-lg"
-            >
-              <ChevronRight className="w-6 h-6 text-slate-700" />
-            </button>
-          )}
-
-          {/* Badges */}
-          <div className="absolute top-7 right-3 flex flex-col gap-2 z-10">
-            {profile.isPremium && (
-              <div className="flex items-center gap-1.5 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-full px-3 py-1.5 shadow-lg">
-                <Crown className="w-3.5 h-3.5 text-white fill-white" />
-                <span className="text-[10px] font-black text-white">PREMIUM</span>
-              </div>
-            )}
-          </div>
-
-          {/* Gradient bas */}
-          <div className="absolute bottom-0 left-0 right-0 h-40 bg-gradient-to-t from-black/80 to-transparent" />
-
-          {/* Nom + âge */}
+          
+          <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-black/80 to-transparent" />
+          
           <div className="absolute bottom-4 left-4 right-4 text-white">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h2 className="text-4xl font-black drop-shadow-2xl flex items-center gap-2">
-                {profile.firstName}
-                {profile.isVerified && (
-                  <BadgeCheck className="w-7 h-7 text-blue-400 fill-blue-500" />
-                )}
-              </h2>
-              <span className="text-3xl font-light">{getAge(profile.birthDate)}</span>
-            </div>
+            <h1 className="text-3xl font-black flex items-center gap-2 drop-shadow-md">
+              {profile.firstName}, {getAge(profile.birthDate)}
+              {profile.isVerified && <BadgeCheck className="w-6 h-6 text-blue-400 fill-blue-500" />}
+            </h1>
+            <p className="flex items-center gap-1.5 mt-1 text-sm font-medium drop-shadow-md">
+              <MapPin className="w-4 h-4" /> {profile.city || "Cameroun"}
+            </p>
           </div>
         </div>
 
-        {/* INFOS DÉTAILLÉES */}
-        <div className="p-6 space-y-6">
-          {/* Localisation */}
-          {(profile.city || profile.distance !== null) && (
-            <div className="bg-white rounded-2xl p-4 shadow-sm">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-rose-100 rounded-xl flex items-center justify-center">
-                  <MapPin className="w-5 h-5 text-rose-500" />
+        <div className="p-5">
+          {/* GALERIE PHOTOS & UPSELL PREMIUM */}
+          <div className="mb-8">
+            <h3 className="font-bold text-slate-800 flex items-center gap-2 mb-3">
+              <Images className="w-5 h-5 text-emerald-500" />
+              Photos ({allPhotos.length})
+            </h3>
+            
+            <div className="grid grid-cols-4 gap-2">
+              {/* Photo 1 (Toujours visible) */}
+              <button
+                onClick={() => setActivePhoto(allPhotos[0])}
+                className={`relative aspect-[3/4] rounded-xl overflow-hidden border-2 transition ${activePhoto === allPhotos[0] ? "border-emerald-500 shadow-md" : "border-transparent"}`}
+              >
+                <Image src={allPhotos[0]} alt="Principale" fill className="object-cover" />
+                <div className="absolute bottom-0 inset-x-0 bg-emerald-500 text-white text-[9px] font-black text-center py-0.5">
+                  Principale
                 </div>
-                <div>
-                  <p className="text-xs text-slate-500 font-medium">Localisation</p>
-                  <p className="font-semibold text-slate-900">
-                    {profile.city && <>{profile.city}</>}
-                    {profile.city && profile.country && ", "}
-                    {profile.country}
-                    {profile.distance !== null && (
-                      <span className="ml-2 text-sm text-slate-500">
-                        • à {profile.distance} km
-                      </span>
-                    )}
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
+              </button>
 
-          {/* Occupation */}
-          {profile.occupation && (
-            <div className="bg-white rounded-2xl p-4 shadow-sm">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center">
-                  <Briefcase className="w-5 h-5 text-purple-500" />
-                </div>
-                <div>
-                  <p className="text-xs text-slate-500 font-medium">Profession</p>
-                  <p className="font-semibold text-slate-900">{profile.occupation}</p>
-                </div>
-              </div>
-            </div>
-          )}
+              {/* Photos 2, 3 et 4 (Bloquées si non-premium) */}
+              {[1, 2, 3].map((index) => {
+                const photoExists = allPhotos[index];
 
-          {/* Bio */}
+                if (!isPremium) {
+                  // MÊME S'IL N'A PAS DE PHOTO, ON AFFICHE LE CADENAS POUR DONNER ENVIE
+                  return (
+                    <Link
+                      key={index}
+                      href="/premium"
+                      className="relative aspect-[3/4] rounded-xl border-2 border-dashed border-amber-200 bg-amber-50 flex flex-col items-center justify-center gap-1 hover:bg-amber-100 transition"
+                    >
+                      {photoExists && (
+                        <Image src={photoExists} alt="" fill className="object-cover opacity-20 blur-sm rounded-xl" />
+                      )}
+                      <Crown className="w-6 h-6 text-amber-500 relative z-10" />
+                      <span className="text-[10px] font-black text-amber-600 relative z-10">Premium</span>
+                    </Link>
+                  );
+                }
+
+                // Si Premium et que la photo existe
+                if (photoExists) {
+                  return (
+                    <button
+                      key={index}
+                      onClick={() => setActivePhoto(photoExists)}
+                      className={`relative aspect-[3/4] rounded-xl overflow-hidden border-2 transition ${activePhoto === photoExists ? "border-emerald-500 shadow-md" : "border-transparent"}`}
+                    >
+                      <Image src={photoExists} alt={`Photo ${index + 1}`} fill className="object-cover" />
+                    </button>
+                  );
+                }
+
+                // Si Premium mais la photo n'existe pas
+                return (
+                  <div key={index} className="aspect-[3/4] rounded-xl border-2 border-dashed border-slate-200 bg-slate-50" />
+                );
+              })}
+            </div>
+          </div>
+
+          {/* BIO */}
           {profile.bio && (
-            <div className="bg-white rounded-2xl p-5 shadow-sm">
-              <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-rose-500" />
+            <div className="mb-6">
+              <h3 className="font-bold text-slate-800 flex items-center gap-2 mb-2">
+                <Info className="w-5 h-5 text-rose-500" />
                 À propos de moi
               </h3>
-              <p className="text-slate-800 leading-relaxed whitespace-pre-line">
+              <p className="text-slate-600 text-sm leading-relaxed bg-slate-50 p-4 rounded-2xl border border-slate-100">
                 {profile.bio}
               </p>
             </div>
           )}
 
-          {/* Intérêts */}
-          {interests.length > 0 && (
-            <div className="bg-white rounded-2xl p-5 shadow-sm">
-              <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
-                <Heart className="w-4 h-4 text-rose-500" />
-                Centres d'intérêt
-              </h3>
-              <div className="flex flex-wrap gap-2">
-                {interests.map((interest, i) => (
-                  <span
-                    key={i}
-                    className="px-3 py-1.5 bg-gradient-to-r from-rose-50 to-purple-50 text-rose-700 rounded-full text-sm font-medium border border-rose-100"
-                  >
-                    {interest}
-                  </span>
-                ))}
+          {/* INFOS COMPLÉMENTAIRES */}
+          <div className="space-y-4 mb-8">
+            {profile.occupation && (
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center text-blue-500">
+                  <Briefcase className="w-5 h-5" />
+                </div>
+                <div>
+                  <p className="text-xs text-slate-400 font-medium">Profession</p>
+                  <p className="text-sm font-bold text-slate-800">{profile.occupation}</p>
+                </div>
               </div>
-            </div>
-          )}
-
-          {/* Prompts */}
-          {profile.prompt1Question && profile.prompt1Answer && (
-            <div className="bg-gradient-to-br from-purple-50 to-rose-50 rounded-2xl p-5 border border-purple-100">
-              <p className="text-xs font-bold text-purple-600 uppercase tracking-wider mb-2">
-                {profile.prompt1Question}
-              </p>
-              <p className="text-slate-800 leading-relaxed">{profile.prompt1Answer}</p>
-            </div>
-          )}
-
-          {profile.prompt2Question && profile.prompt2Answer && (
-            <div className="bg-gradient-to-br from-rose-50 to-pink-50 rounded-2xl p-5 border border-rose-100">
-              <p className="text-xs font-bold text-rose-600 uppercase tracking-wider mb-2">
-                {profile.prompt2Question}
-              </p>
-              <p className="text-slate-800 leading-relaxed">{profile.prompt2Answer}</p>
-            </div>
-          )}
-
-          {profile.prompt3Question && profile.prompt3Answer && (
-            <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-2xl p-5 border border-amber-100">
-              <p className="text-xs font-bold text-amber-600 uppercase tracking-wider mb-2">
-                {profile.prompt3Question}
-              </p>
-              <p className="text-slate-800 leading-relaxed">{profile.prompt3Answer}</p>
-            </div>
-          )}
+            )}
+            
+            {profile.interests && (
+              <div>
+                <p className="text-xs text-slate-400 font-medium mb-2">Centres d&apos;intérêt</p>
+                <div className="flex flex-wrap gap-2">
+                  {profile.interests.split(",").map((interest, i) => (
+                    <span key={i} className="px-3 py-1.5 bg-rose-50 text-rose-600 text-xs font-bold rounded-full border border-rose-100">
+                      {interest.trim()}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
-      </div>
 
-      {/* BOUTONS ACTIONS EN BAS (sticky) */}
-      <div className="fixed bottom-20 lg:bottom-4 left-0 right-0 z-50 flex items-center justify-center gap-4 px-4">
-        <button
-          onClick={() => handleAction(false)}
-          disabled={acting}
-          className="w-16 h-16 bg-white rounded-full shadow-2xl flex items-center justify-center text-red-500 hover:scale-110 active:scale-95 transition disabled:opacity-50"
-        >
-          <X className="w-8 h-8" strokeWidth={3} />
-        </button>
+        {/* BOUTONS D'ACTION FIXES EN BAS */}
+        <div className="fixed lg:absolute bottom-0 left-0 right-0 p-4 bg-white/90 backdrop-blur border-t border-slate-100 flex gap-3 max-w-md mx-auto">
+          <Link
+            href={`/messages?match=${profile.id}`}
+            className="flex-1 py-3.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-2xl flex items-center justify-center gap-2 transition"
+          >
+            <MessageCircle className="w-5 h-5" />
+            Écrire
+          </Link>
+          <button
+            onClick={() => alert("Profil liké ! (Géré via l'API Like)")}
+            className="flex-1 py-3.5 bg-gradient-to-r from-rose-500 to-purple-600 text-white font-bold rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-rose-500/25 hover:scale-105 transition"
+          >
+            <Heart className="w-5 h-5" />
+            Liker
+          </button>
+        </div>
 
-        <button
-          onClick={handleSuperLike}
-          disabled={acting}
-          className="w-14 h-14 bg-white rounded-full shadow-xl flex items-center justify-center text-blue-500 hover:scale-110 active:scale-95 transition disabled:opacity-50"
-        >
-          <Star className="w-7 h-7 fill-blue-500" />
-        </button>
-
-        <button
-          onClick={() => handleAction(true)}
-          disabled={acting}
-          className="w-16 h-16 bg-white rounded-full shadow-2xl flex items-center justify-center text-green-500 hover:scale-110 active:scale-95 transition disabled:opacity-50"
-        >
-          <Heart className="w-8 h-8 fill-green-500" />
-        </button>
       </div>
     </div>
   );
