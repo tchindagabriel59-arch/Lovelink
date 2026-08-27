@@ -277,18 +277,26 @@ export default function NotificationsPage() {
                     const { Icon, color, bg } = notifIcon(normType);
                     const unread = !n.isRead;
 
+                    // 🔗 LIEN VERS LE PROFIL (si la notif vient d'un utilisateur) ou vers les messages
+                    const targetUrl = n.fromUser?.id 
+                      ? (normType === "message" ? `/messages?match=${n.fromUser.id}` : `/discover/${n.fromUser.id}`) 
+                      : "/dashboard";
+
                     return (
                       <div
                         key={n.id}
-                        className={`group relative flex items-start gap-3 p-3.5 rounded-3xl border shadow-sm transition ${
+                        className={`group relative flex items-start gap-3 p-3.5 rounded-3xl border shadow-sm transition hover:scale-[1.02] ${
                           unread
                             ? "bg-white border-rose-100"
                             : "bg-white/80 border-slate-100"
                         }`}
                       >
+                        {/* 🔗 LIEN CLICQUABLE INVISIBLE SUR TOUTE LA NOTIF */}
+                        <Link href={targetUrl} className="absolute inset-0 z-10 rounded-3xl" />
+
                         {/* Avatar ou Icône */}
                         {n.fromUser?.photoUrl ? (
-                          <div className="relative flex-shrink-0">
+                          <div className="relative flex-shrink-0 z-0">
                             <Image
                               src={n.fromUser.photoUrl}
                               alt={n.fromUser.firstName || "Profil"}
@@ -304,14 +312,14 @@ export default function NotificationsPage() {
                           </div>
                         ) : (
                           <div
-                            className={`w-11 h-11 rounded-2xl ${bg} flex items-center justify-center flex-shrink-0`}
+                            className={`w-11 h-11 rounded-2xl ${bg} flex items-center justify-center flex-shrink-0 z-0`}
                           >
                             <Icon className={`w-5 h-5 ${color}`} />
                           </div>
                         )}
 
                         {/* Content */}
-                        <div className="flex-1 min-w-0">
+                        <div className="flex-1 min-w-0 z-0">
                           <div className="flex items-start justify-between gap-2">
                             <p className="font-bold text-slate-900 text-sm leading-snug">
                               <span className={color}>♥ </span>
@@ -339,10 +347,13 @@ export default function NotificationsPage() {
                           </p>
                         </div>
 
-                        {/* Supprimer button */}
+                        {/* Supprimer button (z-20 pour être cliquable AU-DESSUS du lien) */}
                         <button
-                          onClick={() => deleteNotif(n.id)}
-                          className="opacity-0 group-hover:opacity-100 p-1.5 text-slate-300 hover:text-rose-500 transition"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            deleteNotif(n.id);
+                          }}
+                          className="relative z-20 opacity-0 group-hover:opacity-100 p-1.5 text-slate-300 hover:text-rose-500 transition bg-white rounded-full shadow-sm"
                           title="Supprimer"
                         >
                           <Trash2 size={16} />
