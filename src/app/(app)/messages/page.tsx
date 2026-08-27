@@ -23,6 +23,7 @@ import {
   Play,
   Pause,
   Trash2,
+  AlertTriangle,
 } from "lucide-react";
 
 interface MatchData {
@@ -347,7 +348,7 @@ function MessagesContent() {
   }, [chatMessages, scrollToBottom]);
 
   // 🤖 DEMANDER ACCROCHES À GABI AI
-  const getNdoloSuggestions = async () => {
+  const getGabiSuggestions = async () => {
     if (!otherUser) return;
     setLoadingNdolo(true);
     setShowNdoloModal(true);
@@ -487,6 +488,7 @@ function MessagesContent() {
     audioChunksRef.current = [];
   };
 
+  // 📝 GESTION DE L'ENVOI DE MESSAGE ET DU FILTRE ANTI-CONTACT
   async function handleSend(e: React.FormEvent) {
     e.preventDefault();
     if (!newMessage.trim() || !selectedMatch || sending) return;
@@ -502,14 +504,31 @@ function MessagesContent() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content: messageToSend }),
       });
+      const data = await res.json();
+      
       if (res.ok) {
-        const data = await res.json();
         setChatMessages((prev) => [...prev, data.message]);
         lastMessageIdRef.current = data.message.id;
         shouldScrollRef.current = true;
         fetchMatchesList();
       } else {
-        setNewMessage(messageToSend);
+        // 🛡️ SI LE MESSAGE EST BLOQUÉ PAR SÉCURITÉ (MOINS DE 30 MESSAGES)
+        if (data.code === "CONTACT_BLOCKED") {
+          setChatMessages((prev) => [
+            ...prev,
+            {
+              id: Date.now(),
+              senderId: 0, // 0 = Message système
+              content: data.error,
+              isRead: true,
+              createdAt: new Date().toISOString(),
+            },
+          ]);
+          shouldScrollRef.current = true;
+        } else {
+          setNewMessage(messageToSend); // Remet le texte si autre erreur
+          alert(data.error || "Erreur d'envoi");
+        }
       }
     } catch {
       setNewMessage(messageToSend);
@@ -752,7 +771,21 @@ function MessagesContent() {
             ) : (
               chatMessages.map((msg) => {
                 const isMine = msg.senderId === user?.id;
+                const isSystem = msg.senderId === 0;
 
+                // 🛡️ ALERTE SYSTÈME ANTI-CONTACT DANS LE CHAT
+                if (isSystem) {
+                  return (
+                    <div key={msg.id} className="flex justify-center mt-4 mb-2 animate-in zoom-in-95">
+                      <div className="bg-amber-100 border-2 border-amber-300 text-amber-900 text-xs px-5 py-3 rounded-2xl text-center max-w-[85%] font-bold shadow-lg shadow-amber-500/20 whitespace-pre-wrap flex items-center gap-2">
+                        <AlertTriangle className="w-5 h-5 flex-shrink-0 text-amber-600" />
+                        <span>{msg.content}</span>
+                      </div>
+                    </div>
+                  );
+                }
+
+                // MESSAGE NORMAL
                 return (
                   <div
                     key={msg.id}
@@ -875,7 +908,7 @@ function MessagesContent() {
                 {/* 🤖 BOUTON GABI AI */}
                 <button
                   type="button"
-                  onClick={getNdoloSuggestions}
+                  onClick={getGabiSuggestions}
                   className="p-2.5 rounded-full bg-gradient-to-r from-purple-600 to-indigo-600 text-amber-300 hover:scale-105 transition shadow-md flex items-center gap-1 text-xs font-bold flex-shrink-0"
                   title="Conseils Gabi AI"
                 >
