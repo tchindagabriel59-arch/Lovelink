@@ -216,14 +216,6 @@ function Avatar({
   );
 }
 
-export default function MessagesPage() {
-  return (
-    <Suspense fallback={<div className="flex items-center justify-center min-h-screen">Chargement...</div>}>
-      <MessagesContent />
-    </Suspense>
-  );
-}
-
 function MessagesContent() {
   const searchParams = useSearchParams();
   const { user } = useUser();
@@ -261,7 +253,7 @@ function MessagesContent() {
   const lastMatchesHashRef = useRef<string>("");
 
   // 🛡️ PROGRESSION ANTI-CONTACT (Sur 30 messages réels)
-  const realMessageCount = chatMessages.filter(m => m.senderId !== 0).length;
+  const realMessageCount = chatMessages.filter((m) => m.senderId !== 0).length;
   const progressTarget = 30;
   const progressPct = Math.min(100, (realMessageCount / progressTarget) * 100);
   const isContactUnlocked = realMessageCount >= progressTarget;
@@ -535,7 +527,7 @@ function MessagesContent() {
             ...prev,
             {
               id: Date.now(),
-              senderId: 0, // 0 = Message système
+              senderId: 0, // 0 = Message système local
               content: data.error,
               isRead: true,
               createdAt: new Date().toISOString(),
@@ -543,8 +535,7 @@ function MessagesContent() {
           ]);
           shouldScrollRef.current = true;
         } else {
-          setNewMessage(messageToSend); // Remet le texte si autre erreur
-          alert(data.error || "Erreur d'envoi");
+          setNewMessage(messageToSend);
         }
       }
     } catch {
@@ -1036,13 +1027,5 @@ function MessagesContent() {
         </div>
       )}
     </div>
-  );
-}
-
-export default function MessagesPage() {
-  return (
-    <Suspense fallback={<div className="flex items-center justify-center min-h-screen">Chargement...</div>}>
-      <MessagesContent />
-    </Suspense>
   );
 }
