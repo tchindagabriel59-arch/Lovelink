@@ -25,7 +25,7 @@ import {
   Trash2,
   AlertTriangle,
   Lock,
-  Unlock, // 👈 Ajout de l'icône Unlock
+  Unlock,
   X,
 } from "lucide-react";
 
@@ -241,9 +241,9 @@ function MessagesContent() {
   const [searchQuery, setSearchQuery] = useState("");
 
   // 🤖 GABI AI
-  const [showNdoloModal, setShowNdoloModal] = useState(false);
-  const [ndoloSuggestions, setNdoloSuggestions] = useState<string[]>([]);
-  const [loadingNdolo, setLoadingNdolo] = useState(false);
+  const [showGabiModal, setShowGabiModal] = useState(false);
+  const [gabiSuggestions, setGabiSuggestions] = useState<string[]>([]);
+  const [loadingGabi, setLoadingGabi] = useState(false);
 
   // 🎙️ VOCAUX
   const [isRecording, setIsRecording] = useState(false);
@@ -367,9 +367,9 @@ function MessagesContent() {
   // 🤖 DEMANDER ACCROCHES À GABI AI
   const getGabiSuggestions = async () => {
     if (!otherUser) return;
-    setLoadingNdolo(true);
-    setShowNdoloModal(true);
-    setNdoloSuggestions([]);
+    setLoadingGabi(true);
+    setShowGabiModal(true);
+    setGabiSuggestions([]);
 
     try {
       const res = await fetch("/api/ai-coach", {
@@ -385,16 +385,16 @@ function MessagesContent() {
       if (res.ok) {
         const data = await res.json();
         if (data.suggestions && data.suggestions.length > 0) {
-          setNdoloSuggestions(data.suggestions);
+          setGabiSuggestions(data.suggestions);
         } else {
-          setNdoloSuggestions([
+          setGabiSuggestions([
             `Salut ${otherUser.firstName} ! Ton profil m'a beaucoup plu 😊`,
             `Coucou ${otherUser.firstName} ! Ravi de matcher avec toi ✨`,
             `Salut ${otherUser.firstName} ! Comment se passe ta journée ? 😉`,
           ]);
         }
       } else {
-        setNdoloSuggestions([
+        setGabiSuggestions([
           `Salut ${otherUser.firstName} ! Ravi de te rencontrer 😊`,
           `Coucou ${otherUser.firstName} ! Quoi de neuf ? ✨`,
           `Salut ${otherUser.firstName} ! J'aime beaucoup tes photos 😉`,
@@ -402,17 +402,17 @@ function MessagesContent() {
       }
     } catch (err) {
       console.error(err);
-      setNdoloSuggestions([
+      setGabiSuggestions([
         `Salut ${otherUser.firstName} ! Enchanté(e) 😊`,
       ]);
     } finally {
-      setLoadingNdolo(false);
+      setLoadingGabi(false);
     }
   };
 
-  const applyNdoloSuggestion = (text: string) => {
+  const applyGabiSuggestion = (text: string) => {
     setNewMessage(text);
-    setShowNdoloModal(false);
+    setShowGabiModal(false);
   };
 
   // 🎙️ RECORDING VOCAL
@@ -505,6 +505,7 @@ function MessagesContent() {
     audioChunksRef.current = [];
   };
 
+  // 📝 GESTION DE L'ENVOI DE MESSAGE ET DU FILTRE ANTI-CONTACT
   async function handleSend(e: React.FormEvent) {
     e.preventDefault();
     if (!newMessage.trim() || !selectedMatch || sending) return;
@@ -528,13 +529,13 @@ function MessagesContent() {
         shouldScrollRef.current = true;
         fetchMatchesList();
       } else {
-        // 🛡️ SI LE MESSAGE EST BLOQUÉ PAR SÉCURITÉ
+        // 🛡️ SI LE MESSAGE EST BLOQUÉ PAR SÉCURITÉ (MOINS DE 30 MESSAGES)
         if (data.code === "CONTACT_BLOCKED") {
           setChatMessages((prev) => [
             ...prev,
             {
               id: Date.now(),
-              senderId: 0, // Message système local (non sauvegardé en BDD)
+              senderId: 0, // 0 = Message système
               content: data.error,
               isRead: true,
               createdAt: new Date().toISOString(),
@@ -542,7 +543,8 @@ function MessagesContent() {
           ]);
           shouldScrollRef.current = true;
         } else {
-          setNewMessage(messageToSend);
+          setNewMessage(messageToSend); // Remet le texte si autre erreur
+          alert(data.error || "Erreur d'envoi");
         }
       }
     } catch {
@@ -877,7 +879,7 @@ function MessagesContent() {
           </div>
 
           {/* 🤖 PANNEAU DE SUGGESTIONS GABI AI */}
-          {showNdoloModal && (
+          {showGabiModal && (
             <div className="p-4 bg-gradient-to-r from-purple-900 to-indigo-900 text-white border-t border-purple-700/50 rounded-t-3xl shadow-2xl relative animate-in slide-in-from-bottom duration-200 z-20">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
@@ -886,24 +888,24 @@ function MessagesContent() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => setShowNdoloModal(false)}
+                  onClick={() => setShowGabiModal(false)}
                   className="text-slate-400 hover:text-white text-xs font-bold"
                 >
                   ✖
                 </button>
               </div>
 
-              {loadingNdolo ? (
+              {loadingGabi ? (
                 <p className="text-xs text-slate-300 animate-pulse py-3 text-center">
                   ✨ Gabi AI cherche une superbe accroche pour {otherUser?.firstName}...
                 </p>
               ) : (
                 <div className="space-y-2">
-                  {ndoloSuggestions.map((suggestion, idx) => (
+                  {gabiSuggestions.map((suggestion, idx) => (
                     <button
                       key={idx}
                       type="button"
-                      onClick={() => applyNdoloSuggestion(suggestion)}
+                      onClick={() => applyGabiSuggestion(suggestion)}
                       className="w-full text-left p-3 rounded-2xl bg-white/10 hover:bg-white/20 border border-white/10 text-xs text-slate-100 transition flex items-center justify-between group"
                     >
                       <span>{suggestion}</span>
@@ -972,7 +974,7 @@ function MessagesContent() {
                 {/* 🤖 BOUTON GABI AI */}
                 <button
                   type="button"
-                  onClick={getNdoloSuggestions}
+                  onClick={getGabiSuggestions}
                   className="p-2.5 rounded-full bg-gradient-to-r from-purple-600 to-indigo-600 text-amber-300 hover:scale-105 transition shadow-md flex items-center gap-1 text-xs font-bold flex-shrink-0"
                   title="Conseils Gabi AI"
                 >
@@ -1034,5 +1036,13 @@ function MessagesContent() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function MessagesPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center min-h-screen">Chargement...</div>}>
+      <MessagesContent />
+    </Suspense>
   );
 }
