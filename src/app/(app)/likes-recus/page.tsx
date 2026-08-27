@@ -126,7 +126,7 @@ export default function LikesRecusPage() {
       }
     } catch {
       alert("Erreur");
-    } finally {
+    } flex-shrink-0 {
       setProcessing(null);
     }
   }
@@ -499,7 +499,7 @@ function ProfileCard({
             <>
               <button
                 onClick={() => onPass(like.user.id)}
-                disabled={processing === like.user.id}
+                disabled={processing}
                 className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-slate-600 hover:text-slate-800 transition disabled:opacity-50 flex items-center justify-center"
                 title="Passer"
               >
@@ -507,7 +507,7 @@ function ProfileCard({
               </button>
               <button
                 onClick={() => onLikeBack(like.user.id, like.user.firstName, like.user.photoUrl)}
-                disabled={processing === like.user.id}
+                disabled={processing}
                 className={`flex-1 py-2 rounded-lg text-white transition disabled:opacity-50 flex items-center justify-center hover:shadow-lg ${
                   isPremium
                     ? "bg-gradient-to-r from-yellow-500 to-orange-500 hover:shadow-orange-500/30"
