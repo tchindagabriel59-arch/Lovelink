@@ -35,28 +35,25 @@ export async function GET(req: NextRequest) {
       .where(eq(likes.fromUserId, userId));
 
     const interactedIds = interactedRecords.map((record) => record.toUserId);
-    interactedIds.push(userId); // S'exclure soi-même
+    interactedIds.push(userId); // Exclure son propre profil
 
-    // 3. Lire les filtres
+    // 3. Lire le filtre depuis l'URL
     const searchParams = req.nextUrl.searchParams;
     const filter = searchParams.get("filter") || "all";
 
-    // 4. Conditions de base
+    // 4. Conditions de sélection
     const conditions: any[] = [
-      ne(users.isBanned, true), // Exclure les bannis
+      ne(users.isBanned, true), // Exclure les comptes bannis
     ];
 
-    // Sécurité SQL Drizzle : ne pas exécuter notInArray si la liste est vide
     if (interactedIds.length > 0) {
       conditions.push(notInArray(users.id, interactedIds));
     }
 
-    // Appliquer le filtre de genre si ce n'est pas "all" (Cast 'as any' pour corriger l'erreur TypeScript)
     if (currentUser.prefGender && currentUser.prefGender !== "all") {
       conditions.push(eq(users.gender, currentUser.prefGender as any));
     }
 
-    // Filtres spécifiques
     if (filter === "verified") {
       conditions.push(eq(users.isVerified, true));
     } else if (filter === "online") {
@@ -67,7 +64,7 @@ export async function GET(req: NextRequest) {
       conditions.push(sql`${users.createdAt} > NOW() - INTERVAL '7 days'`);
     }
 
-    // 5. Exécuter la requête
+    // 5. Requête SQL d'exploration optimisée
     const discoverProfiles = await db
       .select({
         id: users.id,
@@ -89,13 +86,16 @@ export async function GET(req: NextRequest) {
         lastSeen: users.lastSeen,
         isPremium: users.isPremium,
         isVerified: users.isVerified,
-        isBoosted: users.isBoosted,
-        boostExpiresAt: users.boostExpiresAt,
+        // 🚀 Lecture SQL brute pour contourner le manque de type TypeScript
+        isBoosted: sql<boolean>`COALESCE(is_boosted, false)`,
+        boostExpiresAt: sql<Date | null>`boost_expires_at`,
       })
       .from(users)
       .where(and(...conditions))
       .orderBy(
-        sql`CASE WHEN ${users.isBoosted} = true AND ${users.boostExpiresAt} > NOW() THEN 1 ELSE 0 END DESC`,
+        // Priorité 1 : Profils boostés en cours de validité
+        sql`CASE WHEN is_boosted = true AND boost_expires_at > NOW() THEN 1 ELSE 0 END DESC`,
+        // Priorité 2 : Activité récente
         desc(users.lastSeen)
       )
       .limit(15);
@@ -108,7 +108,7 @@ export async function GET(req: NextRequest) {
 
     const finalProfiles = discoverProfiles.map((p) => {
       const receivedLike = myReceivedLikes.find((l) => l.fromUserId === p.id);
-      
+
       return {
         ...p,
         hasLikedMe: !!receivedLike,
