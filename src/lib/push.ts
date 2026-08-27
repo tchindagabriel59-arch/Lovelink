@@ -8,7 +8,7 @@ const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || "";
 const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY || "";
 let vapidEmail = process.env.VAPID_EMAIL || "mailto:lovelink237@gmail.com";
 
-// 🛡️ SÉCURISATION AUTOMATIQUE DU FORMAT MAILTO (Correction Erreur Vercel)
+// 🛡️ SÉCURISATION AUTOMATIQUE DU FORMAT MAILTO
 if (vapidEmail && !vapidEmail.startsWith("mailto:") && !vapidEmail.startsWith("http")) {
   vapidEmail = `mailto:${vapidEmail}`;
 }
@@ -85,7 +85,7 @@ export async function sendPushToUser(
 }
 
 /**
- * 📢 TOUS LES TEMPLATES DE NOTIFICATIONS (Synchronisés avec tes fichiers Cron)
+ * 📢 TOUS LES TEMPLATES DE NOTIFICATIONS (COMPLETE & EXHAUSTIF)
  */
 export const PushTemplates = {
   // --- INTERACTIONS ---
@@ -138,6 +138,14 @@ export const PushTemplates = {
     url: "/discover",
   }),
 
+  boostExpired: () => ({
+    title: "🚀 Boost terminé",
+    body: "Ton boost est arrivé à terme. Relance-en un pour rester en haut de pile !",
+    icon: "/icon",
+    tag: "boost_expired",
+    url: "/boost",
+  }),
+
   // --- RELANCES : PROFILS INCOMPLETS ---
   newProfiles: (count: number) => ({
     title: "🔥 De nouveaux profils !",
@@ -185,6 +193,14 @@ export const PushTemplates = {
     body: "Ton abonnement expire demain. Ne perds pas tes matchs en cours ! 🚀",
     icon: "/icon",
     tag: "premium_expiry",
+    url: "/premium",
+  }),
+
+  premiumExpired: () => ({
+    title: "💔 Premium terminé",
+    body: "Ton abonnement Premium est arrivé à expiration. Reviens vite pour ne rien rater !",
+    icon: "/icon",
+    tag: "premium_expired",
     url: "/premium",
   }),
 };
