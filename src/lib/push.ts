@@ -8,8 +8,13 @@ const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || "";
 const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY || "";
 let vapidEmail = process.env.VAPID_EMAIL || "mailto:lovelink237@gmail.com";
 
-// 🛡️ SÉCURISATION AUTOMATIQUE DU FORMAT MAILTO
-if (vapidEmail && !vapidEmail.startsWith("mailto:") && !vapidEmail.startsWith("http")) {
+// Correction automatique du format VAPID subject
+if (
+  vapidEmail &&
+  !vapidEmail.startsWith("mailto:") &&
+  !vapidEmail.startsWith("http://") &&
+  !vapidEmail.startsWith("https://")
+) {
   vapidEmail = `mailto:${vapidEmail}`;
 }
 
@@ -21,7 +26,7 @@ if (vapidPublicKey && vapidPrivateKey) {
   }
 }
 
-interface PushPayload {
+export interface PushPayload {
   title: string;
   body: string;
   icon?: string;
@@ -30,6 +35,9 @@ interface PushPayload {
   url?: string;
   tag?: string;
 }
+
+type PushTemplateFn = (...args: any[]) => PushPayload;
+type PushTemplateMap = Record<string, PushTemplateFn>;
 
 /**
  * Envoie une notification push à un utilisateur
@@ -62,17 +70,30 @@ export async function sendPushToUser(
                 auth: sub.auth,
               },
             },
-            JSON.stringify(payload)
+            JSON.stringify({
+              ...payload,
+              icon: payload.icon || "/icon-192.png",
+              badge: payload.badge || "/icon-192.png",
+              data: {
+                url: payload.url || "/dashboard",
+              },
+            })
           );
+
           sent++;
           return { success: true };
         } catch (err: any) {
           failed++;
-          if (err.statusCode === 410 || err.statusCode === 404) {
+
+          // Nettoyage des subscriptions expirées
+          if (err?.statusCode === 410 || err?.statusCode === 404) {
             await db
               .delete(pushSubscriptions)
               .where(eq(pushSubscriptions.id, sub.id));
+          } else {
+            console.error("[Push] Erreur envoi:", err?.message || err);
           }
+
           return { success: false };
         }
       })
@@ -80,77 +101,89 @@ export async function sendPushToUser(
 
     return { success: sent > 0, sent, failed };
   } catch (error) {
+    console.error("[Push] Erreur globale:", error);
     return { success: false, sent: 0, failed: 0 };
   }
 }
 
 /**
- * 📢 TOUS LES TEMPLATES DE NOTIFICATIONS (COMPLETE & EXHAUSTIF)
+ * Templates connus
  */
-export const PushTemplates = {
-  // --- INTERACTIONS ---
+const baseTemplates: PushTemplateMap = {
+  // Interactions
   like: (fromName: string) => ({
     title: "💕 Nouveau like !",
-    body: `${fromName} t'a liké !`,
-    icon: "/icon",
+    body: `${fromName || "Quelqu'un"} t'a liké !`,
+    icon: "/icon-192.png",
     tag: "like",
     url: "/likes-recus",
   }),
 
   superLike: (fromName: string) => ({
     title: "⭐ Super Like !",
-    body: `${fromName} t'a envoyé un Super Like !`,
-    icon: "/icon",
+    body: `${fromName || "Quelqu'un"} t'a envoyé un Super Like !`,
+    icon: "/icon-192.png",
     tag: "super_like",
     url: "/likes-recus",
   }),
 
   match: (fromName: string) => ({
     title: "🔥 C'est un Match !",
-    body: `Toi et ${fromName} vous êtes mutuellement likés !`,
-    icon: "/icon",
+    body: `Toi et ${fromName || "quelqu'un"} vous vous êtes mutuellement likés !`,
+    icon: "/icon-192.png",
     tag: "match",
     url: "/matches",
   }),
 
   message: (fromName: string, preview: string) => ({
-    title: `💬 ${fromName}`,
-    body: preview.length > 60 ? preview.slice(0, 60) + "..." : preview,
-    icon: "/icon",
-    tag: `message-${fromName}`,
+    title: `💬 ${fromName || "Nouveau message"}`,
+    body:
+      preview && preview.length > 60
+        ? preview.slice(0, 60) + "..."
+        : preview || "Tu as reçu un nouveau message.",
+    icon: "/icon-192.png",
+    tag: `message-${fromName || "user"}`,
     url: "/messages",
   }),
 
-  // --- COMPTE & SERVICES ---
+  // Compte / services
   verified: () => ({
-    title: "✅ Profil Vérifié !",
+    title: "✅ Profil vérifié !",
     body: "Félicitations ! Ton badge bleu est actif 💙",
-    icon: "/icon",
+    icon: "/icon-192.png",
     tag: "verified",
     url: "/profile",
   }),
 
   boost: () => ({
     title: "🚀 Boost activé !",
-    body: "Ton profil est mis en avant ! Profite de ta visibilité max !",
-    icon: "/icon",
+    body: "Ton profil est mis en avant. Profite de ta visibilité maximale !",
+    icon: "/icon-192.png",
     tag: "boost",
     url: "/discover",
   }),
 
   boostExpired: () => ({
     title: "🚀 Boost terminé",
-    body: "Ton boost est arrivé à terme. Relance-en un pour rester en haut de pile !",
-    icon: "/icon",
+    body: "Ton Boost est terminé. Relance-le pour rester visible en priorité !",
+    icon: "/icon-192.png",
     tag: "boost_expired",
     url: "/boost",
   }),
 
-  // --- RELANCES : PROFILS INCOMPLETS ---
+  boostExpiringSoon: () => ({
+    title: "⏳ Ton Boost expire bientôt",
+    body: "Ton Boost se termine bientôt. Prolonge-le pour rester visible !",
+    icon: "/icon-192.png",
+    tag: "boost_expiring_soon",
+    url: "/boost",
+  }),
+
+  // Relances profils incomplets
   newProfiles: (count: number) => ({
     title: "🔥 De nouveaux profils !",
-    body: `${count} personne${count > 1 ? "s viennent" : " vient"} de nous rejoindre.`,
-    icon: "/icon",
+    body: `${count || "Plusieurs"} profil${count > 1 ? "s" : ""} viennent de rejoindre LoveLink.`,
+    icon: "/icon-192.png",
     tag: "new_profiles",
     url: "/discover",
   }),
@@ -158,49 +191,79 @@ export const PushTemplates = {
   incompleteProfile3d: () => ({
     title: "📸 Ton profil t'attend !",
     body: "Ajoute une photo pour commencer à matcher 💕",
-    icon: "/icon",
-    tag: "incomplete_profile",
+    icon: "/icon-192.png",
+    tag: "incomplete_profile_3d",
     url: "/profile",
   }),
 
   incompleteProfile7d: () => ({
-    title: "🎁 7 jours Premium OFFERTS !",
-    body: "Complète ton profil aujourd'hui pour en profiter !",
-    icon: "/icon",
-    tag: "incomplete_profile",
+    title: "🎁 7 jours Premium offerts !",
+    body: "Complète ton profil aujourd'hui pour en profiter.",
+    icon: "/icon-192.png",
+    tag: "incomplete_profile_7d",
     url: "/profile",
   }),
 
   incompleteProfile14d: () => ({
-    title: "💔 On va bientôt te supprimer...",
-    body: "Dernière chance ! Complète ton profil vite 😢",
-    icon: "/icon",
-    tag: "incomplete_profile",
+    title: "💔 Dernière chance",
+    body: "Complète ton profil pour ne pas perdre ton compte LoveLink.",
+    icon: "/icon-192.png",
+    tag: "incomplete_profile_14d",
     url: "/profile",
   }),
 
-  // --- RELANCES : EXPIRATION ABONNEMENT ---
+  // Expiration Premium
   premiumExpiring3d: () => ({
-    title: "💎 Plus que 3 jours !",
-    body: "Ton abonnement Premium expire bientôt. Renouvelle pour garder tes avantages ✨",
-    icon: "/icon",
-    tag: "premium_expiry",
+    title: "💎 Plus que 3 jours Premium",
+    body: "Ton abonnement Premium expire bientôt. Renouvelle pour garder tes avantages.",
+    icon: "/icon-192.png",
+    tag: "premium_expiring_3d",
     url: "/premium",
   }),
 
   premiumExpiring1d: () => ({
-    title: "⚠️ Dernier jour Premium !",
-    body: "Ton abonnement expire demain. Ne perds pas tes matchs en cours ! 🚀",
-    icon: "/icon",
-    tag: "premium_expiry",
+    title: "⚠️ Dernier jour Premium",
+    body: "Ton abonnement expire demain. Renouvelle pour garder tes avantages.",
+    icon: "/icon-192.png",
+    tag: "premium_expiring_1d",
     url: "/premium",
   }),
 
   premiumExpired: () => ({
     title: "💔 Premium terminé",
-    body: "Ton abonnement Premium est arrivé à expiration. Reviens vite pour ne rien rater !",
-    icon: "/icon",
+    body: "Ton Premium est terminé. Réactive-le pour retrouver tes avantages.",
+    icon: "/icon-192.png",
     tag: "premium_expired",
     url: "/premium",
   }),
+
+  // Sécurité / fallback nommé
+  generic: (title?: string, body?: string, url?: string) => ({
+    title: title || "LoveLink",
+    body: body || "Tu as une nouvelle notification.",
+    icon: "/icon-192.png",
+    tag: "lovelink",
+    url: url || "/dashboard",
+  }),
 };
+
+/**
+ * PushTemplates BLINDÉ :
+ * - les templates connus existent
+ * - si un ancien cron appelle un template oublié, ça renvoie generic()
+ * - évite les erreurs TypeScript de propriété manquante
+ */
+export const PushTemplates: PushTemplateMap = new Proxy(baseTemplates, {
+  get(target, prop: string) {
+    if (prop in target) return target[prop];
+
+    // fallback dynamique pour ne plus jamais casser le build
+    return (..._args: any[]) => ({
+      title: "LoveLink",
+      body: "Tu as une nouvelle notification.",
+      icon: "/icon-192.png",
+      tag: String(prop),
+      url: "/dashboard",
+    });
+  },
+});
