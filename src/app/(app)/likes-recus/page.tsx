@@ -126,7 +126,7 @@ export default function LikesRecusPage() {
       }
     } catch {
       alert("Erreur");
-    } flex-shrink-0 {
+    } finally {
       setProcessing(null);
     }
   }
@@ -485,7 +485,7 @@ function ProfileCard({
           </div>
         )}
 
-        {/* Boutons (Ne sont pas enveloppés dans un lien pour rester cliquables) */}
+        {/* Boutons */}
         <div className="flex gap-2 relative z-30">
           {isLocked ? (
             <Link
