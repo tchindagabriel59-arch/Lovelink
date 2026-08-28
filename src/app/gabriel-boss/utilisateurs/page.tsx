@@ -130,8 +130,6 @@ function Avatar({
 }
 
 type AgeRange = "all" | "18-25" | "26-35" | "36-45" | "45+";
-type DateRange = "all" | "today" | "week" | "month" | "3months";
-type SortBy = "recent" | "active" | "likes" | "matches";
 
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<UserItem[]>([]);
@@ -141,18 +139,14 @@ export default function AdminUsersPage() {
   const [filter, setFilter] = useState<string>("all");
   const [selectedUser, setSelectedUser] = useState<UserItem | null>(null);
 
-  const [showAdvanced, setShowAdvanced] = useState(false);
   const [cityFilter, setCityFilter] = useState<string>("");
   const [ageFilter, setAgeFilter] = useState<AgeRange>("all");
-  const [dateFilter, setDateFilter] = useState<DateRange>("all");
-  const [sortBy, setSortBy] = useState<SortBy>("recent");
 
   const [showPremiumModal, setShowPremiumModal] = useState(false);
   const [premiumPlan, setPremiumPlan] = useState<"premium" | "gold">("premium");
   const [premiumDuration, setPremiumDuration] = useState<string>("1month");
   const [savingPremium, setSavingPremium] = useState(false);
 
-  // ✅ STATES RESET PASSWORD (manquaient → erreur build)
   const [resetResult, setResetResult] = useState<{
     password: string;
     firstName: string;
@@ -189,15 +183,8 @@ export default function AdminUsersPage() {
     fetchUsers();
   }, [fetchUsers]);
 
-  // 🔑 REINITIALISER LE MOT DE PASSE (génération auto)
   const handleAdminResetPassword = async (userId: number) => {
-    if (
-      !confirm(
-        "Générer un nouveau mot de passe temporaire pour cet utilisateur ?"
-      )
-    ) {
-      return;
-    }
+    if (!confirm("Générer un nouveau mot de passe temporaire pour cet utilisateur ?")) return;
 
     setResettingPassword(true);
     try {
@@ -272,7 +259,7 @@ export default function AdminUsersPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          userId: selectedUser.id,
+          userId: Number(selectedUser.id),
           role: "isPremium",
           value: true,
           premiumPlan,
@@ -285,15 +272,13 @@ export default function AdminUsersPage() {
       if (res.ok) {
         alert(`✅ ${data.message || "Premium activé !"}`);
         setShowPremiumModal(false);
+        setSelectedUser({ ...selectedUser, isPremium: true });
         fetchUsers();
-        if (selectedUser) {
-          setSelectedUser({ ...selectedUser, isPremium: true });
-        }
       } else {
-        alert("❌ " + (data.error || "Erreur"));
+        alert("❌ " + (data.error || "Erreur lors de l'activation"));
       }
     } catch {
-      alert("Erreur de connexion");
+      alert("❌ Erreur de connexion");
     } finally {
       setSavingPremium(false);
     }
@@ -558,7 +543,7 @@ export default function AdminUsersPage() {
           </div>
         </div>
       )}
-      
+
       {/* 💎 MODAL ACTIVER PREMIUM */}
       {showPremiumModal && selectedUser && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4">
@@ -614,10 +599,11 @@ export default function AdminUsersPage() {
             <p className="text-xs font-bold text-slate-500 uppercase mb-2">Durée</p>
             <div className="grid grid-cols-2 gap-2 mb-6">
               {[
-                { value: "1week", label: "1 semaine" },
                 { value: "1month", label: "1 mois" },
                 { value: "3months", label: "3 mois" },
+                { value: "6months", label: "6 mois" },
                 { value: "1year", label: "1 an" },
+                { value: "lifetime", label: "🎁 À vie" },
               ].map((d) => (
                 <button
                   key={d.value}
@@ -644,40 +630,17 @@ export default function AdminUsersPage() {
               </button>
               <button
                 type="button"
-                  async function confirmPremium() {
-    if (!selectedUser) return;
-    setSavingPremium(true);
+                onClick={confirmPremium}
+                disabled={savingPremium}
+                className="flex-1 py-3 bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 font-black rounded-xl disabled:opacity-50 transition"
+              >
+                {savingPremium ? "Activation..." : "✅ Activer"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
-    try {
-      const res = await fetch("/api/admin/users/role", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: Number(selectedUser.id),
-          role: "isPremium",
-          value: true,
-          premiumPlan,
-          premiumDuration,
-        }),
-      });
-
-      const data = await res.json();
-
-      if (res.ok) {
-        alert(`✅ ${data.message || "Premium activé !"}`);
-        setShowPremiumModal(false);
-        setSelectedUser({ ...selectedUser, isPremium: true });
-        fetchUsers();
-      } else {
-        alert("❌ " + (data.error || "Erreur lors de l'activation"));
-      }
-    } catch {
-      alert("❌ Erreur de connexion");
-    } finally {
-      setSavingPremium(false);
-    }
-  }
-      
       {/* 🔑 MODAL MOT DE PASSE GÉNÉRÉ */}
       {resetResult && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4">
