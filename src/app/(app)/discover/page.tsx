@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -13,10 +13,8 @@ import {
   Star,
   RotateCcw,
   BadgeCheck,
-  Zap,
   Rocket,
   ArrowRight,
-  Lock,
   Gem,
 } from "lucide-react";
 
@@ -217,6 +215,7 @@ interface Profile {
   isOnline: boolean;
   isPremium: boolean;
   isVerified: boolean;
+  isBoosted?: boolean;
 }
 
 interface CurrentUser {
@@ -225,6 +224,7 @@ interface CurrentUser {
 }
 
 function getAge(birthDate: string): number {
+  if (!birthDate) return 0;
   const today = new Date();
   const birth = new Date(birthDate);
   let age = today.getFullYear() - birth.getFullYear();
@@ -352,6 +352,7 @@ export default function DiscoverPage() {
       setTimeout(() => {
         setDragOffset({ x: 0, y: 0 });
         setCurrentIndex((i) => i + 1);
+        setCurrentPhotoIndex(0);
         setTimeout(() => setAnimating(null), 20);
       }, 350);
     },
@@ -373,6 +374,7 @@ export default function DiscoverPage() {
     setTimeout(() => {
       setDragOffset({ x: 0, y: 0 });
       setCurrentIndex((i) => i + 1);
+      setCurrentPhotoIndex(0);
       setTimeout(() => setAnimating(null), 20);
     }, 350);
   }, [currentIndex, profiles, animating, showTour]);
@@ -386,6 +388,7 @@ export default function DiscoverPage() {
     }
     if (currentIndex > 0) {
       setCurrentIndex((i) => Math.max(0, i - 1));
+      setCurrentPhotoIndex(0);
     }
   }, [currentIndex, currentUser, animating, showTour]);
 
@@ -430,21 +433,43 @@ export default function DiscoverPage() {
 
   if (loading) return <DiscoverSkeleton />;
 
+  // ==========================================
+  // ÉCRAN VIDE (Tu as tout vu !) - CORRIGÉ
+  // ==========================================
   if (!currentProfile || currentIndex >= profiles.length) {
     return (
       <div className="min-h-screen bg-slate-900 p-4 flex flex-col items-center justify-center text-center text-white">
         <Sparkles className="w-16 h-16 text-rose-500 mb-4" />
         <h2 className="text-2xl font-black mb-2">Tu as tout vu !</h2>
-        <p className="text-slate-400 text-sm mb-6">Reviens plus tard pour de nouveaux profils.</p>
+        <p className="text-slate-400 text-sm mb-6">
+          Reviens plus tard pour de nouveaux profils.
+        </p>
         <button
-          onClick={() => {
-            setCurrentIndex(0);
+          onClick={async () => {
             setLoading(true);
+            setCurrentIndex(0);
+            try {
+              const res = await fetch("/api/discover");
+              if (res.ok) {
+                const data = await res.json();
+                setProfiles(data.profiles || []);
+              }
+            } catch {
+              // silent
+            } finally {
+              setLoading(false);
+            }
           }}
-          className="px-6 py-3 bg-rose-500 font-bold rounded-full"
+          className="px-6 py-3 bg-rose-500 font-bold rounded-full transition active:scale-95"
         >
           Rafraîchir
         </button>
+        <Link
+          href="/preferences"
+          className="mt-6 text-sm text-slate-400 underline hover:text-slate-300 transition"
+        >
+          Élargir mes préférences →
+        </Link>
       </div>
     );
   }
