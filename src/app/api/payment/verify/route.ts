@@ -106,38 +106,88 @@ export async function GET(req: NextRequest) {
           })
           .where(eq(payments.id, payment.id));
 
-        // Activer Premium si succès
-        if (interpretedStatus === 'success') {
-          const expiresAt = new Date();
-          if (payment.billingPeriod === 'monthly') {
-            expiresAt.setMonth(expiresAt.getMonth() + 1);
-          } else {
-            expiresAt.setFullYear(expiresAt.getFullYear() + 1);
-          }
+                if (interpretedStatus === "success") {
+          const now = new Date();
+          const rawPlan = String(payment.plan || "").toLowerCase();
+          const rawPeriod = String(payment.billingPeriod || "").toLowerCase();
 
-          if (payment.subscriptionId) {
+          // 🚀 BOOST
+          if (rawPlan.includes("boost")) {
+            let hours = 24;
+            if (rawPeriod.includes("3")) hours = 72;
+            if (rawPeriod.includes("7")) hours = 168;
+
+            const [u] = await db
+              .select({ boostEndAt: users.boostEndAt })
+              .from(users)
+              .where(eq(users.id, payment.userId))
+              .limit(1);
+
+            let base = now;
+            if (u?.boostEndAt && new Date(u.boostEndAt) > now) {
+              base = new Date(u.boostEndAt);
+            }
+            const boostEndAt = new Date(base.getTime() + hours * 60 * 60 * 1000);
+
             await db
-              .update(subscriptions)
+              .update(users)
               .set({
-                status: 'active',
-                startsAt: new Date(),
-                expiresAt,
-                updatedAt: new Date(),
+                boostEndAt,
+                lastBoostAt: now,
+                updatedAt: now,
               })
-              .where(eq(subscriptions.id, payment.subscriptionId));
+              .where(eq(users.id, payment.userId));
+          }
+          // 💎 PREMIUM / GOLD
+          else {
+            const [u] = await db
+              .select({
+                isPremium: users.isPremium,
+                premiumExpiresAt: users.premiumExpiresAt,
+              })
+              .from(users)
+              .where(eq(users.id, payment.userId))
+              .limit(1);
+
+            let base = now;
+            if (u?.isPremium && u.premiumExpiresAt && new Date(u.premiumExpiresAt) > now) {
+              base = new Date(u.premiumExpiresAt);
+            }
+
+            const expiresAt = new Date(base);
+            if (rawPeriod === "yearly" || rawPeriod.includes("year")) {
+              expiresAt.setFullYear(expiresAt.getFullYear() + 1);
+            } else {
+              expiresAt.setMonth(expiresAt.getMonth() + 1);
+            }
+
+            const planName = rawPlan.includes("gold") ? "gold" : "premium";
+
+            if (payment.subscriptionId) {
+              await db
+                .update(subscriptions)
+                .set({
+                  status: "active",
+                  startsAt: now,
+                  expiresAt,
+                  updatedAt: now,
+                })
+                .where(eq(subscriptions.id, payment.subscriptionId));
+            }
+
+            await db
+              .update(users)
+              .set({
+                isPremium: true,
+                premiumPlan: planName,
+                premiumExpiresAt: expiresAt,
+                updatedAt: now,
+              })
+              .where(eq(users.id, payment.userId));
           }
 
-          await db
-            .update(users)
-            .set({
-              isPremium: true,
-              premiumPlan: payment.plan,
-              premiumExpiresAt: expiresAt,
-              updatedAt: new Date(),
-            })
-            .where(eq(users.id, payment.userId));
-
-          console.log(`Premium activé pour user ${payment.userId}`);
+          console.log(`Avantage activé pour user ${payment.userId}`);
+          // ... garde ton bloc Meta CAPI tel quel ensuite
 
           // 📊 META CAPI - Envoyer Purchase si pas déjà envoyé par le webhook
           const [user] = await db
