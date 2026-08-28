@@ -558,7 +558,126 @@ export default function AdminUsersPage() {
           </div>
         </div>
       )}
+      
+      {/* 💎 MODAL ACTIVER PREMIUM */}
+      {showPremiumModal && selectedUser && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4">
+          <div className="bg-slate-900 border border-amber-500/40 rounded-2xl max-w-md w-full p-6 shadow-2xl">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-bold flex items-center gap-2">
+                <Crown className="w-5 h-5 text-amber-400" />
+                Activer Premium
+              </h3>
+              <button
+                onClick={() => setShowPremiumModal(false)}
+                className="p-2 hover:bg-slate-800 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
 
+            <p className="text-sm text-slate-400 mb-5">
+              Pour{" "}
+              <span className="text-white font-semibold">
+                {selectedUser.firstName} {selectedUser.lastName}
+              </span>
+            </p>
+
+            {/* Plan */}
+            <p className="text-xs font-bold text-slate-500 uppercase mb-2">Formule</p>
+            <div className="grid grid-cols-2 gap-2 mb-5">
+              <button
+                type="button"
+                onClick={() => setPremiumPlan("premium")}
+                className={`p-3 rounded-xl border-2 font-bold text-sm transition ${
+                  premiumPlan === "premium"
+                    ? "border-amber-500 bg-amber-500/20 text-amber-300"
+                    : "border-slate-700 text-slate-400 hover:border-slate-500"
+                }`}
+              >
+                💎 Premium
+              </button>
+              <button
+                type="button"
+                onClick={() => setPremiumPlan("gold")}
+                className={`p-3 rounded-xl border-2 font-bold text-sm transition ${
+                  premiumPlan === "gold"
+                    ? "border-yellow-500 bg-yellow-500/20 text-yellow-300"
+                    : "border-slate-700 text-slate-400 hover:border-slate-500"
+                }`}
+              >
+                🏆 Gold
+              </button>
+            </div>
+
+            {/* Durée */}
+            <p className="text-xs font-bold text-slate-500 uppercase mb-2">Durée</p>
+            <div className="grid grid-cols-2 gap-2 mb-6">
+              {[
+                { value: "1week", label: "1 semaine" },
+                { value: "1month", label: "1 mois" },
+                { value: "3months", label: "3 mois" },
+                { value: "1year", label: "1 an" },
+              ].map((d) => (
+                <button
+                  key={d.value}
+                  type="button"
+                  onClick={() => setPremiumDuration(d.value)}
+                  className={`p-3 rounded-xl border-2 font-bold text-sm transition ${
+                    premiumDuration === d.value
+                      ? "border-purple-500 bg-purple-500/20 text-purple-300"
+                      : "border-slate-700 text-slate-400 hover:border-slate-500"
+                  }`}
+                >
+                  {d.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setShowPremiumModal(false)}
+                className="flex-1 py-3 border border-slate-700 rounded-xl font-semibold text-slate-300 hover:bg-slate-800 transition"
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                  async function confirmPremium() {
+    if (!selectedUser) return;
+    setSavingPremium(true);
+
+    try {
+      const res = await fetch("/api/admin/users/role", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: Number(selectedUser.id),
+          role: "isPremium",
+          value: true,
+          premiumPlan,
+          premiumDuration,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        alert(`✅ ${data.message || "Premium activé !"}`);
+        setShowPremiumModal(false);
+        setSelectedUser({ ...selectedUser, isPremium: true });
+        fetchUsers();
+      } else {
+        alert("❌ " + (data.error || "Erreur lors de l'activation"));
+      }
+    } catch {
+      alert("❌ Erreur de connexion");
+    } finally {
+      setSavingPremium(false);
+    }
+  }
+      
       {/* 🔑 MODAL MOT DE PASSE GÉNÉRÉ */}
       {resetResult && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4">
