@@ -1,5 +1,5 @@
-import { drizzle } from "drizzle-orm/node-postgres";
-import { Pool } from "pg";
+import { neon } from "@neondatabase/serverless";
+import { drizzle } from "drizzle-orm/neon-http";
 import * as schema from "./schema";
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -8,24 +8,7 @@ if (!databaseUrl) {
   throw new Error("DATABASE_URL is required");
 }
 
-const globalForDb = globalThis as typeof globalThis & {
-  __lovelinkPool?: Pool;
-};
+// Neon HTTP = conçu pour Vercel serverless
+const sql = neon(databaseUrl);
 
-export const pool =
-  globalForDb.__lovelinkPool ??
-  new Pool({
-    connectionString: databaseUrl,
-    max: 5,
-    idleTimeoutMillis: 10000,
-    connectionTimeoutMillis: 15000,
-    keepAlive: true,
-    // ✅ OBLIGATOIRE pour Neon sur Vercel
-    ssl: {
-      rejectUnauthorized: false,
-    },
-  });
-
-globalForDb.__lovelinkPool = pool;
-
-export const db = drizzle(pool, { schema });
+export const db = drizzle({ client: sql, schema });
