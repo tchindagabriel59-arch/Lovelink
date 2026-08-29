@@ -8,7 +8,6 @@ if (!databaseUrl) {
   throw new Error("DATABASE_URL is required");
 }
 
-// Neon HTTP = conçu pour Vercel serverless
 const sql = neon(databaseUrl);
 
-export const db = drizzle({ client: sql, schema });
+export const db = drizzle(sql, { schema });
