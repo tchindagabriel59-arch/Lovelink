@@ -40,17 +40,12 @@ export async function POST(req: Request) {
     for (const u of foundUsers) {
       if (!u.passwordHash) continue;
 
-      // Test 1: Code exact (ex: Lk-8X3K9M2P)
+      // Test code exact (ex: Lk-8X3K9M2P)
       let isMatch = await bcrypt.compare(cleanCode, u.passwordHash);
 
-      // Test 2: Si l'user oublie ou modifie le préfixe
+      // Test si oubli du préfixe Lk-
       if (!isMatch && cleanCode.startsWith("Lk-")) {
         isMatch = await bcrypt.compare(cleanCode.replace("Lk-", ""), u.passwordHash);
-      }
-
-      // Test 3: Casse majuscule/minuscule
-      if (!isMatch) {
-        isMatch = await bcrypt.compare(cleanCode.toUpperCase(), u.passwordHash);
       }
 
       if (isMatch) {
@@ -60,21 +55,20 @@ export async function POST(req: Request) {
     }
 
     if (!targetUser) {
-      console.warn(`[Reset-Password] Code incorrect "${cleanCode}" pour phone ${normalizedPhone}`);
       return NextResponse.json(
         { error: "Code secret incorrect. Recopie le code envoyé par l'administrateur." },
         { status: 400 }
       );
     }
 
-    // Enregistrement du NOUVEAU mot de passe choisi par le client
+    // Mise à jour vers le NOUVEAU mot de passe choisi par l'utilisateur
     const hashedNewPassword = await bcrypt.hash(cleanNewPass, 10);
     await db
       .update(users)
       .set({ passwordHash: hashedNewPassword })
       .where(eq(users.id, targetUser.id));
 
-    console.log(`[Reset-Password] ✅ Mot de passe mis à jour avec succès pour User #${targetUser.id}`);
+    console.log(`[Reset-Password] ✅ Succès pour User #${targetUser.id}`);
 
     return NextResponse.json({
       success: true,
