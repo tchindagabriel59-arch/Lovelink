@@ -11,31 +11,25 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { phone, code, newPassword } = body;
 
-    if (!phone || typeof phone !== "string" || phone.trim().length < 8) {
-      return NextResponse.json(
-        { error: "Numéro WhatsApp invalide." },
-        { status: 400 }
-      );
+    // 1. Nettoyage strict des entrées
+    const cleanPhone = String(phone || "").trim();
+    const cleanCode = String(code || "").trim(); // Le code saisi (ex: Lk-6jSMJuVX)
+    const cleanNewPass = String(newPassword || "").trim();
+
+    if (!cleanPhone || cleanPhone.length < 8) {
+      return NextResponse.json({ error: "Numéro WhatsApp invalide." }, { status: 400 });
+    }
+    if (!cleanCode || cleanCode.length < 4) {
+      return NextResponse.json({ error: "Code secret invalide." }, { status: 400 });
+    }
+    if (cleanNewPass.length < 6) {
+      return NextResponse.json({ error: "Le nouveau mot de passe est trop court." }, { status: 400 });
     }
 
-    if (!code || typeof code !== "string" || code.trim().length < 4) {
-      return NextResponse.json(
-        { error: "Veuillez entrer le code secret reçu sur WhatsApp." },
-        { status: 400 }
-      );
-    }
-
-    if (!newPassword || typeof newPassword !== "string" || newPassword.length < 6) {
-      return NextResponse.json(
-        { error: "Le nouveau mot de passe doit faire au moins 6 caractères." },
-        { status: 400 }
-      );
-    }
-
-    const normalizedPhone = normalizePhoneNumber(phone.trim());
+    const normalizedPhone = normalizePhoneNumber(cleanPhone);
     const syntheticEmails = phoneToSyntheticEmails(normalizedPhone);
 
-    // 1. Trouver les utilisateurs potentiels correspondant au numéro
+    // 2. Trouver l'utilisateur
     const emailConditions = syntheticEmails.map((email) => eq(users.email, email));
     const foundUsers = await db
       .select()
@@ -44,69 +38,63 @@ export async function POST(req: Request) {
       .limit(5);
 
     if (!foundUsers || foundUsers.length === 0) {
-      console.warn(`[Reset-Password] Aucun compte trouvé pour phone=${normalizedPhone}`);
-      return NextResponse.json(
-        { error: "Aucun compte trouvé avec ce numéro WhatsApp." },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Aucun compte trouvé pour ce numéro." }, { status: 400 });
     }
 
-    const cleanCode = code.trim();
     let targetUser = null;
 
-    // 2. Tester le code (avec gestion de la casse et des espaces)
+    // 3. Comparaison ultra-robuste
     for (const u of foundUsers) {
       if (!u.passwordHash) continue;
 
-      // Test 1: Code exact
-      let isValid = await bcrypt.compare(cleanCode, u.passwordHash);
+      // On nettoie le hash de la BDD au cas où il y aurait des espaces
+      const dbHash = u.passwordHash.trim();
 
-      // Test 2: En minuscules (ex: lk-12345678)
-      if (!isValid) {
-        isValid = await bcrypt.compare(cleanCode.toLowerCase(), u.passwordHash);
+      // Test du code tel quel
+      let match = await bcrypt.compare(cleanCode, dbHash);
+
+      // Si ça échoue, on teste sans le "Lk-" (si jamais l'admin a hashé sans le préfixe)
+      if (!match && cleanCode.startsWith("Lk-")) {
+        match = await bcrypt.compare(cleanCode.replace("Lk-", ""), dbHash);
+      }
+      
+      // Si ça échoue encore, on teste tout en minuscules
+      if (!match) {
+        match = await bcrypt.compare(cleanCode.toLowerCase(), dbHash);
       }
 
-      // Test 3: En majuscules
-      if (!isValid) {
-        isValid = await bcrypt.compare(cleanCode.toUpperCase(), u.passwordHash);
-      }
-
-      if (isValid) {
+      if (match) {
         targetUser = u;
         break;
       }
     }
 
     if (!targetUser) {
-      console.warn(
-        `[Reset-Password] Code invalide (${cleanCode}) pour phone=${normalizedPhone}. User IDs testés: ${foundUsers.map(u => u.id).join(", ")}`
-      );
+      console.error(`[Reset-Password] ÉCHEC : Le code "${cleanCode}" ne match pas le hash en BDD pour l'ID ${foundUsers[0].id}`);
       return NextResponse.json(
-        { error: "Code secret incorrect. Vérifie le code envoyé par l'administrateur sur WhatsApp." },
+        { error: "Code secret incorrect. Vérifie bien le code envoyé par l'admin." },
         { status: 400 }
       );
     }
 
-    // 3. Hash du NOUVEAU mot de passe choisi par l'utilisateur
-    const newPasswordHash = await bcrypt.hash(newPassword, 10);
+    // 4. Hash du nouveau mot de passe
+    const salt = await bcrypt.genSalt(10);
+    const hashedNewPassword = await bcrypt.hash(cleanNewPass, salt);
 
-    // 4. Mettre à jour le mot de passe dans Neon
+    // 5. Mise à jour finale
     await db
       .update(users)
-      .set({ passwordHash: newPasswordHash })
+      .set({ passwordHash: hashedNewPassword })
       .where(eq(users.id, targetUser.id));
 
-    console.log(`[Reset-Password] Succès ! Mot de passe réinitialisé pour l'user ID ${targetUser.id} (${normalizedPhone})`);
+    console.log(`[Reset-Password] SUCCÈS pour l'ID ${targetUser.id}`);
 
     return NextResponse.json({
       success: true,
-      message: "Mot de passe réinitialisé avec succès !",
+      message: "Mot de passe réinitialisé ! Connecte-toi maintenant.",
     });
   } catch (error) {
-    console.error("[Reset-Password] Erreur serveur:", error);
-    return NextResponse.json(
-      { error: "Une erreur est survenue lors de la réinitialisation." },
-      { status: 500 }
-    );
+    console.error("[Reset-Password] Erreur critique:", error);
+    return NextResponse.json({ error: "Erreur serveur." }, { status: 500 });
   }
 }
