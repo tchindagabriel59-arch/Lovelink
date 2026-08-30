@@ -1,125 +1,121 @@
-import { NextRequest, NextResponse } from "next/server";
+// src/app/api/auth/reset-password/route.ts
+import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { users, passwordResetTokens } from "@/db/schema";
-import { eq, and, gt, isNull, desc } from "drizzle-orm";
+import { eq, or, and, gt, desc, sql } from "drizzle-orm";
 import bcrypt from "bcryptjs";
+import {
+  normalizePhoneNumber,
+  phoneToSyntheticEmails,
+} from "@/lib/whatsapp";
 
-export const dynamic = "force-dynamic";
-
-function normalizeIdentifier(raw: string) {
-  const input = raw.trim();
-  const cleanInput = input.toLowerCase();
-  const cleanDigits = input.replace(/[\s\-\+\(\)]/g, "");
-  const cleanNo237 = cleanDigits.replace(/^237/, "");
-  return {
-    cleanInput,
-    phoneEmails: [
-      `phone_${cleanDigits}@phone.lovelink237.com`,
-      `phone_${cleanNo237}@phone.lovelink237.com`,
-      `phone_237${cleanNo237}@phone.lovelink237.com`,
-    ],
-  };
-}
-
-export async function POST(req: NextRequest) {
+export async function POST(req: Request) {
   try {
-    const { identifier, code, newPassword } = await req.json();
+    const body = await req.json();
+    const { phone, code, newPassword } = body;
 
-    if (!identifier || !code || !newPassword) {
+    // Validation des entrées
+    if (!phone || typeof phone !== "string" || phone.trim().length < 8) {
       return NextResponse.json(
-        { error: "Identifiant, code et nouveau mot de passe requis" },
+        { error: "Numéro WhatsApp invalide." },
         { status: 400 }
       );
     }
 
-    if (String(newPassword).length < 6) {
+    if (!code || typeof code !== "string" || code.trim().length !== 6) {
       return NextResponse.json(
-        { error: "Mot de passe trop court (min. 6 caractères)" },
+        { error: "Le code doit comporter exactement 6 chiffres." },
         { status: 400 }
       );
     }
 
-    const { cleanInput, phoneEmails } = normalizeIdentifier(String(identifier));
+    if (!newPassword || typeof newPassword !== "string" || newPassword.length < 6) {
+      return NextResponse.json(
+        { error: "Le nouveau mot de passe doit faire au moins 6 caractères." },
+        { status: 400 }
+      );
+    }
 
-    const [user] = await db
-      .select({ id: users.id })
+    const normalizedPhone = normalizePhoneNumber(phone.trim());
+    const syntheticEmails = phoneToSyntheticEmails(normalizedPhone);
+
+    // 1. Trouver l'utilisateur
+    const emailConditions = syntheticEmails.map((email) => eq(users.email, email));
+    const foundUsers = await db
+      .select()
       .from(users)
-      .where(
-        eq(users.email, cleanInput) // on retente aussi les phones ci-dessous
-      )
+      .where(or(...emailConditions))
       .limit(1);
 
-    // Recherche élargie
-    let userId = user?.id;
-    if (!userId) {
-      for (const em of [cleanInput, ...phoneEmails]) {
-        const [u] = await db
-          .select({ id: users.id })
-          .from(users)
-          .where(eq(users.email, em))
-          .limit(1);
-        if (u) {
-          userId = u.id;
-          break;
-        }
-      }
-    }
+    const user = foundUsers[0];
 
-    if (!userId) {
+    if (!user) {
       return NextResponse.json(
-        { error: "Code invalide ou expiré" },
+        { error: "Code ou numéro invalide." },
         { status: 400 }
       );
     }
 
+    // 2. Récupérer le dernier token valide et non expiré pour cet user
     const now = new Date();
-    const tokens = await db
+    const activeTokens = await db
       .select()
       .from(passwordResetTokens)
       .where(
         and(
-          eq(passwordResetTokens.userId, userId),
-          isNull(passwordResetTokens.usedAt),
-          gt(passwordResetTokens.expiresAt, now)
+          eq(passwordResetTokens.userId, user.id),
+          gt(passwordResetTokens.expiresAt, now),
+          sql`${passwordResetTokens.usedAt} IS NULL`
         )
       )
       .orderBy(desc(passwordResetTokens.createdAt))
-      .limit(5);
+      .limit(1);
 
-    let matched = null as (typeof tokens)[0] | null;
-    for (const t of tokens) {
-      const ok = await bcrypt.compare(String(code).trim(), t.codeHash);
-      if (ok) {
-        matched = t;
-        break;
-      }
-    }
+    const activeToken = activeTokens[0];
 
-    if (!matched) {
+    if (!activeToken) {
       return NextResponse.json(
-        { error: "Code invalide ou expiré" },
+        { error: "Code expiré ou invalide. Veuillez faire une nouvelle demande." },
         { status: 400 }
       );
     }
 
-    const passwordHash = await bcrypt.hash(String(newPassword), 12);
+    // 3. Vérifier le code bcrypt
+    const isCodeValid = await bcrypt.compare(code.trim(), activeToken.codeHash);
 
+    if (!isCodeValid) {
+      return NextResponse.json(
+        { error: "Code incorrect. Vérifiez le message reçu sur WhatsApp." },
+        { status: 400 }
+      );
+    }
+
+    // 4. Hash du nouveau mot de passe
+    const newPasswordHash = await bcrypt.hash(newPassword, 10);
+
+    // 5. Mettre à jour le mot de passe de l'utilisateur
     await db
       .update(users)
-      .set({ passwordHash, updatedAt: new Date() })
-      .where(eq(users.id, userId));
+      .set({ passwordHash: newPasswordHash })
+      .where(eq(users.id, user.id));
 
+    // 6. Marquer le token comme utilisé
     await db
       .update(passwordResetTokens)
       .set({ usedAt: now })
-      .where(eq(passwordResetTokens.id, matched.id));
+      .where(eq(passwordResetTokens.id, activeToken.id));
+
+    console.log(`[Reset-Password] Mot de passe réinitialisé pour l'user ID ${user.id} (${normalizedPhone})`);
 
     return NextResponse.json({
       success: true,
-      message: "Mot de passe mis à jour. Tu peux te connecter.",
+      message: "Mot de passe réinitialisé avec succès ! Tu peux maintenant te connecter.",
     });
   } catch (error) {
-    console.error("reset-password error:", error);
-    return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
+    console.error("[Reset-Password] Erreur serveur:", error);
+    return NextResponse.json(
+      { error: "Une erreur est survenue lors de la réinitialisation." },
+      { status: 500 }
+    );
   }
 }
