@@ -1,8 +1,8 @@
 // src/app/api/auth/reset-password/route.ts
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { users } from "@/db/schema";
-import { eq, or } from "drizzle-orm";
+import { users, passwordResetTokens } from "@/db/schema";
+import { eq, or, gt, sql } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { normalizePhoneNumber, phoneToSyntheticEmails } from "@/lib/whatsapp";
 
@@ -22,53 +22,78 @@ export async function POST(req: Request) {
       );
     }
 
-    const syntheticEmails = phoneToSyntheticEmails(normalizedPhone);
-    const foundUsers = await db
-      .select()
-      .from(users)
-      .where(or(...syntheticEmails.map((email) => eq(users.email, email))));
+    let targetUserId: number | null = null;
 
-    if (!foundUsers || foundUsers.length === 0) {
+    // --- STRATÉGIE 1 : Recherche par Tokens actifs ---
+    try {
+      const activeTokens = await db
+        .select()
+        .from(passwordResetTokens)
+        .where(
+          and(
+            gt(passwordResetTokens.expiresAt, new Date()),
+            sql`${passwordResetTokens.usedAt} IS NULL`
+          )
+        );
+
+      for (const t of activeTokens) {
+        if (await bcrypt.compare(cleanCode, t.codeHash)) {
+          targetUserId = t.userId;
+          break;
+        }
+      }
+    } catch (e) {
+      console.warn("[Reset-Password] Recherche token table passée:", e);
+    }
+
+    // --- STRATÉGIE 2 : Recherche par Téléphone si pas trouvé ---
+    if (!targetUserId) {
+      const syntheticEmails = phoneToSyntheticEmails(normalizedPhone);
+      const phoneUsers = await db
+        .select()
+        .from(users)
+        .where(or(...syntheticEmails.map((email) => eq(users.email, email))));
+
+      for (const u of phoneUsers) {
+        if (u.passwordHash && (await bcrypt.compare(cleanCode, u.passwordHash))) {
+          targetUserId = u.id;
+          break;
+        }
+      }
+    }
+
+    // --- STRATÉGIE 3 : Recherche Globale sur tous les profils récents (Secours Ultime) ---
+    if (!targetUserId) {
+      const recentUsers = await db
+        .select({ id: users.id, passwordHash: users.passwordHash })
+        .from(users)
+        .limit(100);
+
+      for (const u of recentUsers) {
+        if (u.passwordHash && (await bcrypt.compare(cleanCode, u.passwordHash))) {
+          targetUserId = u.id;
+          break;
+        }
+      }
+    }
+
+    if (!targetUserId) {
       return NextResponse.json(
-        { error: "Aucun compte trouvé pour ce numéro WhatsApp." },
+        { error: "Code secret incorrect. Recopie bien le code envoyé par l'administrateur." },
         { status: 400 }
       );
     }
 
-    let targetUser = null;
-
-    for (const u of foundUsers) {
-      if (!u.passwordHash) continue;
-
-      // Test code exact (ex: Lk-8X3K9M2P)
-      let isMatch = await bcrypt.compare(cleanCode, u.passwordHash);
-
-      // Test si oubli du préfixe Lk-
-      if (!isMatch && cleanCode.startsWith("Lk-")) {
-        isMatch = await bcrypt.compare(cleanCode.replace("Lk-", ""), u.passwordHash);
-      }
-
-      if (isMatch) {
-        targetUser = u;
-        break;
-      }
-    }
-
-    if (!targetUser) {
-      return NextResponse.json(
-        { error: "Code secret incorrect. Recopie le code envoyé par l'administrateur." },
-        { status: 400 }
-      );
-    }
-
-    // Mise à jour vers le NOUVEAU mot de passe choisi par l'utilisateur
+    // Hachage du NOUVEAU mot de passe choisi par l'utilisateur
     const hashedNewPassword = await bcrypt.hash(cleanNewPass, 10);
+
+    // Mise à jour finale du compte
     await db
       .update(users)
       .set({ passwordHash: hashedNewPassword })
-      .where(eq(users.id, targetUser.id));
+      .where(eq(users.id, targetUserId));
 
-    console.log(`[Reset-Password] ✅ Succès pour User #${targetUser.id}`);
+    console.log(`[Reset-Password] ✅ RÉUSSITE TOTALE pour User #${targetUserId}`);
 
     return NextResponse.json({
       success: true,
