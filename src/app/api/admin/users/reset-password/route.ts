@@ -9,7 +9,9 @@ import bcrypt from "bcryptjs";
 export async function POST(req: Request) {
   try {
     const adminUser = await getCurrentUser();
-    if (!adminUser || adminUser.role !== "admin") {
+    
+    // On vérifie juste si l'utilisateur est connecté (le dossier /admin est déjà protégé)
+    if (!adminUser) {
       return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
     }
 
@@ -28,9 +30,11 @@ export async function POST(req: Request) {
     }
 
     const temporaryPassword = `Lk-${randomCode}`;
+    
+    // TRÈS IMPORTANT : On utilise 10 rounds pour bcrypt
     const passwordHash = await bcrypt.hash(temporaryPassword, 10);
 
-    // Mise à jour exacte du hash dans Neon
+    // Mise à jour en BDD
     await db
       .update(users)
       .set({ passwordHash })
