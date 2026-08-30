@@ -15,35 +15,42 @@ export async function POST(req: Request) {
     const cleanCode = String(code || "").trim();
     const cleanNewPass = String(newPassword || "").trim();
 
+    if (!cleanPhone || !cleanCode || cleanNewPass.length < 6) {
+      return NextResponse.json({ error: "Données invalides." }, { status: 400 });
+    }
+
     const normalizedPhone = normalizePhoneNumber(cleanPhone);
     const syntheticEmails = phoneToSyntheticEmails(normalizedPhone);
 
-    // 1. On cherche TOUS les comptes liés à ce numéro
     const emailConditions = syntheticEmails.map((email) => eq(users.email, email));
-    const allMatchingUsers = await db
+    const foundUsers = await db
       .select()
       .from(users)
-      .where(or(...emailConditions));
+      .where(or(...emailConditions))
+      .limit(5);
 
-    if (!allMatchingUsers || allMatchingUsers.length === 0) {
-      return NextResponse.json({ error: "Aucun compte trouvé." }, { status: 400 });
+    if (!foundUsers || foundUsers.length === 0) {
+      return NextResponse.json({ error: "Compte non trouvé pour ce numéro." }, { status: 400 });
     }
 
     let targetUser = null;
 
-    // 2. On teste le code sur chaque compte trouvé
-    for (const u of allMatchingUsers) {
+    for (const u of foundUsers) {
       if (!u.passwordHash) continue;
 
-      // Test Bcrypt
-      let isMatch = false;
-      try {
-        isMatch = await bcrypt.compare(cleanCode, u.passwordHash);
-      } catch (e) { isMatch = false; }
+      const dbHash = u.passwordHash.trim();
 
-      // Test Texte Clair
-      if (!isMatch && cleanCode === u.passwordHash) {
-        isMatch = true;
+      // Test 1: Code complet (ex: Lk-ABC12345)
+      let isMatch = await bcrypt.compare(cleanCode, dbHash);
+
+      // Test 2: Sans le préfixe Lk-
+      if (!isMatch && cleanCode.startsWith("Lk-")) {
+        isMatch = await bcrypt.compare(cleanCode.replace("Lk-", ""), dbHash);
+      }
+
+      // Test 3: Casse tolérante
+      if (!isMatch) {
+        isMatch = await bcrypt.compare(cleanCode.toUpperCase(), dbHash);
       }
 
       if (isMatch) {
@@ -52,29 +59,27 @@ export async function POST(req: Request) {
       }
     }
 
-    // 3. Si échec, on logue les détails pour que le Boss puisse vérifier
     if (!targetUser) {
-      const details = allMatchingUsers.map(u => `ID:${u.id} (Email:${u.email?.split('@')[0]})`).join(", ");
-      console.error(`[Reset-Password] ÉCHEC TOTAL | Code tenté: "${cleanCode}" | Comptes trouvés: ${details}`);
-      
+      console.error(`[Reset-Password] Échec validation code "${cleanCode}" pour ID ${foundUsers[0].id}`);
       return NextResponse.json(
-        { error: "Code secret incorrect. Vérifie que tu as bien généré le code pour le bon compte dans l'admin." },
+        { error: "Code secret incorrect. Génère un nouveau code depuis l'admin et réessaie." },
         { status: 400 }
       );
     }
 
-    // 4. Si succès, on met à jour le compte qui a matché
+    // Hash du nouveau mot de passe utilisateur
     const hashedNewPassword = await bcrypt.hash(cleanNewPass, 10);
+
     await db
       .update(users)
       .set({ passwordHash: hashedNewPassword })
       .where(eq(users.id, targetUser.id));
 
-    console.log(`[Reset-Password] ✅ SUCCÈS pour l'ID ${targetUser.id} (${targetUser.email})`);
+    console.log(`[Reset-Password] ✅ SUCCÈS pour l'user ID ${targetUser.id}`);
 
     return NextResponse.json({
       success: true,
-      message: "Mot de passe réinitialisé avec succès !",
+      message: "Mot de passe réinitialisé ! Tu peux maintenant te connecter.",
     });
   } catch (error) {
     console.error("[Reset-Password] Erreur critique:", error);
