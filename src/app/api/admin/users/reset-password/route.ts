@@ -7,53 +7,75 @@ import bcrypt from "bcryptjs";
 
 export const dynamic = "force-dynamic";
 
-// Fonction pour t'envoyer le code sur Telegram
-async function sendToTelegram(msg: string) {
+// Envoi Telegram en arrière-plan (NE BLOQUE PAS l'API)
+function notifyTelegramBackground(text: string) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.TELEGRAM_CHAT_ID;
   if (!token || !chatId) return;
-  try {
-    await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chat_id: chatId, text: msg, parse_mode: "HTML" }),
-    });
-  } catch (e) {
-    console.error("Erreur Telegram:", e);
-  }
+
+  fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ chat_id: chatId, text, parse_mode: "HTML" }),
+  }).catch((err) => console.error("[Admin-Reset] Telegram err:", err));
 }
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
-    const userId = Number(body.userId || body.id);
-
-    if (!userId) {
-      return NextResponse.json({ success: false, error: "ID manquant" }, { status: 200 });
+    let body: any = {};
+    try {
+      body = await req.json();
+    } catch {
+      body = {};
     }
 
-    // 1. Générer le code
-    const code = Math.random().toString(36).slice(-8).toUpperCase();
-    const tempPass = `Lk-${code}`;
+    const rawId = body?.userId ?? body?.id ?? body?.targetUserId;
+    const userId = Number(rawId);
 
-    // 2. Hacher et mettre à jour la BDD
-    const hash = await bcrypt.hash(tempPass, 10);
-    await db.update(users).set({ passwordHash: hash }).where(eq(users.id, userId));
+    if (!userId || isNaN(userId)) {
+      return NextResponse.json(
+        { success: false, error: "ID utilisateur manquant." },
+        { status: 400 }
+      );
+    }
 
-    // 3. ENVOYER LE CODE SUR TELEGRAM (Pour que tu l'aies quoi qu'il arrive)
-    await sendToTelegram(`<b>🔑 NOUVEAU MOT DE PASSE GÉNÉRÉ</b>\n\nID Utilisateur : ${userId}\nCode à envoyer : <code>${tempPass}</code>`);
+    // Génération du code Lk-XXXXXXXX (8 caractères)
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    let randomCode = "";
+    for (let i = 0; i < 8; i++) {
+      randomCode += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    const temporaryPassword = `Lk-${randomCode}`;
 
-    console.log(`[ADMIN] OK pour ID ${userId} : ${tempPass}`);
+    // Hash bcrypt (10 rounds)
+    const passwordHash = await bcrypt.hash(temporaryPassword, 10);
 
-    // 4. Réponse ultra-courte pour éviter le bug réseau du front
+    // Mise à jour Neon
+    await db
+      .update(users)
+      .set({ passwordHash })
+      .where(eq(users.id, userId));
+
+    console.log(`[Admin-Reset] ✅ Mot de passe généré pour User #${userId} : ${temporaryPassword}`);
+
+    // Notification Telegram sans await (instantané)
+    notifyTelegramBackground(
+      `<b>🔑 MOT DE PASSE GÉNÉRÉ</b>\n\nUser ID : ${userId}\nCode : <code>${temporaryPassword}</code>`
+    );
+
+    // Réponse immédiate pour le frontend
     return NextResponse.json({
       success: true,
-      password: tempPass,
-      temporaryPassword: tempPass
-    }, { status: 200 });
-
+      ok: true,
+      password: temporaryPassword,
+      temporaryPassword: temporaryPassword,
+      message: temporaryPassword,
+    });
   } catch (error: any) {
-    console.error("Erreur API Admin:", error.message);
-    return NextResponse.json({ success: false, error: error.message }, { status: 200 });
+    console.error("[Admin-Reset] Erreur serveur:", error);
+    return NextResponse.json(
+      { success: false, error: "Erreur lors de la génération." },
+      { status: 500 }
+    );
   }
 }
