@@ -1,20 +1,16 @@
 // src/app/api/auth/reset-password/route.ts
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { users, passwordResetTokens } from "@/db/schema";
-import { eq, or, and, gt, desc, sql } from "drizzle-orm";
+import { users } from "@/db/schema";
+import { eq, or } from "drizzle-orm";
 import bcrypt from "bcryptjs";
-import {
-  normalizePhoneNumber,
-  phoneToSyntheticEmails,
-} from "@/lib/whatsapp";
+import { normalizePhoneNumber, phoneToSyntheticEmails } from "@/lib/whatsapp";
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
     const { phone, code, newPassword } = body;
 
-    // Validation des entrées
     if (!phone || typeof phone !== "string" || phone.trim().length < 8) {
       return NextResponse.json(
         { error: "Numéro WhatsApp invalide." },
@@ -22,9 +18,9 @@ export async function POST(req: Request) {
       );
     }
 
-    if (!code || typeof code !== "string" || code.trim().length !== 6) {
+    if (!code || typeof code !== "string" || code.trim().length < 4) {
       return NextResponse.json(
-        { error: "Le code doit comporter exactement 6 chiffres." },
+        { error: "Veuillez entrer le code reçu sur WhatsApp." },
         { status: 400 }
       );
     }
@@ -39,7 +35,7 @@ export async function POST(req: Request) {
     const normalizedPhone = normalizePhoneNumber(phone.trim());
     const syntheticEmails = phoneToSyntheticEmails(normalizedPhone);
 
-    // 1. Trouver l'utilisateur
+    // 1. Trouver l'utilisateur par son numéro
     const emailConditions = syntheticEmails.map((email) => eq(users.email, email));
     const foundUsers = await db
       .select()
@@ -51,68 +47,45 @@ export async function POST(req: Request) {
 
     if (!user) {
       return NextResponse.json(
-        { error: "Code ou numéro invalide." },
+        { error: "Aucun compte trouvé avec ce numéro WhatsApp." },
         { status: 400 }
       );
     }
 
-    // 2. Récupérer le dernier token valide et non expiré pour cet user
-    const now = new Date();
-    const activeTokens = await db
-      .select()
-      .from(passwordResetTokens)
-      .where(
-        and(
-          eq(passwordResetTokens.userId, user.id),
-          gt(passwordResetTokens.expiresAt, now),
-          sql`${passwordResetTokens.usedAt} IS NULL`
-        )
-      )
-      .orderBy(desc(passwordResetTokens.createdAt))
-      .limit(1);
-
-    const activeToken = activeTokens[0];
-
-    if (!activeToken) {
+    if (!user.passwordHash) {
       return NextResponse.json(
-        { error: "Code expiré ou invalide. Veuillez faire une nouvelle demande." },
+        { error: "Erreur de compte. Contacte le support." },
         { status: 400 }
       );
     }
 
-    // 3. Vérifier le code bcrypt
-    const isCodeValid = await bcrypt.compare(code.trim(), activeToken.codeHash);
+    // 2. Vérifier si le code entré correspond au mot de passe temporaire généré par l'admin
+    const isCodeValid = await bcrypt.compare(code.trim(), user.passwordHash);
 
     if (!isCodeValid) {
       return NextResponse.json(
-        { error: "Code incorrect. Vérifiez le message reçu sur WhatsApp." },
+        { error: "Code secret incorrect. Vérifie le code envoyé par l'administrateur sur WhatsApp." },
         { status: 400 }
       );
     }
 
-    // 4. Hash du nouveau mot de passe
+    // 3. Hash du NOUVEAU mot de passe choisi par l'utilisateur
     const newPasswordHash = await bcrypt.hash(newPassword, 10);
 
-    // 5. Mettre à jour le mot de passe de l'utilisateur
+    // 4. Mettre à jour la BDD
     await db
       .update(users)
       .set({ passwordHash: newPasswordHash })
       .where(eq(users.id, user.id));
 
-    // 6. Marquer le token comme utilisé
-    await db
-      .update(passwordResetTokens)
-      .set({ usedAt: now })
-      .where(eq(passwordResetTokens.id, activeToken.id));
-
-    console.log(`[Reset-Password] Mot de passe réinitialisé pour l'user ID ${user.id} (${normalizedPhone})`);
+    console.log(`[Reset-Password-Manual] Mot de passe réinitialisé pour l'user ID ${user.id} (${normalizedPhone})`);
 
     return NextResponse.json({
       success: true,
-      message: "Mot de passe réinitialisé avec succès ! Tu peux maintenant te connecter.",
+      message: "Mot de passe réinitialisé avec succès !",
     });
   } catch (error) {
-    console.error("[Reset-Password] Erreur serveur:", error);
+    console.error("[Reset-Password-Manual] Erreur serveur:", error);
     return NextResponse.json(
       { error: "Une erreur est survenue lors de la réinitialisation." },
       { status: 500 }
