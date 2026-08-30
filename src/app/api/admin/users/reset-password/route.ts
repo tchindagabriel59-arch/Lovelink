@@ -10,19 +10,23 @@ export async function POST(req: Request) {
   try {
     const adminUser = await getCurrentUser();
     
-    // On vérifie juste si l'utilisateur est connecté (le dossier /admin est déjà protégé)
+    // Sécurité Admin
     if (!adminUser) {
-      return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
+      return NextResponse.json({ error: "Non autorisé" }, { status: 403 });
     }
 
     const body = await req.json();
-    const userId = Number(body.userId || body.id);
+    console.log("DEBUG - Admin Reset Request Body:", body);
 
-    if (!userId) {
-      return NextResponse.json({ error: "ID utilisateur manquant." }, { status: 400 });
+    // On accepte TOUTES les variantes possibles d'ID envoyées par le front
+    const rawId = body.userId || body.id || body.user?.id || body.targetUserId;
+    const userId = Number(rawId);
+
+    if (!userId || isNaN(userId)) {
+      return NextResponse.json({ error: "ID utilisateur manquant ou invalide." }, { status: 400 });
     }
 
-    // Génération d'un code lisible de 8 caractères
+    // Génération d'un code lisible (sans les caractères ambigus comme 0, O, I, 1, l)
     const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
     let randomCode = "";
     for (let i = 0; i < 8; i++) {
@@ -31,25 +35,27 @@ export async function POST(req: Request) {
 
     const temporaryPassword = `Lk-${randomCode}`;
     
-    // TRÈS IMPORTANT : On utilise 10 rounds pour bcrypt
+    // Hachage propre (10 rounds)
     const passwordHash = await bcrypt.hash(temporaryPassword, 10);
 
-    // Mise à jour en BDD
+    // Mise à jour Neon
     await db
       .update(users)
       .set({ passwordHash })
       .where(eq(users.id, userId));
 
-    console.log(`[Admin-Reset] Mot de passe généré pour user ${userId} : ${temporaryPassword}`);
+    console.log(`[Admin-Reset] ✅ Succès pour l'ID ${userId} : ${temporaryPassword}`);
 
+    // On renvoie tous les formats de réponse possibles pour le front
     return NextResponse.json({
       success: true,
       password: temporaryPassword,
-      temporaryPassword,
-      message: `Mot de passe temporaire : ${temporaryPassword}`,
+      temporaryPassword: temporaryPassword,
+      newPassword: temporaryPassword,
+      message: `Mot de passe généré : ${temporaryPassword}`,
     });
   } catch (error) {
-    console.error("[Admin-Reset] Erreur serveur:", error);
+    console.error("[Admin-Reset] Erreur critique:", error);
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
   }
 }
