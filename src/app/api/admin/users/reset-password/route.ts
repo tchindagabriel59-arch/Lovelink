@@ -5,71 +5,52 @@ import { users } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 
-export const dynamic = "force-dynamic";
+// Force le runtime Node.js pour assurer la compatibilité de bcryptjs sur Vercel
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
-  console.log("--- DEBUG ADMIN RESET START ---");
-  
   try {
-    // 1. Essayer de lire le body peu importe le format
-    let body: any = {};
-    const contentType = req.headers.get("content-type") || "";
+    // 1. Lecture ultra-simple du JSON
+    const body = await req.json();
     
-    if (contentType.includes("application/json")) {
-      body = await req.json();
-    } else {
-      const formData = await req.formData();
-      formData.forEach((value, key) => {
-        body[key] = value;
-      });
-    }
-    
-    console.log("Payload reçu:", JSON.stringify(body));
-
-    // 2. Chercher l'ID partout (userId, id, targetId, etc.)
-    const rawId = body.userId || body.id || body.targetUserId || body.targetId;
-    const userId = Number(rawId);
+    // On cherche l'ID : ton frontend envoie probablement { "userId": ... }
+    const userId = Number(body.userId || body.id);
 
     if (!userId || isNaN(userId)) {
-      console.error("ID invalide détecté:", rawId);
       return NextResponse.json({ 
         success: false, 
-        error: "ID utilisateur manquant dans la requête." 
-      }, { status: 200 }); // On renvoie 200 pour éviter l'erreur réseau
+        error: "ID utilisateur non reçu" 
+      }, { status: 200 });
     }
 
-    // 3. Générer le code
-    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-    let randomCode = "";
-    for (let i = 0; i < 8; i++) {
-      randomCode += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    const tempPass = `Lk-${randomCode}`;
-    
-    console.log(`Hachage pour ID ${userId}...`);
-    const hash = await bcrypt.hash(tempPass, 10);
+    // 2. Génération d'un code simple (8 lettres/chiffres)
+    const code = Math.random().toString(36).slice(-8).toUpperCase();
+    const temporaryPassword = `Lk-${code}`;
 
-    // 4. Update Neon
+    // 3. Hachage
+    const passwordHash = await bcrypt.hash(temporaryPassword, 10);
+
+    // 4. Mise à jour Neon
     await db
       .update(users)
-      .set({ passwordHash: hash })
+      .set({ passwordHash })
       .where(eq(users.id, userId));
 
-    console.log(`✅ SUCCÈS : ${tempPass} pour ID ${userId}`);
+    console.log(`[ADMIN] Password reset OK pour ID ${userId}: ${temporaryPassword}`);
 
+    // 5. Réponse JSON pure et simple
     return NextResponse.json({
       success: true,
-      ok: true,
-      temporaryPassword: tempPass,
-      password: tempPass,
-      message: `Code généré : ${tempPass}`
+      temporaryPassword: temporaryPassword,
+      password: temporaryPassword // au cas où le front cherche cette clé
     });
 
-  } catch (err: any) {
-    console.error("CRASH API ADMIN:", err);
+  } catch (error: any) {
+    console.error("[ADMIN] Erreur fatale:", error.message);
     return NextResponse.json({ 
       success: false, 
-      error: "Crash serveur: " + err.message 
-    }, { status: 200 }); // Toujours 200 pour que le front affiche l'erreur proprement
+      error: "Erreur serveur interne" 
+    }, { status: 200 });
   }
 }
