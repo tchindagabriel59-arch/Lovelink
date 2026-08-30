@@ -4,7 +4,7 @@
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { Smartphone, Lock, CheckCircle2, ArrowLeft, Loader2, ShieldCheck } from "lucide-react";
+import { Smartphone, Lock, CheckCircle2, ArrowLeft, Loader2, KeyRound } from "lucide-react";
 
 function ResetPasswordForm() {
   const router = useRouter();
@@ -33,8 +33,8 @@ function ResetPasswordForm() {
       return;
     }
 
-    if (!code || code.trim().length !== 6) {
-      setError("Le code doit contenir exactement 6 chiffres.");
+    if (!code || code.trim().length < 4) {
+      setError("Saisis le code reçu sur WhatsApp.");
       return;
     }
 
@@ -93,9 +93,13 @@ function ResetPasswordForm() {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="bg-slate-950/60 border border-pink-500/20 rounded-2xl p-3.5 text-xs text-slate-300 mb-2">
+        📱 <strong className="text-pink-400">Demande transmise !</strong> Un administrateur va t'envoyer ton code secret sur WhatsApp (ex: <code className="text-slate-200">Lk-XXXXXXXX</code>).
+      </div>
+
       <div>
         <label className="block text-xs font-semibold text-slate-300 mb-1.5 uppercase tracking-wider">
-          Numéro WhatsApp
+          Ton numéro WhatsApp
         </label>
         <div className="relative">
           <Smartphone className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
@@ -103,7 +107,7 @@ function ResetPasswordForm() {
             type="tel"
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
-            placeholder="Ex: 221778161664 ou 6XXXXXXXX"
+            placeholder="Ex: 2376XXXXXXXX"
             required
             disabled={loading}
             className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 pl-11 pr-4 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition disabled:opacity-50"
@@ -113,19 +117,18 @@ function ResetPasswordForm() {
 
       <div>
         <label className="block text-xs font-semibold text-slate-300 mb-1.5 uppercase tracking-wider">
-          Code reçu par WhatsApp (6 chiffres)
+          Code reçu par WhatsApp
         </label>
         <div className="relative">
-          <ShieldCheck className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-pink-400" />
+          <KeyRound className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-pink-400" />
           <input
             type="text"
-            maxLength={6}
             value={code}
-            onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
-            placeholder="123456"
+            onChange={(e) => setCode(e.target.value)}
+            placeholder="Ex: Lk-a1b2c3d4"
             required
             disabled={loading}
-            className="w-full bg-slate-950 border border-pink-500/40 rounded-2xl py-3 pl-11 pr-4 text-lg font-mono tracking-widest text-pink-400 placeholder-slate-700 focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition disabled:opacity-50 text-center"
+            className="w-full bg-slate-950 border border-pink-500/40 rounded-2xl py-3 pl-11 pr-4 text-sm font-mono text-pink-300 placeholder-slate-600 focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition disabled:opacity-50"
           />
         </div>
       </div>
@@ -150,7 +153,7 @@ function ResetPasswordForm() {
 
       <div>
         <label className="block text-xs font-semibold text-slate-300 mb-1.5 uppercase tracking-wider">
-          Confirmer le mot de passe
+          Confirmer le nouveau mot de passe
         </label>
         <div className="relative">
           <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
@@ -183,7 +186,7 @@ function ResetPasswordForm() {
             <span>Modification en cours...</span>
           </>
         ) : (
-          <span>Réinitialiser le mot de passe</span>
+          <span>Valider et Réinitialiser</span>
         )}
       </button>
     </form>
@@ -198,15 +201,15 @@ export default function ResetPasswordPage() {
           href="/forgot-password"
           className="inline-flex items-center text-sm text-slate-400 hover:text-pink-400 transition mb-6"
         >
-          <ArrowLeft className="w-4 h-4 mr-2" /> Demander un nouveau code
+          <ArrowLeft className="w-4 h-4 mr-2" /> Retour
         </Link>
 
         <div className="mb-6">
           <h1 className="text-xl font-bold bg-gradient-to-r from-pink-400 via-rose-300 to-white bg-clip-text text-transparent">
-            Saisis ton code WhatsApp
+            Définir mon mot de passe
           </h1>
           <p className="text-xs text-slate-400 mt-1">
-            Entre le code reçu à 6 chiffres et définis ton nouveau mot de passe.
+            Entre le code reçu par l'admin et ton nouveau mot de passe.
           </p>
         </div>
 
