@@ -25,22 +25,18 @@ export async function POST(req: Request) {
     const normalizedPhone = normalizePhoneNumber(phone.trim());
     const syntheticEmails = phoneToSyntheticEmails(normalizedPhone);
 
-    // 1. Recherche de l'utilisateur par numéro réel OU emails synthétiques
+    // 1. Recherche de l'utilisateur via ses emails synthétiques possibles dans users.email
+    const emailConditions = syntheticEmails.map((email) => eq(users.email, email));
+
     const foundUsers = await db
       .select()
       .from(users)
-      .where(
-        or(
-          eq(users.phone, normalizedPhone),
-          ...syntheticEmails.map((email) => eq(users.email, email))
-        )
-      )
+      .where(or(...emailConditions))
       .limit(1);
 
     const user = foundUsers[0];
 
-    // Pour des raisons de sécurité, si le numéro n'existe pas,
-    // on simule le succès sans envoyer de SMS pour ne pas révéler qui est inscrit
+    // Pour la sécurité, réponse neutre si non trouvé
     if (!user) {
       console.warn(`[Forgot-Password] Aucun compte trouvé pour: ${normalizedPhone}`);
       return NextResponse.json({
@@ -50,7 +46,7 @@ export async function POST(req: Request) {
       });
     }
 
-    // 2. Rate limiting : Max 3 demandes sur les 30 dernières minutes
+    // 2. Rate limiting : Max 3 demandes / 30 minutes
     const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000);
     const recentTokensCount = await db
       .select({ count: sql<number>`count(*)` })
@@ -73,12 +69,12 @@ export async function POST(req: Request) {
       );
     }
 
-    // 3. Génération d'un code à 6 chiffres (ex: 839201)
+    // 3. Génération du code à 6 chiffres
     const rawCode = Math.floor(100000 + Math.random() * 900000).toString();
     const codeHash = await bcrypt.hash(rawCode, 10);
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 min
 
-    // 4. Invalider les anciens codes non utilisés de cet user
+    // 4. Invalider les anciens codes non utilisés
     await db
       .update(passwordResetTokens)
       .set({ usedAt: new Date() })
@@ -89,7 +85,7 @@ export async function POST(req: Request) {
         )
       );
 
-    // 5. Sauvegarder le nouveau token en BDD
+    // 5. Sauvegarder le token
     await db.insert(passwordResetTokens).values({
       userId: user.id,
       codeHash,
