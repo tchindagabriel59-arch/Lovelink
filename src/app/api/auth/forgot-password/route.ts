@@ -1,122 +1,175 @@
 // src/app/api/auth/forgot-password/route.ts
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { users, passwordResetTokens } from "@/db/schema";
-import { eq, or, and, gt, sql } from "drizzle-orm";
-import bcrypt from "bcryptjs";
+import { users } from "@/db/schema";
+import { sql, or, ilike, eq } from "drizzle-orm";
 import {
   normalizePhoneNumber,
   phoneToSyntheticEmails,
-  sendWhatsAppResetCode,
 } from "@/lib/whatsapp";
+
+const ADMIN_WHATSAPP = process.env.ADMIN_WHATSAPP_NUMBER || "221778161664";
+
+async function notifyTelegram(text: string) {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  const chatId = process.env.TELEGRAM_CHAT_ID;
+  if (!token || !chatId) return false;
+
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text,
+        parse_mode: "HTML",
+      }),
+    });
+    return res.ok;
+  } catch (e) {
+    console.error("[Forgot-Manual] Telegram error:", e);
+    return false;
+  }
+}
+
+async function notifyAdminWhatsApp(text: string) {
+  const token = process.env.WHATSAPP_TOKEN;
+  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  if (!token || !phoneNumberId) return false;
+
+  try {
+    const res = await fetch(
+      `https://graph.facebook.com/v21.0/${phoneNumberId}/messages`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          messaging_product: "whatsapp",
+          recipient_type: "individual",
+          to: normalizePhoneNumber(ADMIN_WHATSAPP),
+          type: "text",
+          text: { preview_url: false, body: text },
+        }),
+      }
+    );
+    const data = await res.json();
+    if (!res.ok) {
+      console.error("[Forgot-Manual] WhatsApp admin error:", data);
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.error("[Forgot-Manual] WhatsApp admin exception:", e);
+    return false;
+  }
+}
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { phone } = body;
+    const fullName = String(body.fullName || "").trim();
+    const phone = String(body.phone || "").trim();
 
-    if (!phone || typeof phone !== "string" || phone.trim().length < 8) {
+    if (fullName.length < 3) {
       return NextResponse.json(
-        { error: "Veuillez entrer un numéro WhatsApp valide." },
+        { error: "Indique ton nom complet utilisé à l'inscription." },
         { status: 400 }
       );
     }
 
-    const normalizedPhone = normalizePhoneNumber(phone.trim());
+    if (phone.length < 8) {
+      return NextResponse.json(
+        { error: "Indique ton numéro WhatsApp pour te recontacter." },
+        { status: 400 }
+      );
+    }
+
+    const normalizedPhone = normalizePhoneNumber(phone);
     const syntheticEmails = phoneToSyntheticEmails(normalizedPhone);
 
-    // 1. Recherche de l'utilisateur via ses emails synthétiques possibles dans users.email
+    // Recherche approximative par nom + tentative par téléphone
+    const namePattern = `%${fullName}%`;
     const emailConditions = syntheticEmails.map((email) => eq(users.email, email));
 
-    const foundUsers = await db
-      .select()
-      .from(users)
-      .where(or(...emailConditions))
-      .limit(1);
+    let matchedUsers: Array<{
+      id: number;
+      name: string | null;
+      email: string | null;
+    }> = [];
 
-    const user = foundUsers[0];
-
-    // Pour la sécurité, réponse neutre si non trouvé
-    if (!user) {
-      console.warn(`[Forgot-Password] Aucun compte trouvé pour: ${normalizedPhone}`);
-      return NextResponse.json({
-        success: true,
-        message: "Si ce numéro existe, un code a été envoyé sur WhatsApp.",
-        phone: normalizedPhone,
-      });
-    }
-
-    // 2. Rate limiting : Max 3 demandes / 30 minutes
-    const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000);
-    const recentTokensCount = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(passwordResetTokens)
-      .where(
-        and(
-          eq(passwordResetTokens.userId, user.id),
-          gt(passwordResetTokens.createdAt, thirtyMinAgo)
+    try {
+      matchedUsers = await db
+        .select({
+          id: users.id,
+          name: users.name,
+          email: users.email,
+        })
+        .from(users)
+        .where(
+          or(
+            ilike(users.name, namePattern),
+            ...emailConditions
+          )
         )
-      );
-
-    const count = Number(recentTokensCount[0]?.count || 0);
-    if (count >= 3) {
-      return NextResponse.json(
-        {
-          error:
-            "Trop de tentatives. Veuillez patienter 30 minutes avant de demander un nouveau code.",
-        },
-        { status: 429 }
-      );
+        .limit(5);
+    } catch (e) {
+      // fallback si ilike/name pose problème selon schema
+      console.warn("[Forgot-Manual] search fallback:", e);
+      matchedUsers = await db
+        .select({
+          id: users.id,
+          name: users.name,
+          email: users.email,
+        })
+        .from(users)
+        .where(or(...emailConditions))
+        .limit(5);
     }
 
-    // 3. Génération du code à 6 chiffres
-    const rawCode = Math.floor(100000 + Math.random() * 900000).toString();
-    const codeHash = await bcrypt.hash(rawCode, 10);
-    const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 min
+    const matchLines =
+      matchedUsers.length > 0
+        ? matchedUsers
+            .map(
+              (u) =>
+                `• ID ${u.id} — ${u.name || "Sans nom"} — ${u.email || "n/a"}`
+            )
+            .join("\n")
+        : "• Aucun compte trouvé automatiquement (à chercher manuellement)";
 
-    // 4. Invalider les anciens codes non utilisés
-    await db
-      .update(passwordResetTokens)
-      .set({ usedAt: new Date() })
-      .where(
-        and(
-          eq(passwordResetTokens.userId, user.id),
-          sql`${passwordResetTokens.usedAt} IS NULL`
-        )
-      );
+    const telegramText =
+      `<b>🔐 Demande reset MDP LoveLink</b>\n\n` +
+      `<b>Nom saisi :</b> ${fullName}\n` +
+      `<b>WhatsApp :</b> ${normalizedPhone}\n\n` +
+      `<b>Correspondances :</b>\n${matchLines}\n\n` +
+      `➡️ Va dans Admin → Utilisateurs → génère un MDP temporaire puis envoie-le au user sur WhatsApp.`;
 
-    // 5. Sauvegarder le token
-    await db.insert(passwordResetTokens).values({
-      userId: user.id,
-      codeHash,
-      expiresAt,
-    });
+    const whatsappText =
+      `🔐 *Demande reset MDP LoveLink*\n\n` +
+      `Nom saisi : ${fullName}\n` +
+      `WhatsApp : ${normalizedPhone}\n\n` +
+      `Correspondances :\n${matchLines}\n\n` +
+      `➡️ Admin → Utilisateurs → Générer un mot de passe temporaire, puis envoie-le au user.`;
 
-    // 6. Envoi WhatsApp
-    const sendResult = await sendWhatsAppResetCode(normalizedPhone, rawCode);
+    const tgOk = await notifyTelegram(telegramText);
+    const waOk = await notifyAdminWhatsApp(whatsappText);
 
-    if (!sendResult.success) {
-      console.error("[Forgot-Password] Erreur envoi WhatsApp:", sendResult.error);
-      return NextResponse.json(
-        {
-          error:
-            "Impossible d'envoyer le message WhatsApp. Vérifie ton numéro ou réessaie plus tard.",
-        },
-        { status: 500 }
-      );
-    }
+    console.log(
+      `[Forgot-Manual] Demande de "${fullName}" (${normalizedPhone}) | matches=${matchedUsers.length} | tg=${tgOk} | wa=${waOk}`
+    );
 
-    console.log(`[Forgot-Password] Code envoyé à ${normalizedPhone} (User ID: ${user.id})`);
-
+    // Toujours succès côté user (UX + anti-énumération)
     return NextResponse.json({
       success: true,
-      message: "Code envoyé avec succès par WhatsApp !",
-      phone: normalizedPhone,
+      message:
+        "Demande envoyée ✅. Tu recevras ton nouveau mot de passe sur WhatsApp très bientôt.",
     });
   } catch (error) {
-    console.error("[Forgot-Password] Erreur serveur:", error);
+    console.error("[Forgot-Manual] Erreur serveur:", error);
     return NextResponse.json(
-      { error: "Une erreur est survenue lors de la demande." },
+      { error: "Impossible d'envoyer la demande. Réessaie dans un instant." },
       { status: 500 }
     );
   }
