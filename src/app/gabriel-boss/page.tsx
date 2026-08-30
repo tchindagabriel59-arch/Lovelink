@@ -466,9 +466,8 @@ export default function AdminDashboard() {
           <QuickAction href="/gabriel-boss/abonnes" icon={<Crown />} label="Abonnés Premium" />
         </div>
 
-        Actualisation auto toutes les 5 min (pause si onglet inactif)
-        </p>
-          🔄 Actualisation automatique toutes les 60 secondes
+                <p className="text-center text-xs text-slate-600 mt-8">
+          🔄 Actualisation auto toutes les 5 min (pause si onglet inactif)
         </p>
       </main>
     </div>
