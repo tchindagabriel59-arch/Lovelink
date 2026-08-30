@@ -1,184 +1,127 @@
-import { NextRequest, NextResponse } from "next/server";
+// src/app/api/auth/forgot-password/route.ts
+import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { users, passwordResetTokens, pushSubscriptions } from "@/db/schema";
-import { eq, or, and, gt, isNull, desc } from "drizzle-orm";
+import { users, passwordResetTokens } from "@/db/schema";
+import { eq, or, and, gt, sql } from "drizzle-orm";
 import bcrypt from "bcryptjs";
-import { Resend } from "resend";
-import { sendPushToUser } from "@/lib/push";
+import {
+  normalizePhoneNumber,
+  phoneToSyntheticEmails,
+  sendWhatsAppResetCode,
+} from "@/lib/whatsapp";
 
-export const dynamic = "force-dynamic";
-
-function normalizeIdentifier(raw: string) {
-  const input = raw.trim();
-  const cleanInput = input.toLowerCase();
-  const cleanDigits = input.replace(/[\s\-\+\(\)]/g, "");
-  const cleanNo237 = cleanDigits.replace(/^237/, "");
-  return {
-    cleanInput,
-    cleanDigits,
-    phoneEmails: [
-      `phone_${cleanDigits}@phone.lovelink237.com`,
-      `phone_${cleanNo237}@phone.lovelink237.com`,
-      `phone_237${cleanNo237}@phone.lovelink237.com`,
-    ],
-  };
-}
-
-function isRealEmail(email: string) {
-  return (
-    email.includes("@") &&
-    !email.endsWith("@phone.lovelink237.com")
-  );
-}
-
-function generateCode() {
-  return String(Math.floor(100000 + Math.random() * 900000)); // 6 chiffres
-}
-
-export async function POST(req: NextRequest) {
+export async function POST(req: Request) {
   try {
-    const { identifier } = await req.json();
-    if (!identifier || String(identifier).trim().length < 3) {
+    const body = await req.json();
+    const { phone } = body;
+
+    if (!phone || typeof phone !== "string" || phone.trim().length < 8) {
       return NextResponse.json(
-        { error: "Indique ton email ou ton numéro WhatsApp" },
+        { error: "Veuillez entrer un numéro WhatsApp valide." },
         { status: 400 }
       );
     }
 
-    const { cleanInput, phoneEmails } = normalizeIdentifier(String(identifier));
+    const normalizedPhone = normalizePhoneNumber(phone.trim());
+    const syntheticEmails = phoneToSyntheticEmails(normalizedPhone);
 
-    // Toujours répondre pareil (anti-énumération des comptes)
-    const genericOk = {
-      success: true,
-      message:
-        "Si un compte existe, un code de réinitialisation a été envoyé. Vérifie tes emails, SMS/WhatsApp ou tes notifications.",
-    };
-
-    const [user] = await db
-      .select({
-        id: users.id,
-        email: users.email,
-        firstName: users.firstName,
-        isBanned: users.isBanned,
-      })
+    // 1. Recherche de l'utilisateur par numéro réel OU emails synthétiques
+    const foundUsers = await db
+      .select()
       .from(users)
       .where(
         or(
-          eq(users.email, cleanInput),
-          eq(users.email, phoneEmails[0]),
-          eq(users.email, phoneEmails[1]),
-          eq(users.email, phoneEmails[2])
+          eq(users.phone, normalizedPhone),
+          ...syntheticEmails.map((email) => eq(users.email, email))
         )
       )
       .limit(1);
 
-    if (!user || user.isBanned) {
-      return NextResponse.json(genericOk);
+    const user = foundUsers[0];
+
+    // Pour des raisons de sécurité, si le numéro n'existe pas,
+    // on simule le succès sans envoyer de SMS pour ne pas révéler qui est inscrit
+    if (!user) {
+      console.warn(`[Forgot-Password] Aucun compte trouvé pour: ${normalizedPhone}`);
+      return NextResponse.json({
+        success: true,
+        message: "Si ce numéro existe, un code a été envoyé sur WhatsApp.",
+        phone: normalizedPhone,
+      });
     }
 
-    // Rate limit : max 3 codes / 30 min
-    const since = new Date(Date.now() - 30 * 60 * 1000);
-    const recent = await db
-      .select({ id: passwordResetTokens.id })
+    // 2. Rate limiting : Max 3 demandes sur les 30 dernières minutes
+    const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000);
+    const recentTokensCount = await db
+      .select({ count: sql<number>`count(*)` })
       .from(passwordResetTokens)
       .where(
         and(
           eq(passwordResetTokens.userId, user.id),
-          gt(passwordResetTokens.createdAt, since)
+          gt(passwordResetTokens.createdAt, thirtyMinAgo)
         )
       );
 
-    if (recent.length >= 3) {
+    const count = Number(recentTokensCount[0]?.count || 0);
+    if (count >= 3) {
       return NextResponse.json(
-        { error: "Trop de tentatives. Réessaie dans 30 minutes." },
+        {
+          error:
+            "Trop de tentatives. Veuillez patienter 30 minutes avant de demander un nouveau code.",
+        },
         { status: 429 }
       );
     }
 
-    const code = generateCode();
-    const codeHash = await bcrypt.hash(code, 10);
-    const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+    // 3. Génération d'un code à 6 chiffres (ex: 839201)
+    const rawCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const codeHash = await bcrypt.hash(rawCode, 10);
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 min
 
+    // 4. Invalider les anciens codes non utilisés de cet user
+    await db
+      .update(passwordResetTokens)
+      .set({ usedAt: new Date() })
+      .where(
+        and(
+          eq(passwordResetTokens.userId, user.id),
+          sql`${passwordResetTokens.usedAt} IS NULL`
+        )
+      );
+
+    // 5. Sauvegarder le nouveau token en BDD
     await db.insert(passwordResetTokens).values({
       userId: user.id,
       codeHash,
       expiresAt,
     });
 
-    let sentBy: string[] = [];
+    // 6. Envoi WhatsApp
+    const sendResult = await sendWhatsAppResetCode(normalizedPhone, rawCode);
 
-    // 1) Email réel via Resend
-    if (isRealEmail(user.email) && process.env.RESEND_API_KEY) {
-      try {
-        const resend = new Resend(process.env.RESEND_API_KEY);
-        await resend.emails.send({
-          from:
-            process.env.RESEND_FROM ||
-            "LoveLink <onboarding@resend.dev>",
-          to: user.email,
-          subject: "Code de réinitialisation LoveLink",
-          html: `
-            <div style="font-family:sans-serif;max-width:480px;margin:0 auto">
-              <h2>Salut ${user.firstName} 👋</h2>
-              <p>Voici ton code pour réinitialiser ton mot de passe :</p>
-              <p style="font-size:32px;font-weight:900;letter-spacing:8px;color:#e11d48">${code}</p>
-              <p>Valable <strong>15 minutes</strong>.</p>
-              <p>Si tu n'as pas demandé ce code, ignore ce message.</p>
-              <p style="color:#64748b;font-size:12px">— LoveLink 💕</p>
-            </div>
-          `,
-        });
-        sentBy.push("email");
-      } catch (e) {
-        console.error("Resend error:", e);
-      }
+    if (!sendResult.success) {
+      console.error("[Forgot-Password] Erreur envoi WhatsApp:", sendResult.error);
+      return NextResponse.json(
+        {
+          error:
+            "Impossible d'envoyer le message WhatsApp. Vérifie ton numéro ou réessaie plus tard.",
+        },
+        { status: 500 }
+      );
     }
 
-    // 2) Push PWA si abonné
-    try {
-      const subs = await db
-        .select({ id: pushSubscriptions.id })
-        .from(pushSubscriptions)
-        .where(eq(pushSubscriptions.userId, user.id))
-        .limit(1);
+    console.log(`[Forgot-Password] Code envoyé à ${normalizedPhone} (User ID: ${user.id})`);
 
-      if (subs.length > 0) {
-        await sendPushToUser(user.id, {
-          title: "🔑 Code LoveLink",
-          body: `Ton code de réinitialisation : ${code} (15 min)`,
-          tag: "password_reset",
-          url: "/reset-password",
-        });
-        sentBy.push("push");
-      }
-    } catch (e) {
-      console.error("Push reset error:", e);
-    }
-
-    // Log serveur (jamais renvoyer le code au client en prod)
-    console.log(
-      `[RESET] user=${user.id} sentVia=${sentBy.join(",") || "none"}`
-    );
-
-    // En dev uniquement, aide au debug :
-    const payload: Record<string, unknown> = { ...genericOk };
-    if (process.env.NODE_ENV !== "production") {
-      payload.debugCode = code;
-      payload.sentBy = sentBy;
-    }
-
-    // Indice UX sans spoiler le compte
-    if (sentBy.includes("email")) {
-      payload.hint = "email";
-    } else if (sentBy.includes("push")) {
-      payload.hint = "push";
-    } else if (!isRealEmail(user.email)) {
-      payload.hint = "phone_no_channel";
-    }
-
-    return NextResponse.json(payload);
+    return NextResponse.json({
+      success: true,
+      message: "Code envoyé avec succès par WhatsApp !",
+      phone: normalizedPhone,
+    });
   } catch (error) {
-    console.error("forgot-password error:", error);
-    return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
+    console.error("[Forgot-Password] Erreur serveur:", error);
+    return NextResponse.json(
+      { error: "Une erreur est survenue lors de la demande." },
+      { status: 500 }
+    );
   }
 }
