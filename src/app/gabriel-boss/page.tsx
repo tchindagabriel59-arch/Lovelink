@@ -127,11 +127,24 @@ export default function AdminDashboard() {
     }
   }, []);
 
-  useEffect(() => {
+    useEffect(() => {
     fetchAll();
-    // ✅ Polling à 60s au lieu de 30s (dashboard admin change pas si vite)
-    const interval = setInterval(fetchAll, 60000);
-    return () => clearInterval(interval);
+
+    // 🔋 5 min + pause si onglet caché
+    const interval = setInterval(() => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      fetchAll();
+    }, 5 * 60 * 1000);
+
+    const onVisible = () => {
+      if (!document.hidden) fetchAll();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [fetchAll]);
 
   async function handleRelancePhotos() {
@@ -453,7 +466,8 @@ export default function AdminDashboard() {
           <QuickAction href="/gabriel-boss/abonnes" icon={<Crown />} label="Abonnés Premium" />
         </div>
 
-        <p className="text-center text-xs text-slate-600 mt-8">
+        Actualisation auto toutes les 5 min (pause si onglet inactif)
+        </p>
           🔄 Actualisation automatique toutes les 60 secondes
         </p>
       </main>
