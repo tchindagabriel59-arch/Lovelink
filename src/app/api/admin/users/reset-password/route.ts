@@ -5,77 +5,71 @@ import { users } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 
+export const dynamic = "force-dynamic";
+
 export async function POST(req: Request) {
+  console.log("--- DEBUG ADMIN RESET START ---");
+  
   try {
-    // 1. Récupération sécurisée du body
+    // 1. Essayer de lire le body peu importe le format
     let body: any = {};
-    try {
+    const contentType = req.headers.get("content-type") || "";
+    
+    if (contentType.includes("application/json")) {
       body = await req.json();
-    } catch (e) {
-      console.warn("[Admin-Reset] Body JSON invalide ou vide:", e);
+    } else {
+      const formData = await req.formData();
+      formData.forEach((value, key) => {
+        body[key] = value;
+      });
     }
+    
+    console.log("Payload reçu:", JSON.stringify(body));
 
-    console.log("[Admin-Reset] Requête reçue:", JSON.stringify(body));
-
-    // 2. Extraire le userId sous n'importe quelle forme envoyée par le frontend
-    const rawId = body?.userId ?? body?.id ?? body?.targetUserId ?? body?.user?.id;
+    // 2. Chercher l'ID partout (userId, id, targetId, etc.)
+    const rawId = body.userId || body.id || body.targetUserId || body.targetId;
     const userId = Number(rawId);
 
     if (!userId || isNaN(userId)) {
-      console.error("[Admin-Reset] ID manquant ou invalide:", rawId);
-      return NextResponse.json(
-        { success: false, error: "ID utilisateur manquant." },
-        { status: 400 }
-      );
+      console.error("ID invalide détecté:", rawId);
+      return NextResponse.json({ 
+        success: false, 
+        error: "ID utilisateur manquant dans la requête." 
+      }, { status: 200 }); // On renvoie 200 pour éviter l'erreur réseau
     }
 
-    // 3. Vérifier la présence de l'utilisateur dans Neon
-    const existingUser = await db
-      .select({ id: users.id })
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1);
-
-    if (!existingUser || existingUser.length === 0) {
-      console.error(`[Admin-Reset] User ID ${userId} introuvable en BDD.`);
-      return NextResponse.json(
-        { success: false, error: `Utilisateur #${userId} introuvable.` },
-        { status: 404 }
-      );
-    }
-
-    // 4. Générer le mot de passe temporaire (ex: Lk-8X3K9M2P)
+    // 3. Générer le code
     const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
     let randomCode = "";
     for (let i = 0; i < 8; i++) {
       randomCode += chars.charAt(Math.floor(Math.random() * chars.length));
     }
-    const temporaryPassword = `Lk-${randomCode}`;
+    const tempPass = `Lk-${randomCode}`;
+    
+    console.log(`Hachage pour ID ${userId}...`);
+    const hash = await bcrypt.hash(tempPass, 10);
 
-    // 5. Hachage bcrypt (10 rounds)
-    const passwordHash = await bcrypt.hash(temporaryPassword, 10);
-
-    // 6. Mise à jour dans Neon
+    // 4. Update Neon
     await db
       .update(users)
-      .set({ passwordHash })
+      .set({ passwordHash: hash })
       .where(eq(users.id, userId));
 
-    console.log(`[Admin-Reset] ✅ Mot de passe généré pour User #${userId} : ${temporaryPassword}`);
+    console.log(`✅ SUCCÈS : ${tempPass} pour ID ${userId}`);
 
-    // 7. Réponse 200 universelle (toutes les clés possibles pour le frontend)
     return NextResponse.json({
-      ok: true,
       success: true,
-      password: temporaryPassword,
-      temporaryPassword: temporaryPassword,
-      message: temporaryPassword,
+      ok: true,
+      temporaryPassword: tempPass,
+      password: tempPass,
+      message: `Code généré : ${tempPass}`
     });
-  } catch (error) {
-    console.error("[Admin-Reset] Erreur serveur critique:", error);
-    return NextResponse.json(
-      { success: false, error: "Erreur serveur lors du reset." },
-      { status: 500 }
-    );
+
+  } catch (err: any) {
+    console.error("CRASH API ADMIN:", err);
+    return NextResponse.json({ 
+      success: false, 
+      error: "Crash serveur: " + err.message 
+    }, { status: 200 }); // Toujours 200 pour que le front affiche l'erreur proprement
   }
 }
