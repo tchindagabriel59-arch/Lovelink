@@ -1,125 +1,144 @@
+// src/app/forgot-password/page.tsx
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { KeyRound, ArrowLeft, Loader2 } from "lucide-react";
+import Link from "next/link";
+import { Smartphone, ArrowRight, ArrowLeft, Loader2, KeyRound } from "lucide-react";
 
 export default function ForgotPasswordPage() {
   const router = useRouter();
-  const [identifier, setIdentifier] = useState("");
+  const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
-  const [hint, setHint] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
-  async function handleSubmit(e: React.FormEvent) {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError(null);
+    setSuccessMsg(null);
+
+    if (!phone || phone.trim().length < 8) {
+      setError("Renseigne un numéro WhatsApp valide.");
+      return;
+    }
+
     setLoading(true);
-    setError("");
-    setMessage("");
-    setHint("");
 
     try {
       const res = await fetch("/api/auth/forgot-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ identifier }),
+        body: JSON.stringify({ phone }),
       });
+
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error || "Erreur");
-        return;
+        throw new Error(data.error || "Une erreur est survenue.");
       }
 
-      setMessage(data.message);
-      if (data.hint === "email") {
-        setHint("📬 Regarde ta boîte email (et les spams).");
-      } else if (data.hint === "push") {
-        setHint("📱 Regarde tes notifications LoveLink sur le téléphone.");
-      } else if (data.hint === "phone_no_channel") {
-        setHint(
-          "⚠️ Active les notifications LoveLink sur ton téléphone, ou utilise l'email du compte si tu en as un. Sinon contacte le support."
-        );
-      }
+      setSuccessMsg(data.message || "Code envoyé sur WhatsApp !");
 
-      // Redirige vers saisie du code après 1.5s
+      // Redirection automatique vers /reset-password après 1.5s
       setTimeout(() => {
-        router.push(
-          `/reset-password?id=${encodeURIComponent(identifier.trim())}`
-        );
+        const encodedPhone = encodeURIComponent(data.phone || phone);
+        router.push(`/reset-password?phone=${encodedPhone}`);
       }, 1500);
-    } catch {
-      setError("Erreur de connexion");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erreur de connexion.");
     } finally {
       setLoading(false);
     }
-  }
+  };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-rose-50 to-purple-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl shadow-xl max-w-md w-full p-8">
+    <div className="min-h-screen bg-slate-950 text-white flex flex-col justify-center items-center px-4 py-8">
+      <div className="w-full max-w-md bg-slate-900/90 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl backdrop-blur-xl">
         <Link
           href="/login"
-          className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-rose-500 mb-6"
+          className="inline-flex items-center text-sm text-slate-400 hover:text-pink-400 transition mb-6"
         >
-          <ArrowLeft className="w-4 h-4" /> Retour
+          <ArrowLeft className="w-4 h-4 mr-2" /> Retour à la connexion
         </Link>
 
-        <div className="w-14 h-14 bg-gradient-to-br from-rose-500 to-purple-600 rounded-2xl flex items-center justify-center mb-4">
-          <KeyRound className="w-7 h-7 text-white" />
+        <div className="flex items-center space-x-3 mb-4">
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-pink-500 to-rose-600 flex items-center justify-center shadow-lg shadow-pink-500/20">
+            <KeyRound className="w-6 h-6 text-white" />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold bg-gradient-to-r from-pink-400 via-rose-300 to-white bg-clip-text text-transparent">
+              Mot de passe oublié ?
+            </h1>
+            <p className="text-xs text-slate-400">Récupération par WhatsApp</p>
+          </div>
         </div>
 
-        <h1 className="text-2xl font-black text-slate-900 mb-2">
-          Mot de passe oublié ?
-        </h1>
-        <p className="text-slate-500 text-sm mb-6">
-          Entre ton email ou ton numéro WhatsApp. On t&apos;envoie un code à 6
-          chiffres.
+        <p className="text-sm text-slate-300 mb-6 leading-relaxed">
+          Entre le numéro WhatsApp lié à ton compte. Nous t’enverrons un code à 6 chiffres.
         </p>
+
+        {error && (
+          <div className="mb-4 p-3.5 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-300 text-xs font-medium">
+            {error}
+          </div>
+        )}
+
+        {successMsg && (
+          <div className="mb-4 p-3.5 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-300 text-xs font-medium">
+            {successMsg}
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-              Email ou numéro WhatsApp
+            <label className="block text-xs font-semibold text-slate-300 mb-1.5 uppercase tracking-wider">
+              Numéro WhatsApp
             </label>
-            <input
-              type="text"
-              value={identifier}
-              onChange={(e) => setIdentifier(e.target.value)}
-              placeholder="ex: 651387914 ou email@gmail.com"
-              required
-              className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-rose-400 focus:ring-2 focus:ring-rose-100 outline-none"
-            />
+            <div className="relative">
+              <Smartphone className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
+              <input
+                type="tel"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="Ex: 6XXXXXXXX ou 7XXXXXXXX"
+                required
+                disabled={loading}
+                className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3.5 pl-11 pr-4 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition disabled:opacity-50"
+              />
+            </div>
+            <p className="text-[11px] text-slate-500 mt-1.5">
+              Cameroun (6xx...), Sénégal (7xx...), ou format international (+221...)
+            </p>
           </div>
-
-          {error && (
-            <div className="p-3 bg-red-50 text-red-600 text-sm rounded-xl">
-              {error}
-            </div>
-          )}
-          {message && (
-            <div className="p-3 bg-green-50 text-green-700 text-sm rounded-xl">
-              {message}
-              {hint && <p className="mt-2 font-medium">{hint}</p>}
-            </div>
-          )}
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3.5 bg-gradient-to-r from-rose-500 to-purple-600 text-white font-bold rounded-xl disabled:opacity-50 flex items-center justify-center gap-2"
+            className="w-full mt-2 bg-gradient-to-r from-pink-500 to-rose-600 hover:from-pink-600 hover:to-rose-700 text-white font-semibold py-3.5 px-4 rounded-2xl shadow-lg shadow-pink-500/25 flex items-center justify-center space-x-2 transition transform active:scale-[0.98] disabled:opacity-50"
           >
             {loading ? (
               <>
-                <Loader2 className="w-5 h-5 animate-spin" /> Envoi...
+                <Loader2 className="w-5 h-5 animate-spin" />
+                <span>Envoi du code...</span>
               </>
             ) : (
-              "Recevoir mon code"
+              <>
+                <span>Recevoir le code sur WhatsApp</span>
+                <ArrowRight className="w-4 h-4" />
+              </>
             )}
           </button>
         </form>
+
+        <div className="mt-6 pt-6 border-t border-slate-800/80 text-center">
+          <Link
+            href="/reset-password"
+            className="text-xs text-slate-400 hover:text-pink-400 transition"
+          >
+            Tu as déjà un code ? <span className="underline font-semibold">Saisir le code ici</span>
+          </Link>
+        </div>
       </div>
     </div>
   );
