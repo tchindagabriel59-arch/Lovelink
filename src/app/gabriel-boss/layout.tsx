@@ -60,10 +60,26 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     }
   }, []);
 
-  useEffect(() => {
+    useEffect(() => {
     fetchCounts();
-    const interval = setInterval(fetchCounts, 60000);
-    return () => clearInterval(interval);
+
+    // 🔋 5 min au lieu de 60s — économise Neon CU-h
+    const interval = setInterval(() => {
+      // Ne poll pas si l'onglet est en arrière-plan
+      if (typeof document !== "undefined" && document.hidden) return;
+      fetchCounts();
+    }, 5 * 60 * 1000);
+
+    // Refresh immédiat quand tu reviens sur l'onglet
+    const onVisible = () => {
+      if (!document.hidden) fetchCounts();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [fetchCounts]);
 
   useEffect(() => {
