@@ -402,20 +402,14 @@ export default function DiscoverPage() {
     setShowDirectMessageModal(true);
   };
 
-  const submitDirectMessage = async () => {
-    if (!directMessageText.trim() || !profiles[currentIndex]) return;
-    setSendingDirectMessage(true);
-
-    try {
-      await fetch("/api/like", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          toUserId: profiles[currentIndex].id,
-          isLike: true,
-          message: directMessageText,
-        }),
-      });
+  await fetch("/api/messages/send", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    receiverId: profiles[currentIndex].id,
+    content: directMessageText,
+  }),
+});
 
       setShowDirectMessageModal(false);
       setDirectMessageText("");
