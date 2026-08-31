@@ -6,47 +6,49 @@ import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
-function notifyTelegramBackground(text: string) {
+function notifyTelegram(text: string) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.TELEGRAM_CHAT_ID;
   if (!token || !chatId) return;
-
+  // fire-and-forget (ne bloque pas la réponse)
   fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ chat_id: chatId, text, parse_mode: "HTML" }),
-  }).catch((err) => console.error("[Admin-Reset] Telegram err:", err));
+  }).catch(() => {});
 }
 
 export async function POST(req: Request) {
   try {
-    let body: any = {};
-    try { body = await req.json(); } catch { body = {}; }
+    const body = await req.json().catch(() => ({} as any));
+    const userId = Number(body.userId ?? body.id ?? body.targetUserId);
 
-    const rawId = body?.userId ?? body?.id ?? body?.targetUserId;
-    const userId = Number(rawId);
-
-    if (!userId || isNaN(userId)) {
-      return NextResponse.json({ success: false, error: "ID utilisateur manquant." }, { status: 400 });
+    if (!userId || Number.isNaN(userId)) {
+      return NextResponse.json(
+        { success: false, error: "ID utilisateur manquant." },
+        { status: 400 }
+      );
     }
 
-    // Génération du code Lk-XXXXXXXX
+    // Code lisible : Lk-XXXXXXXX
     const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-    let randomCode = "";
+    let random = "";
     for (let i = 0; i < 8; i++) {
-      randomCode += chars.charAt(Math.floor(Math.random() * chars.length));
+      random += chars.charAt(Math.floor(Math.random() * chars.length));
     }
-    const temporaryPassword = `Lk-${randomCode}`;
-
-    // Hash bcrypt (10 rounds)
+    const temporaryPassword = `Lk-${random}`;
     const passwordHash = await bcrypt.hash(temporaryPassword, 10);
-    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // Valide 24h
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
-    // 1. Mettre à jour le mot de passe utilisateur dans users
-    await db.update(users).set({ passwordHash }).where(eq(users.id, userId));
+    // 1) Update mot de passe user
+    await db
+      .update(users)
+      .set({ passwordHash })
+      .where(eq(users.id, userId));
 
-    // 2. Enregistrer aussi dans passwordResetTokens pour la recherche rapide
+    // 2) Stocke aussi le token (pour retrouver le compte par le code)
     try {
       await db.insert(passwordResetTokens).values({
         userId,
@@ -54,24 +56,33 @@ export async function POST(req: Request) {
         expiresAt,
       });
     } catch (e) {
-      console.warn("[Admin-Reset] Erreur insertion token table:", e);
+      console.warn("[Admin-Reset] password_reset_tokens insert failed:", e);
     }
 
-    console.log(`[Admin-Reset] ✅ Code généré pour User #${userId} : ${temporaryPassword}`);
+    console.log(`[Admin-Reset] OK user #${userId} → ${temporaryPassword}`);
 
-    notifyTelegramBackground(
-      `<b>🔑 NOUVEAU CODE D'ACCÈS</b>\n\nUser ID : ${userId}\nCode : <code>${temporaryPassword}</code>`
+    notifyTelegram(
+      `<b>🔑 CODE RESET LOVELINK</b>\n\nUser ID: <code>${userId}</code>\nCode: <code>${temporaryPassword}</code>`
     );
 
+    // Réponse compatible avec le plus grand nombre de frontends admin
     return NextResponse.json({
       success: true,
       ok: true,
       password: temporaryPassword,
-      temporaryPassword: temporaryPassword,
+      temporaryPassword,
+      newPassword: temporaryPassword,
       message: temporaryPassword,
+      data: {
+        password: temporaryPassword,
+        temporaryPassword,
+      },
     });
   } catch (error: any) {
-    console.error("[Admin-Reset] Erreur serveur:", error);
-    return NextResponse.json({ success: false, error: "Erreur lors de la génération." }, { status: 500 });
+    console.error("[Admin-Reset] FATAL:", error);
+    return NextResponse.json(
+      { success: false, error: error?.message || "Erreur serveur" },
+      { status: 500 }
+    );
   }
 }
