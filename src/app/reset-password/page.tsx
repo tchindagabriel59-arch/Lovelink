@@ -99,8 +99,8 @@ function ResetPasswordForm() {
 
       <div>
         <label className="block text-xs font-semibold text-slate-300 mb-1.5 uppercase tracking-wider">
-          Ton numéro WhatsApp
-        </label>
+  Numéro WhatsApp ou Email
+</label>
         <div className="relative">
           <Smartphone className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
           <input
