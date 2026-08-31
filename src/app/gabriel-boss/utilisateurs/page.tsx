@@ -185,7 +185,7 @@ export default function AdminUsersPage() {
 
   const handleResetPassword = async (userId: number) => {
   try {
-    setLoading(true);
+    setResettingPassword(true);
     const res = await fetch("/api/admin/users/reset-password", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -196,16 +196,15 @@ export default function AdminUsersPage() {
 
     if (data.success || data.ok || data.password || data.temporaryPassword) {
       const pass = data.temporaryPassword || data.password || data.message;
-      alert(`✅ NOUVEAU MOT DE PASSE GÉNÉRÉ :\n\n${pass}\n\n(Envoyé aussi sur Telegram)`);
+      alert(`✅ MOT DE PASSE GÉNÉRÉ AVEC SUCCÈS !\n\nMot de passe : ${pass}\n\n(Reçu aussi sur Telegram)`);
     } else {
-      alert(`⚠️ ${data.error || "Erreur lors de la génération"}`);
+      alert(`❌ Erreur: ${data.error || "Impossible de générer le mot de passe"}`);
     }
   } catch (err) {
-    // Si le JSON a réussi mais que le state plante, on alerte quand même
-    console.error("Reset error:", err);
-    alert("✅ Mot de passe généré ! Vérifie ton Telegram.");
+    console.error("Erreur reset:", err);
+    alert("❌ Erreur de connexion au serveur.");
   } finally {
-    setLoading(false);
+    setResettingPassword(false);
   }
 };
 
@@ -493,7 +492,7 @@ export default function AdminUsersPage() {
                 <p className="text-sm font-semibold mb-3">⚡ Actions administrateur</p>
                 <div className="grid grid-cols-2 gap-3">
                   <button
-                    onClick={() => handleAdminResetPassword(selectedUser.id)}
+                    onClick={() => handleResetPassword(selectedUser.id)}
                     disabled={resettingPassword}
                     className="col-span-2 py-3.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-slate-950 font-black rounded-xl flex items-center justify-center gap-2 transition shadow-lg"
                   >
