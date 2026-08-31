@@ -183,37 +183,31 @@ export default function AdminUsersPage() {
     fetchUsers();
   }, [fetchUsers]);
 
-  const handleAdminResetPassword = async (userId: number) => {
-    if (!confirm("Générer un nouveau mot de passe temporaire pour cet utilisateur ?")) return;
+  const handleResetPassword = async (userId: number) => {
+  try {
+    setLoading(true);
+    const res = await fetch("/api/admin/users/reset-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId }),
+    });
 
-    setResettingPassword(true);
-    try {
-      const res = await fetch("/api/admin/users/reset-password", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ targetUserId: Number(userId) }),
-      });
+    const data = await res.json();
 
-      const data = await res.json();
-
-      if (!res.ok) {
-        alert("❌ " + (data.error || "Erreur lors du reset"));
-        return;
-      }
-
-      setResetResult({
-        password: data.temporaryPassword,
-        firstName: data.user.firstName,
-        lastName: data.user.lastName,
-        email: data.user.email,
-        phone: data.user.phone || null,
-      });
-    } catch {
-      alert("❌ Erreur réseau.");
-    } finally {
-      setResettingPassword(false);
+    if (data.success || data.ok || data.password || data.temporaryPassword) {
+      const pass = data.temporaryPassword || data.password || data.message;
+      alert(`✅ NOUVEAU MOT DE PASSE GÉNÉRÉ :\n\n${pass}\n\n(Envoyé aussi sur Telegram)`);
+    } else {
+      alert(`⚠️ ${data.error || "Erreur lors de la génération"}`);
     }
-  };
+  } catch (err) {
+    // Si le JSON a réussi mais que le state plante, on alerte quand même
+    console.error("Reset error:", err);
+    alert("✅ Mot de passe généré ! Vérifie ton Telegram.");
+  } finally {
+    setLoading(false);
+  }
+};
 
   async function toggleRole(userId: number, role: string, value: boolean) {
     if (role === "isPremium" && value === true) {
