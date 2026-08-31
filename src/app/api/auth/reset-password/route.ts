@@ -1,95 +1,134 @@
 // src/app/api/auth/reset-password/route.ts
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { users } from "@/db/schema";
-import { eq, or, and } from "drizzle-orm"; // Ajout de 'and' ici
+import { users, passwordResetTokens } from "@/db/schema";
+import { eq, or, and, gt, isNull, desc } from "drizzle-orm";
 import bcrypt from "bcryptjs";
-import { normalizePhoneNumber, phoneToSyntheticEmails } from "@/lib/whatsapp";
+import {
+  normalizePhoneNumber,
+  phoneToSyntheticEmails,
+} from "@/lib/whatsapp";
+
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { phone, code, newPassword } = body;
+    const cleanCode = String(body.code || "").trim();
+    const cleanNewPass = String(body.newPassword || "").trim();
+    const rawPhone = String(body.phone || "").trim();
 
-    const cleanCode = String(code || "").trim();
-    const cleanNewPass = String(newPassword || "").trim();
-    const normalizedPhone = normalizePhoneNumber(String(phone || "").trim());
-
-    if (!cleanCode || cleanNewPass.length < 6) {
+    if (!cleanCode || cleanCode.length < 4) {
+      return NextResponse.json(
+        { error: "Saisis le code reçu (ex: Lk-XXXXXXXX)." },
+        { status: 400 }
+      );
+    }
+    if (cleanNewPass.length < 6) {
       return NextResponse.json(
         { error: "Le nouveau mot de passe doit faire au moins 6 caractères." },
         { status: 400 }
       );
     }
 
-    // --- STRATÉGIE : RECHERCHE DIRECTE DANS LA TABLE USERS ---
-    // Puisque l'admin vient de mettre à jour le passwordHash de l'user, 
-    // le code secret (Lk-...) est actuellement le hash du compte.
+    let targetUserId: number | null = null;
 
-    const syntheticEmails = phoneToSyntheticEmails(normalizedPhone);
-    
-    // On récupère tous les utilisateurs qui pourraient correspondre au numéro
-    const matchingUsers = await db
-      .select()
-      .from(users)
-      .where(or(...syntheticEmails.map((email) => eq(users.email, email))));
+    // ========== STRATÉGIE A : tokens récents (la bonne) ==========
+    try {
+      const tokens = await db
+        .select()
+        .from(passwordResetTokens)
+        .where(
+          and(
+            gt(passwordResetTokens.expiresAt, new Date()),
+            isNull(passwordResetTokens.usedAt)
+          )
+        )
+        .orderBy(desc(passwordResetTokens.createdAt))
+        .limit(50);
 
-    let targetUser = null;
-
-    // On teste le code sur chaque compte trouvé
-    for (const u of matchingUsers) {
-      if (!u.passwordHash) continue;
-
-      // Vérification bcrypt du code envoyé par l'admin
-      const isMatch = await bcrypt.compare(cleanCode, u.passwordHash);
-      if (isMatch) {
-        targetUser = u;
-        break;
+      for (const t of tokens) {
+        const ok = await bcrypt.compare(cleanCode, t.codeHash);
+        if (ok) {
+          targetUserId = t.userId;
+          // marque utilisé
+          await db
+            .update(passwordResetTokens)
+            .set({ usedAt: new Date() })
+            .where(eq(passwordResetTokens.id, t.id));
+          break;
+        }
       }
+    } catch (e) {
+      console.warn("[Reset-Password] tokens lookup skip:", e);
     }
 
-    // SI NON TROUVÉ PAR TÉLÉPHONE : Recherche large (au cas où le numéro saisi est différent)
-    if (!targetUser) {
-      // On prend les 50 derniers utilisateurs modifiés (pour la performance)
-      const recentUsers = await db
-        .select({ id: users.id, passwordHash: users.passwordHash })
-        .from(users)
-        .limit(100);
+    // ========== STRATÉGIE B : par numéro WhatsApp ==========
+    if (!targetUserId && rawPhone) {
+      const normalizedPhone = normalizePhoneNumber(rawPhone);
+      const emails = phoneToSyntheticEmails(normalizedPhone);
 
-      for (const u of recentUsers) {
-        if (u.passwordHash && (await bcrypt.compare(cleanCode, u.passwordHash))) {
-          targetUser = u;
+      const phoneUsers = await db
+        .select()
+        .from(users)
+        .where(or(...emails.map((e) => eq(users.email, e))))
+        .limit(10);
+
+      for (const u of phoneUsers) {
+        if (!u.passwordHash) continue;
+        if (await bcrypt.compare(cleanCode, u.passwordHash)) {
+          targetUserId = u.id;
           break;
         }
       }
     }
 
-    if (!targetUser) {
+    // ========== STRATÉGIE C : secours — users les plus récents ==========
+    if (!targetUserId) {
+      // ⚠️ important: order by id DESC pour prendre les comptes récents
+      const recent = await db
+        .select({ id: users.id, passwordHash: users.passwordHash })
+        .from(users)
+        .orderBy(desc(users.id))
+        .limit(200);
+
+      for (const u of recent) {
+        if (!u.passwordHash) continue;
+        if (await bcrypt.compare(cleanCode, u.passwordHash)) {
+          targetUserId = u.id;
+          break;
+        }
+      }
+    }
+
+    if (!targetUserId) {
+      console.warn(`[Reset-Password] Code invalide: ${cleanCode}`);
       return NextResponse.json(
-        { error: "Code secret incorrect. Recopie bien le code envoyé par l'administrateur." },
+        {
+          error:
+            "Code secret incorrect. Vérifie le code Telegram/WhatsApp, ou régénère un nouveau code dans l'admin sur LE BON utilisateur.",
+        },
         { status: 400 }
       );
     }
 
-    // Hachage du NOUVEAU mot de passe choisi par l'utilisateur
-    const hashedNewPassword = await bcrypt.hash(cleanNewPass, 10);
-
-    // Mise à jour finale du compte avec le vrai mot de passe
+    const newHash = await bcrypt.hash(cleanNewPass, 10);
     await db
       .update(users)
-      .set({ passwordHash: hashedNewPassword })
-      .where(eq(users.id, targetUser.id));
+      .set({ passwordHash: newHash })
+      .where(eq(users.id, targetUserId));
 
-    console.log(`[Reset-Password] ✅ RÉUSSITE pour User #${targetUser.id}`);
+    console.log(`[Reset-Password] ✅ OK user #${targetUserId}`);
 
     return NextResponse.json({
       success: true,
-      message: "Mot de passe réinitialisé ! Tu peux maintenant te connecter.",
+      message: "Mot de passe réinitialisé ! Tu peux te connecter.",
     });
   } catch (error) {
-    console.error("[Reset-Password] Erreur serveur:", error);
+    console.error("[Reset-Password] FATAL:", error);
     return NextResponse.json(
-      { error: "Une erreur est survenue lors de la réinitialisation." },
+      { error: "Erreur serveur lors de la réinitialisation." },
       { status: 500 }
     );
   }
