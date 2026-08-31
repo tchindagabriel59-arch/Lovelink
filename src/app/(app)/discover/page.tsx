@@ -1,8 +1,10 @@
+// src/app/(app)/discover/page.tsx
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import MatchModal from "@/components/MatchModal";
 import {
   Heart,
   X,
@@ -269,10 +271,15 @@ export default function DiscoverPage() {
   const [showPremiumModal, setShowPremiumModal] = useState(false);
   const [premiumFeature, setPremiumFeature] = useState<string>("");
 
-  // 💬 Modale Message Direct
+  // 💬 Modale Message Direct & Modale Match
   const [showDirectMessageModal, setShowDirectMessageModal] = useState(false);
   const [directMessageText, setDirectMessageText] = useState("");
   const [sendingDirectMessage, setSendingDirectMessage] = useState(false);
+  const [matchModalUser, setMatchModalUser] = useState<{
+    id: number;
+    name: string;
+    photoUrl: string | null;
+  } | null>(null);
 
   const [animating, setAnimating] = useState<"left" | "right" | "up" | null>(null);
   const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
@@ -343,11 +350,26 @@ export default function DiscoverPage() {
       const profile = profiles[currentIndex];
       setAnimating(isLike ? "right" : "left");
 
-      fetch("/api/like", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ toUserId: profile.id, isLike }),
-      }).catch(() => {});
+      try {
+        const res = await fetch("/api/like", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ toUserId: profile.id, isLike }),
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          if (isLike && (data?.isMatch || data?.matched)) {
+            setMatchModalUser({
+              id: profile.id,
+              name: profile.firstName,
+              photoUrl: profile.photoUrl,
+            });
+          }
+        }
+      } catch (err) {
+        console.error("Erreur lors du like:", err);
+      }
 
       setTimeout(() => {
         setDragOffset({ x: 0, y: 0 });
@@ -365,11 +387,26 @@ export default function DiscoverPage() {
 
     setAnimating("up");
 
-    fetch("/api/like", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ toUserId: profile.id, isLike: true, isSuperLike: true }),
-    }).catch(() => {});
+    try {
+      const res = await fetch("/api/like", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ toUserId: profile.id, isLike: true, isSuperLike: true }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.isMatch || data?.matched) {
+          setMatchModalUser({
+            id: profile.id,
+            name: profile.firstName,
+            photoUrl: profile.photoUrl,
+          });
+        }
+      }
+    } catch (err) {
+      console.error("Erreur lors du superlike:", err);
+    }
 
     setTimeout(() => {
       setDragOffset({ x: 0, y: 0 });
@@ -402,20 +439,30 @@ export default function DiscoverPage() {
     setShowDirectMessageModal(true);
   };
 
-  await fetch("/api/messages/send", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({
-    receiverId: profiles[currentIndex].id,
-    content: directMessageText,
-  }),
-});
+  const submitDirectMessage = async () => {
+    if (!directMessageText.trim() || !profiles[currentIndex]) return;
+    setSendingDirectMessage(true);
+
+    try {
+      const res = await fetch("/api/messages/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          receiverId: profiles[currentIndex].id,
+          content: directMessageText.trim(),
+        }),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || "Erreur lors de l'envoi");
+      }
 
       setShowDirectMessageModal(false);
       setDirectMessageText("");
       handleAction(true);
-    } catch {
-      alert("Erreur lors de l'envoi");
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Erreur lors de l'envoi");
     } finally {
       setSendingDirectMessage(false);
     }
@@ -428,7 +475,7 @@ export default function DiscoverPage() {
   if (loading) return <DiscoverSkeleton />;
 
   // ==========================================
-  // ÉCRAN VIDE (Tu as tout vu !) - CORRIGÉ
+  // ÉCRAN VIDE (Tu as tout vu !)
   // ==========================================
   if (!currentProfile || currentIndex >= profiles.length) {
     return (
@@ -480,7 +527,7 @@ export default function DiscoverPage() {
       {/* 🚀 TOUR EN DIRECT */}
       {showTour && <OnboardingTour onFinish={completeTour} />}
 
-      {/* 🚀 BANNIÈRE PROMO BOOST (max 2 fois) */}
+      {/* 🚀 BANNIÈRE PROMO BOOST */}
       {showBoostPromo && !showTour && (
         <div className="fixed bottom-28 left-3 right-3 z-[90] max-w-md mx-auto animate-in slide-in-from-bottom duration-300">
           <div className="bg-gradient-to-r from-purple-600 via-rose-500 to-amber-400 p-[1.5px] rounded-2xl shadow-2xl">
@@ -581,6 +628,13 @@ export default function DiscoverPage() {
           </div>
         </div>
       )}
+
+      {/* 💖 MODALE NOUVEAU MATCH */}
+      <MatchModal
+        isOpen={!!matchModalUser}
+        onClose={() => setMatchModalUser(null)}
+        matchedUser={matchModalUser}
+      />
 
       {/* CARTE PROFIL */}
       <div
