@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useUser } from "../layout";
 import PushNotifButton from "../../components/PushNotifButton";
 import RewardBanner from "../../components/RewardBanner";
-import ProfileCompletionCard from "@/components/ProfileCompletionCard";
+import ProfileCompletionCard from "../../components/ProfileCompletionCard";
 import {
   User,
   MapPin,
