@@ -454,7 +454,7 @@ export default function DashboardPage() {
                   />
                 </div>
                 <Link
-                  href="/profile"
+                  href="/complete-profile"
                   className="inline-flex items-center gap-2 px-4 py-2 bg-white text-purple-600 rounded-lg font-bold text-sm hover:shadow-lg transition"
                 >
                   Améliorer mon profil
