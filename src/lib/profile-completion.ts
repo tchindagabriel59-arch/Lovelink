@@ -71,8 +71,7 @@ export function calculateProfileCompletion(
       points: 25,
       cta: "Ajouter une photo",
       href: "/profile",
-      priority: 1,
-      emoji: "📸",
+      href: "/complete-profile"
     });
   }
 
@@ -93,8 +92,7 @@ export function calculateProfileCompletion(
       points: (3 - extraCount) * 5,
       cta: "Ajouter des photos",
       href: "/profile",
-      priority: 2,
-      emoji: "🖼️",
+      href: "/complete-profile"
     });
   }
 
@@ -112,8 +110,7 @@ export function calculateProfileCompletion(
       points: 15,
       cta: "Écrire ma bio",
       href: "/profile",
-      priority: 3,
-      emoji: "✍️",
+      href: "/complete-profile",
     });
   }
 
@@ -129,8 +126,7 @@ export function calculateProfileCompletion(
       points: 10,
       cta: "Ajouter ma ville",
       href: "/profile",
-      priority: 4,
-      emoji: "📍",
+      href: "/complete-profile"
     });
   }
 
@@ -147,8 +143,7 @@ export function calculateProfileCompletion(
       points: 8,
       cta: "Ajouter mon métier",
       href: "/profile",
-      priority: 6,
-      emoji: "💼",
+      href: "/complete-profile",
     });
   }
 
@@ -166,8 +161,7 @@ export function calculateProfileCompletion(
       points: 12,
       cta: "Ajouter mes intérêts",
       href: "/profile",
-      priority: 5,
-      emoji: "🎯",
+      href: "/complete-profile"
     });
   }
 
@@ -182,8 +176,7 @@ export function calculateProfileCompletion(
       points: 0,
       cta: "Ajouter ma date de naissance",
       href: "/profile",
-      priority: 0, // très urgent
-      emoji: "🎂",
+      href: "/complete-profile"
     });
   }
 
