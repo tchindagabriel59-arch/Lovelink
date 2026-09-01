@@ -5,6 +5,12 @@ import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+import ProfileCompletionCard from "@/components/ProfileCompletionCard";
+
+// Après <div className="fixed inset-0..."> et avant les modales :
+<div className="fixed top-3 left-3 right-3 z-[80] max-w-md mx-auto">
+  <ProfileCompletionCard variant="banner" dismissible={true} />
+</div>
 import {
   Heart,
   X,
