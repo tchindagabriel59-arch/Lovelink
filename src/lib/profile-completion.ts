@@ -1,5 +1,5 @@
 // src/lib/profile-completion.ts
-// Logique de calcul du score de complétion profil LoveLink (style Badoo)
+// Score de complétion profil LoveLink (style Badoo)
 
 export interface ProfileForCompletion {
   photoUrl?: string | null;
@@ -33,7 +33,7 @@ export interface MissingItem {
   points: number;
   cta: string;
   href: string;
-  priority: number; // plus petit = plus urgent
+  priority: number;
   emoji: string;
 }
 
@@ -47,17 +47,13 @@ export interface CompletionResult {
   message: string;
 }
 
-/**
- * Calcule le score de complétion d'un profil LoveLink
- * Total possible : 100 points
- */
 export function calculateProfileCompletion(
   profile: ProfileForCompletion
 ): CompletionResult {
   let earnedPoints = 0;
   const missing: MissingItem[] = [];
 
-  // ===== 1. PHOTO PRINCIPALE (25 pts) - Priorité absolue =====
+  // 1. Photo principale (25)
   const hasMainPhoto =
     !!profile.photoUrl && profile.photoUrl.trim().length > 5;
   if (hasMainPhoto) {
@@ -70,12 +66,13 @@ export function calculateProfileCompletion(
         "Les profils avec photo reçoivent 10× plus de likes. C'est indispensable.",
       points: 25,
       cta: "Ajouter une photo",
-      href: "/profile",
-      href: "/complete-profile"
+      href: "/complete-profile",
+      priority: 1,
+      emoji: "📸",
     });
   }
 
-  // ===== 2. PHOTOS SUPPLÉMENTAIRES (15 pts max, 5 pts/photo) =====
+  // 2. Photos extra (15 max)
   const extraPhotos = [
     profile.photo1Url,
     profile.photo2Url,
@@ -85,36 +82,38 @@ export function calculateProfileCompletion(
   const extraCount = Math.min(extraPhotos.length, 3);
   earnedPoints += extraCount * 5;
   if (extraCount < 3) {
+    const need = 3 - extraCount;
     missing.push({
       key: "photosExtra",
-      label: `Ajoute ${3 - extraCount} photo${3 - extraCount > 1 ? "s" : ""} de plus`,
+      label: `Ajoute ${need} photo${need > 1 ? "s" : ""} de plus`,
       description: "Les profils avec 3+ photos matchent 3× plus.",
-      points: (3 - extraCount) * 5,
+      points: need * 5,
       cta: "Ajouter des photos",
-      href: "/profile",
-      href: "/complete-profile"
+      href: "/complete-profile",
+      priority: 2,
+      emoji: "🖼️",
     });
   }
 
-  // ===== 3. BIO (15 pts) =====
-  const hasBio =
-    !!profile.bio &&
-    profile.bio.trim().length >= 20; // Minimum 20 caractères pour être utile
+  // 3. Bio (15)
+  const hasBio = !!profile.bio && profile.bio.trim().length >= 20;
   if (hasBio) {
     earnedPoints += 15;
   } else {
     missing.push({
       key: "bio",
       label: "Écris une bio percutante",
-      description: "En 2 phrases, montre ta personnalité. Les bios attirent 5× plus.",
+      description:
+        "En 2 phrases, montre ta personnalité. Les bios attirent 5× plus.",
       points: 15,
       cta: "Écrire ma bio",
-      href: "/profile",
       href: "/complete-profile",
+      priority: 3,
+      emoji: "✍️",
     });
   }
 
-  // ===== 4. VILLE (10 pts) =====
+  // 4. Ville (10)
   const hasCity = !!profile.city && profile.city.trim().length >= 2;
   if (hasCity) {
     earnedPoints += 10;
@@ -125,12 +124,33 @@ export function calculateProfileCompletion(
       description: "Pour être vu par les célibataires près de toi.",
       points: 10,
       cta: "Ajouter ma ville",
-      href: "/profile",
-      href: "/complete-profile"
+      href: "/complete-profile",
+      priority: 4,
+      emoji: "📍",
     });
   }
 
-  // ===== 5. OCCUPATION (8 pts) =====
+  // 5. Intérêts (12)
+  const interestsCount = profile.interests
+    ? profile.interests.split(",").filter((i) => i.trim().length > 0).length
+    : 0;
+  if (interestsCount >= 3) {
+    earnedPoints += 12;
+  } else {
+    const need = Math.max(1, 3 - interestsCount);
+    missing.push({
+      key: "interests",
+      label: `Ajoute ${need} centre${need > 1 ? "s" : ""} d'intérêt`,
+      description: "Ça facilite les premiers messages et brise la glace.",
+      points: 12,
+      cta: "Ajouter mes intérêts",
+      href: "/complete-profile",
+      priority: 5,
+      emoji: "🎯",
+    });
+  }
+
+  // 6. Occupation (8)
   const hasOccupation =
     !!profile.occupation && profile.occupation.trim().length >= 2;
   if (hasOccupation) {
@@ -142,72 +162,52 @@ export function calculateProfileCompletion(
       description: "Ça donne du contexte et rassure.",
       points: 8,
       cta: "Ajouter mon métier",
-      href: "/profile",
       href: "/complete-profile",
+      priority: 6,
+      emoji: "💼",
     });
   }
 
-  // ===== 6. INTÉRÊTS (12 pts) =====
-  const interestsCount = profile.interests
-    ? profile.interests.split(",").filter((i) => i.trim().length > 0).length
-    : 0;
-  if (interestsCount >= 3) {
-    earnedPoints += 12;
-  } else {
-    missing.push({
-      key: "interests",
-      label: `Ajoute ${3 - interestsCount} centre${3 - interestsCount > 1 ? "s" : ""} d'intérêt`,
-      description: "Ça facilite les premiers messages et brise la glace.",
-      points: 12,
-      cta: "Ajouter mes intérêts",
-      href: "/profile",
-      href: "/complete-profile"
-    });
-  }
-
-  // ===== 7. DATE DE NAISSANCE (bonus interne 0 pt car obligatoire à l'inscription) =====
-  // On ne le compte pas car normalement rempli, mais on l'ajoute si manquant
-  const hasBirthDate = !!profile.birthDate;
-  if (!hasBirthDate) {
+  // 7. Date de naissance (si manquante)
+  if (!profile.birthDate) {
     missing.push({
       key: "birthDate",
       label: "Renseigne ta date de naissance",
       description: "Obligatoire pour finaliser ton profil.",
       points: 0,
-      cta: "Ajouter ma date de naissance",
-      href: "/profile",
-      href: "/complete-profile"
+      cta: "Compléter mon profil",
+      href: "/complete-profile",
+      priority: 0,
+      emoji: "🎂",
     });
   }
 
-  // ===== 8. VÉRIFICATION (15 pts) =====
-  const isVerified = !!profile.isVerified;
-  if (isVerified) {
+  // 8. Vérification (15)
+  if (profile.isVerified) {
     earnedPoints += 15;
   } else {
     missing.push({
       key: "verified",
       label: "Fais vérifier ton profil",
-      description: "Badge bleu de confiance. Les profils vérifiés matchent 4× plus.",
+      description:
+        "Badge bleu de confiance. Les profils vérifiés matchent 4× plus.",
       points: 15,
       cta: "Vérifier mon profil",
-      href: "/verifications",
+      href: "/verification",
       priority: 7,
       emoji: "✅",
     });
   }
 
-  // ===== CALCUL FINAL =====
   const totalPoints = 100;
   const percent = Math.min(100, Math.round((earnedPoints / totalPoints) * 100));
 
-  // Trier par priorité pour trouver la prochaine action
   missing.sort((a, b) => a.priority - b.priority);
   const nextAction = missing.length > 0 ? missing[0] : null;
 
-  // Niveau et message motivant
   let level: CompletionResult["level"] = "low";
-  let message = "";
+  let message =
+    "⚡ Attention : profil incomplet. Tu passes à côté de beaucoup de matchs !";
 
   if (percent >= 100) {
     level = "complete";
@@ -218,9 +218,6 @@ export function calculateProfileCompletion(
   } else if (percent >= 40) {
     level = "medium";
     message = "💪 Bien parti ! Complète ton profil pour multiplier tes matchs.";
-  } else {
-    level = "low";
-    message = "⚡ Attention : profil incomplet. Tu passes à côté de beaucoup de matchs !";
   }
 
   return {
