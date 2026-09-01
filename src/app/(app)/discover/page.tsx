@@ -5,12 +5,7 @@ import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import ProfileCompletionCard from "@/components/ProfileCompletionCard";
-
-// Après <div className="fixed inset-0..."> et avant les modales :
-<div className="fixed top-3 left-3 right-3 z-[80] max-w-md mx-auto">
-  <ProfileCompletionCard variant="banner" dismissible={true} />
-</div>
+import ProfileCompletionCard from "../../components/ProfileCompletionCard";
 import {
   Heart,
   X,
@@ -653,6 +648,12 @@ export default function DiscoverPage() {
 
   return (
     <div className="fixed inset-0 bg-black lg:relative lg:min-h-screen lg:bg-slate-100 lg:flex lg:flex-col lg:items-center lg:justify-center lg:p-4">
+      {/* Bannière complétion profil */}
+{!showTour && (
+  <div className="fixed top-3 left-3 right-3 z-[80] max-w-md mx-auto pointer-events-auto">
+    <ProfileCompletionCard variant="banner" dismissible={true} />
+  </div>
+)}
       {/* 🚀 TOUR EN DIRECT */}
       {showTour && <OnboardingTour onFinish={completeTour} />}
 
