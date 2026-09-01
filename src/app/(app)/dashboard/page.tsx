@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useUser } from "../layout";
+import ProfileCompletionCard from "../../components/ProfileCompletionCard";
 import {
   Heart,
   Compass,
@@ -40,7 +41,7 @@ interface DashboardStats {
     messagesSent: number;
     unreadMessages: number;
     unreadNotifs: number;
-    <ProfileCompletionCard variant="compact" />
+    
   };
   completion: number;
   suggestions: Array<{ icon: string; text: string; link: string }>;
@@ -257,6 +258,10 @@ export default function DashboardPage() {
               {user?.isVerified && (
                 <span className="inline-flex items-center gap-1 bg-gradient-to-r from-blue-100 to-cyan-100 text-blue-700 rounded-full px-3 py-1 text-xs font-black border border-blue-300">
                   <BadgeCheck className="w-3 h-3 fill-blue-500" />
+                  {/* Complétion profil style Badoo */}
+<div className="mb-6">
+  <ProfileCompletionCard variant="full" />
+</div>
                   VÉRIFIÉ
                 </span>
               )}
