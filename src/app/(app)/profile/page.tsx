@@ -5,6 +5,10 @@ import { useRouter } from "next/navigation";
 import { useUser } from "../layout";
 import PushNotifButton from "../../components/PushNotifButton";
 import RewardBanner from "../../components/RewardBanner";
+import ProfileCompletionCard from "@/components/ProfileCompletionCard";
+
+// Dans le JSX, tout en haut de ta page profil :
+<ProfileCompletionCard variant="full" className="mb-6" />
 import {
   User,
   MapPin,
