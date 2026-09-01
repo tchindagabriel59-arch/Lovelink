@@ -40,6 +40,7 @@ interface DashboardStats {
     messagesSent: number;
     unreadMessages: number;
     unreadNotifs: number;
+    <ProfileCompletionCard variant="compact" />
   };
   completion: number;
   suggestions: Array<{ icon: string; text: string; link: string }>;
