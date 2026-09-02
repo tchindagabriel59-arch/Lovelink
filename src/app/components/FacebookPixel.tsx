@@ -1,3 +1,4 @@
+// src/app/components/FacebookPixel.tsx
 'use client';
 
 import Script from 'next/script';
@@ -19,30 +20,28 @@ function PixelTracker() {
 
   useEffect(() => {
     const trackPageView = () => {
-  if (
-    typeof window !== 'undefined' &&
-    typeof window.fbq === 'function' &&
-    (window.fbq as any).loaded === true
-  ) {
-    // ✅ Générer un eventId pour déduplication Pixel + CAPI
-    const eventId = `pv-${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
-    
-    // 1. Envoyer au Pixel avec eventID
-    window.fbq('track', 'PageView', {}, { eventID: eventId });
+      if (
+        typeof window !== 'undefined' &&
+        typeof window.fbq === 'function' &&
+        (window.fbq as any).loaded === true
+      ) {
+        // ✅ Identifiant unique pour déduplication Pixel + CAPI
+        const eventId = `pv-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
 
-    // 2. Envoyer aussi au CAPI serveur (déduplication)
-    fetch('/api/analytics/pageview', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        eventId,
-        url: window.location.href,
-      }),
-    }).catch(() => {
-      // Silencieux, ne pas bloquer
-    });
-  }
-};
+        // 1. Envoyer au Pixel navigateur avec eventID
+        window.fbq('track', 'PageView', {}, { eventID: eventId });
+
+        // 2. Envoyer au CAPI serveur
+        fetch('/api/analytics/pageview', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            eventId,
+            url: window.location.href,
+          }),
+        }).catch(() => {});
+      }
+    };
 
     const timer = setTimeout(trackPageView, 100);
     return () => clearTimeout(timer);
@@ -68,10 +67,10 @@ export default function FacebookPixel() {
             s.parentNode.insertBefore(t,s)}(window, document,'script',
             'https://connect.facebook.net/en_US/fbevents.js');
             
-            // ⚠️ IMPORTANT : Désactiver Advanced Matching auto AVANT init
-            fbq('set', 'autoConfig', false, '${FB_PIXEL_ID}');
+            // ✅ Activer la configuration automatique et le recoupement Meta
+            fbq('set', 'autoConfig', true, '${FB_PIXEL_ID}');
             
-            // Initialiser sans Advanced Matching automatique
+            // Initialisation avec recoupement automatique activé
             fbq('init', '${FB_PIXEL_ID}');
           `,
         }}
