@@ -1,30 +1,34 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { users, passwordResetTokens } from "@/db/schema";
-import { eq, and, gt } from "drizzle-orm";
-import bcrypt from "bcryptjs"; // Corrigé ici : bcryptjs au lieu de bcrypt
+import { eq, and, gt, isNull } from "drizzle-orm";
+import bcrypt from "bcryptjs"; // important: bcryptjs (pas bcrypt)
+import crypto from "crypto";
 
 export async function POST(request: Request) {
   try {
     const { token, newPassword } = await request.json();
 
-    if (!token || !newPassword || newPassword.length < 6) {
+    if (!token || !newPassword || String(newPassword).length < 6) {
       return NextResponse.json(
         { error: "Le mot de passe doit contenir au moins 6 caractères." },
         { status: 400 }
       );
     }
 
-    // 1. Trouver le token valide et non expiré en base de données
+    const codeHash = crypto.createHash("sha256").update(String(token)).digest("hex");
+
     const activeTokens = await db
       .select()
       .from(passwordResetTokens)
       .where(
         and(
-          eq(passwordResetTokens.token, token),
-          gt(passwordResetTokens.expiresAt, new Date())
+          eq(passwordResetTokens.codeHash, codeHash),
+          gt(passwordResetTokens.expiresAt, new Date()),
+          isNull(passwordResetTokens.usedAt)
         )
-      );
+      )
+      .limit(1);
 
     if (activeTokens.length === 0) {
       return NextResponse.json(
@@ -34,27 +38,26 @@ export async function POST(request: Request) {
     }
 
     const resetTokenRecord = activeTokens[0];
+    const passwordHash = await bcrypt.hash(String(newPassword), 10);
 
-    // 2. Hacher le nouveau mot de passe avec bcryptjs
-    const saltRounds = 10;
-    const passwordHash = await bcrypt.hash(newPassword, saltRounds);
-
-    // 3. Mettre à jour l'utilisateur
     await db
       .update(users)
-      .set({ passwordHash: passwordHash })
+      .set({
+        passwordHash,
+        updatedAt: new Date(),
+      })
       .where(eq(users.id, resetTokenRecord.userId));
 
-    // 4. Supprimer le token utilisé
+    // Marquer le token comme utilisé (one-time)
     await db
-      .delete(passwordResetTokens)
+      .update(passwordResetTokens)
+      .set({ usedAt: new Date() })
       .where(eq(passwordResetTokens.id, resetTokenRecord.id));
 
     return NextResponse.json({
       success: true,
       message: "Votre mot de passe a bien été modifié.",
     });
-
   } catch (error) {
     console.error("Reset password execution error:", error);
     return NextResponse.json(
