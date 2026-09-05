@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 export default function ForgotPasswordPage() {
-  const [whatsappNumber, setWhatsappNumber] = useState("");
+  const [email, setEmail] = useState("");
   const [birthDate, setBirthDate] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -20,16 +20,12 @@ export default function ForgotPasswordPage() {
       const res = await fetch("/api/auth/forgot-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ whatsappNumber, birthDate }),
+        body: JSON.stringify({ email, birthDate }),
       });
 
       const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Une erreur est survenue.");
 
-      if (!res.ok) {
-        throw new Error(data.error || "Une erreur est survenue.");
-      }
-
-      // Redirection automatique vers la page avec le token sécurisé
       router.push(data.redirectUrl);
     } catch (err: any) {
       setError(err.message);
@@ -44,7 +40,7 @@ export default function ForgotPasswordPage() {
         <div className="text-center mb-6">
           <h1 className="text-2xl font-bold text-gray-900">Mot de passe oublié ?</h1>
           <p className="text-sm text-gray-500 mt-2">
-            Validez votre identité pour réinitialiser instantanément votre mot de passe.
+            Confirmez votre identité pour choisir un nouveau mot de passe immédiatement.
           </p>
         </div>
 
@@ -57,37 +53,37 @@ export default function ForgotPasswordPage() {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Numéro WhatsApp d'inscription
+              E-mail du compte
             </label>
             <input
-              type="tel"
+              type="email"
               required
-              placeholder="Ex: 651387914"
-              value={whatsappNumber}
-              onChange={(e) => setWhatsappNumber(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-pink-500 focus:border-transparent outline-none transition"
+              placeholder="ex: marie@gmail.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-pink-500 outline-none"
             />
           </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Votre Date de Naissance
+              Date de naissance
             </label>
             <input
               type="date"
               required
               value={birthDate}
               onChange={(e) => setBirthDate(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-pink-500 focus:border-transparent outline-none transition"
+              className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-pink-500 outline-none"
             />
           </div>
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3.5 bg-gradient-to-r from-pink-500 to-rose-600 hover:from-pink-600 hover:to-rose-700 text-white font-semibold rounded-xl shadow-lg shadow-pink-200 transition duration-200 disabled:opacity-50"
+            className="w-full py-3.5 bg-gradient-to-r from-pink-500 to-rose-600 text-white font-semibold rounded-xl disabled:opacity-50"
           >
-            {loading ? "Vérification..." : "Vérifier mon identité"}
+            {loading ? "Vérification..." : "Continuer"}
           </button>
         </form>
 
