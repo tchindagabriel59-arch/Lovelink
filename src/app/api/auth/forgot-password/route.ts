@@ -1,61 +1,67 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { users, passwordResetTokens } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, and, isNull, gt } from "drizzle-orm";
 import crypto from "crypto";
 
 export async function POST(request: Request) {
   try {
-    const { whatsappNumber, birthDate } = await request.json();
+    const { email, birthDate } = await request.json();
 
-    if (!whatsappNumber || !birthDate) {
+    if (!email || !birthDate) {
       return NextResponse.json(
         { error: "Veuillez remplir tous les champs." },
         { status: 400 }
       );
     }
 
-    // Nettoyage du numéro de téléphone
-    const cleanPhone = whatsappNumber.replace(/\D/g, "");
+    const cleanEmail = String(email).toLowerCase().trim();
+    const formattedBirthDate = String(birthDate).trim(); // YYYY-MM-DD
 
-    // Récupérer les utilisateurs (compatible peu importe le nom de la colonne dans schema.ts)
-    const allUsers = await db.select().from(users);
+    const existingUsers = await db
+      .select()
+      .from(users)
+      .where(eq(users.email, cleanEmail))
+      .limit(1);
 
-    // Filtrage souple sur le numéro WhatsApp / téléphone
-    const user = allUsers.find((u: any) => {
-      const userPhone = (u.whatsappNumber || u.whatsapp || u.phone || u.phoneNumber || "").replace(/\D/g, "");
-      return userPhone.includes(cleanPhone) || cleanPhone.includes(userPhone);
-    });
-
-    if (!user) {
+    if (existingUsers.length === 0) {
       return NextResponse.json(
-        { error: "Aucun compte ne correspond à ce numéro." },
+        { error: "Aucun compte ne correspond à cet e-mail." },
         { status: 404 }
       );
     }
 
-    // Vérification de la date de naissance si renseignée
-    const formattedInputBirthDate = new Date(birthDate).toISOString().split("T")[0];
-    const userDbBirthDate = user.birthDate
-      ? new Date(user.birthDate).toISOString().split("T")[0]
-      : null;
+    const user = existingUsers[0];
 
-    if (userDbBirthDate && userDbBirthDate !== formattedInputBirthDate) {
+    // birthDate est un varchar(10) dans ton schéma
+    if (!user.birthDate || user.birthDate !== formattedBirthDate) {
       return NextResponse.json(
-        { error: "La date de naissance ne correspond pas à ce compte." },
+        { error: "Les informations fournies ne correspondent pas." },
         { status: 400 }
       );
     }
 
-    // Génération d'un token sécurisé (valide 15 mins)
+    // Token brut (envoyé dans l'URL) + hash stocké en BDD (colonne codeHash)
     const token = crypto.randomBytes(32).toString("hex");
-    const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+    const codeHash = crypto.createHash("sha256").update(token).digest("hex");
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
 
-    // Insertion du token en BDD
+    // Invalider les anciens tokens non utilisés de cet user (propre)
+    await db
+      .update(passwordResetTokens)
+      .set({ usedAt: new Date() })
+      .where(
+        and(
+          eq(passwordResetTokens.userId, user.id),
+          isNull(passwordResetTokens.usedAt)
+        )
+      );
+
+    // Insertion compatible avec TON schéma exact
     await db.insert(passwordResetTokens).values({
       userId: user.id,
-      token: token,
-      expiresAt: expiresAt,
+      codeHash, // ← colonne réelle
+      expiresAt,
     });
 
     return NextResponse.json({
@@ -63,7 +69,6 @@ export async function POST(request: Request) {
       message: "Identité vérifiée avec succès !",
       redirectUrl: `/reset-password?token=${token}`,
     });
-
   } catch (error) {
     console.error("Forgot password error:", error);
     return NextResponse.json(
