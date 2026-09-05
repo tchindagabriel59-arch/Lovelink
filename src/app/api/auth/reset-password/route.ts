@@ -1,134 +1,64 @@
-// src/app/api/auth/reset-password/route.ts
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { users, passwordResetTokens } from "@/db/schema";
-import { eq, or, and, gt, isNull, desc } from "drizzle-orm";
-import bcrypt from "bcryptjs";
-import {
-  normalizePhoneNumber,
-  phoneToSyntheticEmails,
-} from "@/lib/whatsapp";
+import { eq, and, gt } from "drizzle-orm";
+import bcrypt from "bcrypt";
 
-export const dynamic = "force-dynamic";
-export const runtime = "nodejs";
-
-export async function POST(req: Request) {
+export async function POST(request: Request) {
   try {
-    const body = await req.json();
-    const cleanCode = String(body.code || "").trim();
-    const cleanNewPass = String(body.newPassword || "").trim();
-    const rawPhone = String(body.phone || "").trim();
+    const { token, newPassword } = await request.json();
 
-    if (!cleanCode || cleanCode.length < 4) {
+    if (!token || !newPassword || newPassword.length < 6) {
       return NextResponse.json(
-        { error: "Saisis le code reçu (ex: Lk-XXXXXXXX)." },
-        { status: 400 }
-      );
-    }
-    if (cleanNewPass.length < 6) {
-      return NextResponse.json(
-        { error: "Le nouveau mot de passe doit faire au moins 6 caractères." },
+        { error: "Le mot de passe doit contenir au moins 6 caractères." },
         { status: 400 }
       );
     }
 
-    let targetUserId: number | null = null;
-
-    // ========== STRATÉGIE A : tokens récents (la bonne) ==========
-    try {
-      const tokens = await db
-        .select()
-        .from(passwordResetTokens)
-        .where(
-          and(
-            gt(passwordResetTokens.expiresAt, new Date()),
-            isNull(passwordResetTokens.usedAt)
-          )
+    // 1. Trouver le token valide et non expiré en base de données
+    const activeTokens = await db
+      .select()
+      .from(passwordResetTokens)
+      .where(
+        and(
+          eq(passwordResetTokens.token, token),
+          gt(passwordResetTokens.expiresAt, new Date()) // Non expiré
         )
-        .orderBy(desc(passwordResetTokens.createdAt))
-        .limit(50);
+      );
 
-      for (const t of tokens) {
-        const ok = await bcrypt.compare(cleanCode, t.codeHash);
-        if (ok) {
-          targetUserId = t.userId;
-          // marque utilisé
-          await db
-            .update(passwordResetTokens)
-            .set({ usedAt: new Date() })
-            .where(eq(passwordResetTokens.id, t.id));
-          break;
-        }
-      }
-    } catch (e) {
-      console.warn("[Reset-Password] tokens lookup skip:", e);
-    }
-
-    // ========== STRATÉGIE B : par numéro WhatsApp ==========
-    if (!targetUserId && rawPhone) {
-      const normalizedPhone = normalizePhoneNumber(rawPhone);
-      const emails = phoneToSyntheticEmails(normalizedPhone);
-
-      const phoneUsers = await db
-        .select()
-        .from(users)
-        .where(or(...emails.map((e) => eq(users.email, e))))
-        .limit(10);
-
-      for (const u of phoneUsers) {
-        if (!u.passwordHash) continue;
-        if (await bcrypt.compare(cleanCode, u.passwordHash)) {
-          targetUserId = u.id;
-          break;
-        }
-      }
-    }
-
-    // ========== STRATÉGIE C : secours — users les plus récents ==========
-    if (!targetUserId) {
-      // ⚠️ important: order by id DESC pour prendre les comptes récents
-      const recent = await db
-        .select({ id: users.id, passwordHash: users.passwordHash })
-        .from(users)
-        .orderBy(desc(users.id))
-        .limit(200);
-
-      for (const u of recent) {
-        if (!u.passwordHash) continue;
-        if (await bcrypt.compare(cleanCode, u.passwordHash)) {
-          targetUserId = u.id;
-          break;
-        }
-      }
-    }
-
-    if (!targetUserId) {
-      console.warn(`[Reset-Password] Code invalide: ${cleanCode}`);
+    if (activeTokens.length === 0) {
       return NextResponse.json(
-        {
-          error:
-            "Code secret incorrect. Vérifie le code Telegram/WhatsApp, ou régénère un nouveau code dans l'admin sur LE BON utilisateur.",
-        },
+        { error: "Ce lien de réinitialisation est invalide ou a expiré." },
         { status: 400 }
       );
     }
 
-    const newHash = await bcrypt.hash(cleanNewPass, 10);
+    const resetTokenRecord = activeTokens[0];
+
+    // 2. Hacher le nouveau mot de passe (10 rounds bcrypt)
+    const saltRounds = 10;
+    const passwordHash = await bcrypt.hash(newPassword, saltRounds);
+
+    // 3. Mettre à jour l'utilisateur
     await db
       .update(users)
-      .set({ passwordHash: newHash })
-      .where(eq(users.id, targetUserId));
+      .set({ passwordHash: passwordHash })
+      .where(eq(users.id, resetTokenRecord.userId));
 
-    console.log(`[Reset-Password] ✅ OK user #${targetUserId}`);
+    // 4. Supprimer le token pour éviter qu'il ne soit réutilisé
+    await db
+      .delete(passwordResetTokens)
+      .where(eq(passwordResetTokens.id, resetTokenRecord.id));
 
     return NextResponse.json({
       success: true,
-      message: "Mot de passe réinitialisé ! Tu peux te connecter.",
+      message: "Votre mot de passe a bien été modifié.",
     });
+
   } catch (error) {
-    console.error("[Reset-Password] FATAL:", error);
+    console.error("Reset password execution error:", error);
     return NextResponse.json(
-      { error: "Erreur serveur lors de la réinitialisation." },
+      { error: "Impossible de modifier le mot de passe." },
       { status: 500 }
     );
   }
