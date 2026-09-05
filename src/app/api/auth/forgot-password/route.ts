@@ -1,145 +1,77 @@
-// src/app/api/auth/forgot-password/route.ts
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { users } from "@/db/schema";
-import { or, eq } from "drizzle-orm";
-import {
-  normalizePhoneNumber,
-  phoneToSyntheticEmails,
-} from "@/lib/whatsapp";
+import { users } from "@/db/schema"; // Ajuste le chemin selon ton schéma
+import { eq, and } from "drizzle-orm";
+import crypto from "crypto";
 
-// Ton numéro WhatsApp Admin Boss (Cameroun)
-const ADMIN_WHATSAPP = process.env.ADMIN_WHATSAPP_NUMBER || "237651387914";
+// Table des tokens de réinitialisation (déjà existante dans ton schéma)
+import { passwordResetTokens } from "@/db/schema"; 
 
-async function notifyTelegram(text: string) {
-  const token = process.env.TELEGRAM_BOT_TOKEN;
-  const chatId = process.env.TELEGRAM_CHAT_ID;
-  if (!token || !chatId) return false;
-
+export async function POST(request: Request) {
   try {
-    const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        chat_id: chatId,
-        text,
-        parse_mode: "HTML",
-      }),
-    });
-    return res.ok;
-  } catch (e) {
-    console.error("[Forgot-Manual] Telegram error:", e);
-    return false;
-  }
-}
+    const { whatsappNumber, birthDate } = await request.json();
 
-async function notifyAdminWhatsApp(text: string) {
-  const token = process.env.WHATSAPP_TOKEN;
-  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
-  if (!token || !phoneNumberId) return false;
-
-  try {
-    const res = await fetch(
-      `https://graph.facebook.com/v21.0/${phoneNumberId}/messages`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          messaging_product: "whatsapp",
-          recipient_type: "individual",
-          to: normalizePhoneNumber(ADMIN_WHATSAPP),
-          type: "text",
-          text: { preview_url: false, body: text },
-        }),
-      }
-    );
-    const data = await res.json();
-    if (!res.ok) {
-      console.error("[Forgot-Manual] WhatsApp admin error:", data);
-      return false;
-    }
-    return true;
-  } catch (e) {
-    console.error("[Forgot-Manual] WhatsApp admin exception:", e);
-    return false;
-  }
-}
-
-export async function POST(req: Request) {
-  try {
-    const body = await req.json();
-    const fullName = String(body.fullName || "").trim();
-    const phone = String(body.phone || "").trim();
-
-    if (fullName.length < 3) {
+    if (!whatsappNumber || !birthDate) {
       return NextResponse.json(
-        { error: "Indique ton nom complet utilisé à l'inscription." },
+        { error: "Veuillez remplir tous les champs." },
         { status: 400 }
       );
     }
 
-    if (phone.length < 8) {
-      return NextResponse.json(
-        { error: "Indique ton numéro WhatsApp pour te recontacter." },
-        { status: 400 }
-      );
-    }
+    // Nettoyage du numéro de téléphone (garder uniquement les chiffres)
+    const cleanPhone = whatsappNumber.replace(/\D/g, "");
 
-    const normalizedPhone = normalizePhoneNumber(phone);
-    const syntheticEmails = phoneToSyntheticEmails(normalizedPhone);
+    // Recherche de l'utilisateur avec ce numéro ET cette date de naissance
+    // Note : Adapte les noms des colonnes (ex: users.phone ou users.whatsapp, users.birthDate)
+    const formattedBirthDate = new Date(birthDate).toISOString().split('T')[0];
 
-    // Sélection uniquement des colonnes garanties : id, email
-    const emailConditions = syntheticEmails.map((email) => eq(users.email, email));
-
-    const matchedUsers = await db
-      .select({
-        id: users.id,
-        email: users.email,
-      })
+    const existingUsers = await db
+      .select()
       .from(users)
-      .where(or(...emailConditions))
-      .limit(5);
+      .where(eq(users.phone, cleanPhone)); // ou users.whatsapp selon ton schéma
 
-    const matchLines =
-      matchedUsers.length > 0
-        ? matchedUsers
-            .map((u) => `• User ID: ${u.id} | Email: ${u.email || "n/a"}`)
-            .join("\n")
-        : "• Aucun compte trouvé par numéro (à chercher par le nom dans le panel admin)";
+    if (existingUsers.length === 0) {
+      return NextResponse.json(
+        { error: "Aucun compte ne correspond à ce numéro." },
+        { status: 404 }
+      );
+    }
 
-    const telegramText =
-      `<b>🔐 Demande reset MDP LoveLink</b>\n\n` +
-      `<b>Nom saisi :</b> ${fullName}\n` +
-      `<b>WhatsApp client :</b> ${normalizedPhone}\n\n` +
-      `<b>Correspondances BDD :</b>\n${matchLines}\n\n` +
-      `➡️ Va dans Admin (/gabriel-boss/utilisateurs) → cherche "${fullName}" ou "${normalizedPhone}" → génère un MDP temporaire et envoie-le sur WhatsApp.`;
+    const user = existingUsers[0];
 
-    const whatsappText =
-      `🔐 *Demande reset MDP LoveLink*\n\n` +
-      `Nom saisi : ${fullName}\n` +
-      `WhatsApp client : ${normalizedPhone}\n\n` +
-      `Correspondances BDD :\n${matchLines}\n\n` +
-      `➡️ Admin (/gabriel-boss/utilisateurs) → cherche "${fullName}" ou "${normalizedPhone}" → Générer un mot de passe temporaire.`;
+    // Vérification de la date de naissance
+    const userDbBirthDate = user.birthDate 
+      ? new Date(user.birthDate).toISOString().split('T')[0] 
+      : null;
 
-    const tgOk = await notifyTelegram(telegramText);
-    const waOk = await notifyAdminWhatsApp(whatsappText);
+    if (!userDbBirthDate || userDbBirthDate !== formattedBirthDate) {
+      return NextResponse.json(
+        { error: "Les informations fournies ne correspondent pas." },
+        { status: 400 }
+      );
+    }
 
-    console.log(
-      `[Forgot-Manual] Demande de "${fullName}" (${normalizedPhone}) | matches=${matchedUsers.length} | tg=${tgOk} | wa=${waOk}`
-    );
+    // Génération d'un token sécurisé à usage unique
+    const token = crypto.randomBytes(32).toString("hex");
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // Expire dans 15 minutes
+
+    // Insertion du token en BDD
+    await db.insert(passwordResetTokens).values({
+      userId: user.id,
+      token: token,
+      expiresAt: expiresAt,
+    });
 
     return NextResponse.json({
       success: true,
-      message:
-        "Demande envoyée ✅. Tu recevras ton nouveau mot de passe sur WhatsApp très bientôt.",
+      message: "Identité vérifiée avec succès !",
+      redirectUrl: `/reset-password?token=${token}`,
     });
+
   } catch (error) {
-    console.error("[Forgot-Manual] Erreur serveur:", error);
+    console.error("Forgot password error:", error);
     return NextResponse.json(
-      { error: "Impossible d'envoyer la demande. Réessaie dans un instant." },
+      { error: "Une erreur interne est survenue." },
       { status: 500 }
     );
   }
