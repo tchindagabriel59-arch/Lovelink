@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 export default function ForgotPasswordPage() {
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [birthDate, setBirthDate] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -20,7 +20,7 @@ export default function ForgotPasswordPage() {
       const res = await fetch("/api/auth/forgot-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, birthDate }),
+        body: JSON.stringify({ identifier, birthDate }),
       });
 
       const data = await res.json();
@@ -40,7 +40,7 @@ export default function ForgotPasswordPage() {
         <div className="text-center mb-6">
           <h1 className="text-2xl font-bold text-gray-900">Mot de passe oublié ?</h1>
           <p className="text-sm text-gray-500 mt-2">
-            Confirmez votre identité pour choisir un nouveau mot de passe immédiatement.
+            Entrez vos informations pour choisir un nouveau mot de passe instantanément.
           </p>
         </div>
 
@@ -53,35 +53,35 @@ export default function ForgotPasswordPage() {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              E-mail du compte
+              Numéro WhatsApp ou E-mail
             </label>
             <input
-              type="email"
+              type="text"
               required
-              placeholder="ex: marie@gmail.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-pink-500 outline-none"
+              placeholder="Ex: 651387914 ou email@gmail.com"
+              value={identifier}
+              onChange={(e) => setIdentifier(e.target.value)}
+              className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-pink-500 outline-none transition"
             />
           </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Date de naissance
+              Votre Date de Naissance
             </label>
             <input
               type="date"
               required
               value={birthDate}
               onChange={(e) => setBirthDate(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-pink-500 outline-none"
+              className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-pink-500 outline-none transition"
             />
           </div>
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3.5 bg-gradient-to-r from-pink-500 to-rose-600 text-white font-semibold rounded-xl disabled:opacity-50"
+            className="w-full py-3.5 bg-gradient-to-r from-pink-500 to-rose-600 hover:from-pink-600 hover:to-rose-700 text-white font-semibold rounded-xl shadow-lg shadow-pink-200 transition duration-200 disabled:opacity-50"
           >
             {loading ? "Vérification..." : "Continuer"}
           </button>
