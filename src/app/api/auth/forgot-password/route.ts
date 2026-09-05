@@ -1,11 +1,8 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { users } from "@/db/schema"; // Ajuste le chemin selon ton schéma
-import { eq, and } from "drizzle-orm";
+import { users, passwordResetTokens } from "@/db/schema";
+import { eq } from "drizzle-orm";
 import crypto from "crypto";
-
-// Table des tokens de réinitialisation (déjà existante dans ton schéma)
-import { passwordResetTokens } from "@/db/schema"; 
 
 export async function POST(request: Request) {
   try {
@@ -18,42 +15,41 @@ export async function POST(request: Request) {
       );
     }
 
-    // Nettoyage du numéro de téléphone (garder uniquement les chiffres)
+    // Nettoyage du numéro de téléphone
     const cleanPhone = whatsappNumber.replace(/\D/g, "");
 
-    // Recherche de l'utilisateur avec ce numéro ET cette date de naissance
-    // Note : Adapte les noms des colonnes (ex: users.phone ou users.whatsapp, users.birthDate)
-    const formattedBirthDate = new Date(birthDate).toISOString().split('T')[0];
+    // Récupérer les utilisateurs (compatible peu importe le nom de la colonne dans schema.ts)
+    const allUsers = await db.select().from(users);
 
-    const existingUsers = await db
-      .select()
-      .from(users)
-      .where(eq(users.phone, cleanPhone)); // ou users.whatsapp selon ton schéma
+    // Filtrage souple sur le numéro WhatsApp / téléphone
+    const user = allUsers.find((u: any) => {
+      const userPhone = (u.whatsappNumber || u.whatsapp || u.phone || u.phoneNumber || "").replace(/\D/g, "");
+      return userPhone.includes(cleanPhone) || cleanPhone.includes(userPhone);
+    });
 
-    if (existingUsers.length === 0) {
+    if (!user) {
       return NextResponse.json(
         { error: "Aucun compte ne correspond à ce numéro." },
         { status: 404 }
       );
     }
 
-    const user = existingUsers[0];
-
-    // Vérification de la date de naissance
-    const userDbBirthDate = user.birthDate 
-      ? new Date(user.birthDate).toISOString().split('T')[0] 
+    // Vérification de la date de naissance si renseignée
+    const formattedInputBirthDate = new Date(birthDate).toISOString().split("T")[0];
+    const userDbBirthDate = user.birthDate
+      ? new Date(user.birthDate).toISOString().split("T")[0]
       : null;
 
-    if (!userDbBirthDate || userDbBirthDate !== formattedBirthDate) {
+    if (userDbBirthDate && userDbBirthDate !== formattedInputBirthDate) {
       return NextResponse.json(
-        { error: "Les informations fournies ne correspondent pas." },
+        { error: "La date de naissance ne correspond pas à ce compte." },
         { status: 400 }
       );
     }
 
-    // Génération d'un token sécurisé à usage unique
+    // Génération d'un token sécurisé (valide 15 mins)
     const token = crypto.randomBytes(32).toString("hex");
-    const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // Expire dans 15 minutes
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
 
     // Insertion du token en BDD
     await db.insert(passwordResetTokens).values({
