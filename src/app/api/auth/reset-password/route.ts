@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { users, passwordResetTokens } from "@/db/schema";
 import { eq, and, gt } from "drizzle-orm";
-import bcrypt from "bcrypt";
+import bcrypt from "bcryptjs"; // Corrigé ici : bcryptjs au lieu de bcrypt
 
 export async function POST(request: Request) {
   try {
@@ -22,7 +22,7 @@ export async function POST(request: Request) {
       .where(
         and(
           eq(passwordResetTokens.token, token),
-          gt(passwordResetTokens.expiresAt, new Date()) // Non expiré
+          gt(passwordResetTokens.expiresAt, new Date())
         )
       );
 
@@ -35,7 +35,7 @@ export async function POST(request: Request) {
 
     const resetTokenRecord = activeTokens[0];
 
-    // 2. Hacher le nouveau mot de passe (10 rounds bcrypt)
+    // 2. Hacher le nouveau mot de passe avec bcryptjs
     const saltRounds = 10;
     const passwordHash = await bcrypt.hash(newPassword, saltRounds);
 
@@ -45,7 +45,7 @@ export async function POST(request: Request) {
       .set({ passwordHash: passwordHash })
       .where(eq(users.id, resetTokenRecord.userId));
 
-    // 4. Supprimer le token pour éviter qu'il ne soit réutilisé
+    // 4. Supprimer le token utilisé
     await db
       .delete(passwordResetTokens)
       .where(eq(passwordResetTokens.id, resetTokenRecord.id));
