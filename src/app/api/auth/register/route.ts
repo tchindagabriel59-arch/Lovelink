@@ -212,6 +212,8 @@ export async function POST(req: NextRequest) {
         },
         customData: {
           content_name: 'Inscription LoveLink',
+          currency: "USD", 
+          value: 1.00      
         }
       });
     } catch (capiError) {
