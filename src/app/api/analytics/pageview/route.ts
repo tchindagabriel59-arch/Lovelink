@@ -1,12 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { sendMetaEvent, getClientIp, generateEventId } from '@/lib/meta-capi';
+import { sendMetaEvent, generateEventId } from '@/lib/meta-capi';
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const { eventId, url } = body;
 
-    const clientIp = getClientIp(req as any);
+    // FIX Meta: vraie IP client derrière Vercel
+    const forwardedFor = req.headers.get('x-forwarded-for');
+    const clientIp = forwardedFor
+      ? forwardedFor.split(',')[0].trim()
+      : req.headers.get('x-real-ip') || '0.0.0.0';
+
     const userAgent = req.headers.get('user-agent') || undefined;
     const fbp = req.cookies.get('_fbp')?.value;
     const fbc = req.cookies.get('_fbc')?.value;
@@ -18,8 +23,8 @@ export async function POST(req: NextRequest) {
       userData: {
         clientIpAddress: clientIp,
         clientUserAgent: userAgent,
-        fbp: fbp,
-        fbc: fbc,
+        fbp,
+        fbc,
       },
     });
 
