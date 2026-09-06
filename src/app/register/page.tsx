@@ -62,6 +62,7 @@ function RegisterPageContent() {
 
   const [step, setStep] = useState(1);
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [genderLocked, setGenderLocked] = useState(false);
@@ -98,9 +99,26 @@ function RegisterPageContent() {
       : null);
 
   const setField = (name: string, value: string) => {
-    setForm((prev) => ({ ...prev, [name]: value }));
+    // Trim automatique uniquement pour les mots de passe (évite les espaces invisibles)
+    const nextValue =
+      name === "password" || name === "confirmPassword"
+        ? value.replace(/\s/g, "")
+        : value;
+
+    setForm((prev) => ({ ...prev, [name]: nextValue }));
     setError("");
   };
+
+  const password = form.password;
+  const confirmPassword = form.confirmPassword;
+  const passwordsMatch =
+    password.length > 0 &&
+    confirmPassword.length > 0 &&
+    password === confirmPassword;
+  const passwordsMismatch =
+    password.length > 0 &&
+    confirmPassword.length > 0 &&
+    password !== confirmPassword;
 
   const calculateAge = (birthDate: string): number => {
     const today = new Date();
@@ -136,8 +154,14 @@ function RegisterPageContent() {
           setError("Mot de passe : minimum 6 caractères");
           return false;
         }
+        if (!form.confirmPassword) {
+          setError("Confirme ton mot de passe");
+          return false;
+        }
         if (form.password !== form.confirmPassword) {
-          setError("Les mots de passe ne correspondent pas");
+          setError(
+            "Les mots de passe ne correspondent pas. Retape exactement le même dans les 2 cases (utilise l’œil 👁️ pour vérifier)."
+          );
           return false;
         }
         return true;
@@ -295,7 +319,6 @@ function RegisterPageContent() {
         return;
       }
 
-      // 🔴 FIX DIAGNOSTICS 1 & 2 : On passe value: 1.00
       if (typeof window !== "undefined" && typeof window.fbq === "function") {
         window.fbq(
           "track",
@@ -304,7 +327,7 @@ function RegisterPageContent() {
             content_name: "LoveLink Registration",
             status: true,
             currency: "USD",
-            value: 1.00, // Modifié de 0 à 1.00 pour corriger l'erreur Meta
+            value: 1.0,
           },
           { eventID: data.metaEventId }
         );
@@ -456,13 +479,25 @@ function RegisterPageContent() {
                     type={showPassword ? "text" : "password"}
                     value={form.password}
                     onChange={(e) => setField("password", e.target.value)}
-                    className="w-full px-4 py-3.5 rounded-2xl border-2 border-slate-200 focus:border-rose-400 outline-none pr-12"
+                    className={`w-full px-4 py-3.5 rounded-2xl border-2 outline-none pr-12 ${
+                      passwordsMismatch
+                        ? "border-red-400 focus:border-red-400"
+                        : passwordsMatch
+                          ? "border-emerald-400 focus:border-emerald-400"
+                          : "border-slate-200 focus:border-rose-400"
+                    }`}
                     placeholder="Min. 6 caractères"
+                    autoComplete="new-password"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
                     className="absolute right-3 top-10 text-slate-400"
+                    aria-label={
+                      showPassword
+                        ? "Masquer le mot de passe"
+                        : "Afficher le mot de passe"
+                    }
                   >
                     {showPassword ? (
                       <EyeOff className="w-5 h-5" />
@@ -472,18 +507,69 @@ function RegisterPageContent() {
                   </button>
                 </div>
 
-                <div>
+                <div className="relative">
                   <label className="block text-sm font-bold text-slate-700 mb-1.5">
-                    Confirmer *
+                    Confirmer le mot de passe *
                   </label>
                   <input
-                    type="password"
+                    type={showConfirmPassword ? "text" : "password"}
                     value={form.confirmPassword}
-                    onChange={(e) => setField("confirmPassword", e.target.value)}
-                    className="w-full px-4 py-3.5 rounded-2xl border-2 border-slate-200 focus:border-rose-400 outline-none"
-                    placeholder="••••••••"
+                    onChange={(e) =>
+                      setField("confirmPassword", e.target.value)
+                    }
+                    className={`w-full px-4 py-3.5 rounded-2xl border-2 outline-none pr-12 ${
+                      passwordsMismatch
+                        ? "border-red-400 focus:border-red-400"
+                        : passwordsMatch
+                          ? "border-emerald-400 focus:border-emerald-400"
+                          : "border-slate-200 focus:border-rose-400"
+                    }`}
+                    placeholder="Retape le même mot de passe"
+                    autoComplete="new-password"
                   />
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setShowConfirmPassword(!showConfirmPassword)
+                    }
+                    className="absolute right-3 top-10 text-slate-400"
+                    aria-label={
+                      showConfirmPassword
+                        ? "Masquer la confirmation"
+                        : "Afficher la confirmation"
+                    }
+                  >
+                    {showConfirmPassword ? (
+                      <EyeOff className="w-5 h-5" />
+                    ) : (
+                      <Eye className="w-5 h-5" />
+                    )}
+                  </button>
                 </div>
+
+                {/* Feedback en direct */}
+                {passwordsMatch && (
+                  <div className="flex items-center gap-2 text-emerald-600 text-sm font-bold bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2">
+                    <Check className="w-4 h-4" />
+                    Les mots de passe correspondent
+                  </div>
+                )}
+                {passwordsMismatch && (
+                  <div className="text-red-600 text-sm font-semibold bg-red-50 border border-red-200 rounded-xl px-3 py-2">
+                    ❌ Les mots de passe ne sont pas identiques.
+                    <br />
+                    <span className="font-medium text-red-500">
+                      Retape exactement le même dans les 2 cases. Clique sur
+                      l’œil 👁️ pour vérifier.
+                    </span>
+                  </div>
+                )}
+                {password.length > 0 && password.length < 6 && (
+                  <p className="text-amber-600 text-xs font-semibold">
+                    Encore {6 - password.length} caractère
+                    {6 - password.length > 1 ? "s" : ""} minimum
+                  </p>
+                )}
               </div>
             )}
 
