@@ -41,7 +41,6 @@ export async function POST(req: NextRequest) {
     }
 
     // 3) Déjà traité ? (idempotent)
-    // ⚠️ On accepte "success" ET "completed" pour rétrocompat
     if (payment.status === "success" || payment.status === "completed") {
       return NextResponse.json({ success: true, message: "Déjà traité" });
     }
@@ -57,15 +56,15 @@ export async function POST(req: NextRequest) {
       // 🚀 BOOST
       // ═══════════════════════════════════════
       if (payment.plan === "boost") {
-  let addHours = 24;
+        let addHours = 24;
 
-if (payment.billingPeriod === "1h") {
-  addHours = 1;
-} else if (payment.billingPeriod === "3d") {
-  addHours = 72;
-} else if (payment.billingPeriod === "7d") {
-  addHours = 168;
-}
+        if (payment.billingPeriod === "1h") {
+          addHours = 1;
+        } else if (payment.billingPeriod === "3d") {
+          addHours = 72;
+        } else if (payment.billingPeriod === "7d") {
+          addHours = 168;
+        }
 
         const [user] = await db
           .select({ boostEndAt: users.boostEndAt })
@@ -78,7 +77,9 @@ if (payment.billingPeriod === "1h") {
         if (user?.boostEndAt && new Date(user.boostEndAt) > now) {
           newBoostEndAt = new Date(user.boostEndAt);
         }
-        newBoostEndAt = new Date(newBoostEndAt.getTime() + addHours * 60 * 60 * 1000);
+        newBoostEndAt = new Date(
+          newBoostEndAt.getTime() + addHours * 60 * 60 * 1000
+        );
 
         await db
           .update(users)
@@ -91,10 +92,21 @@ if (payment.billingPeriod === "1h") {
 
         // Notifs
         try {
+          const durationLabel =
+            addHours === 1
+              ? "1 heure"
+              : addHours === 24
+                ? "24h"
+                : addHours === 72
+                  ? "3 jours"
+                  : addHours === 168
+                    ? "7 jours"
+                    : `${addHours}h`;
+
           await db.insert(notifications).values({
             userId,
             type: "boost_activated",
-            content: "🚀 Ton Boost est activé ! Ton profil est mis en avant.",
+            content: `🚀 Ton Boost (${durationLabel}) est activé ! Ton profil est mis en avant.`,
             isRead: false,
           });
           await sendPushToUser(userId, PushTemplates.boost());
@@ -194,7 +206,7 @@ if (payment.billingPeriod === "1h") {
         }
       }
 
-      // 5) Marquer le paiement SUCCESS (aligné avec tes stats admin)
+      // 5) Marquer le paiement SUCCESS
       await db
         .update(payments)
         .set({
