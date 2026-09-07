@@ -15,6 +15,7 @@ import {
 import { sendTelegramAlert, formatPaymentAlert } from "@/lib/telegram";
 
 type PaymentCountry = "CM" | "OTHER";
+type ExtendedPeriod = BillingPeriod | "1h";
 
 export async function POST(req: NextRequest) {
   try {
@@ -40,47 +41,48 @@ export async function POST(req: NextRequest) {
       plan = "premium";
     }
 
-    // 2. Normalisation de la DURÉE
-    let period: BillingPeriod | "1h" = "monthly";
+    // 2. Normalisation de la DURÉE (avec support "1h" pour le Mini-Boost)
+    let period: ExtendedPeriod = "monthly";
+    const rawPeriod = String(
+      body.period ||
+        body.duration ||
+        body.billingPeriod ||
+        body.periodLabel ||
+        "monthly"
+    ).toLowerCase();
 
-const rawPeriod = String(
-  body.period ||
-    body.duration ||
-    body.billingPeriod ||
-    body.periodLabel ||
-    "monthly"
-).toLowerCase();
+    if (
+      rawPeriod === "1h" ||
+      rawPeriod.includes("1 heure") ||
+      rawPeriod.includes("1heure") ||
+      rawPeriod.includes("mini")
+    ) {
+      period = "1h";
+    } else if (
+      rawPeriod.includes("an") ||
+      rawPeriod.includes("year") ||
+      rawPeriod === "1y" ||
+      rawPeriod === "yearly"
+    ) {
+      period = "yearly";
+    } else if (rawPeriod.includes("24") || rawPeriod.includes("1j")) {
+      period = "24h";
+    } else if (
+      rawPeriod.includes("3d") ||
+      rawPeriod.includes("3j") ||
+      rawPeriod === "3"
+    ) {
+      period = "3d";
+    } else if (
+      rawPeriod.includes("7d") ||
+      rawPeriod.includes("7j") ||
+      rawPeriod === "7"
+    ) {
+      period = "7d";
+    } else {
+      period = "monthly";
+    }
 
-if (
-  rawPeriod === "1h" ||
-  rawPeriod.includes("1 heure") ||
-  rawPeriod.includes("1heure")
-) {
-  period = "1h";
-} else if (
-  rawPeriod.includes("an") ||
-  rawPeriod.includes("year") ||
-  rawPeriod === "1y" ||
-  rawPeriod === "yearly"
-) {
-  period = "yearly";
-} else if (rawPeriod.includes("24") || rawPeriod.includes("1j")) {
-  period = "24h";
-} else if (
-  rawPeriod.includes("3d") ||
-  rawPeriod.includes("3j") ||
-  rawPeriod === "3"
-) {
-  period = "3d";
-} else if (
-  rawPeriod.includes("7d") ||
-  rawPeriod.includes("7j") ||
-  rawPeriod === "7"
-) {
-  period = "7d";
-} else {
-  period = "monthly";
-}
     const country: PaymentCountry | undefined = body.country;
     const defaultReturnPath = plan === "boost" ? "/discover" : "/premium";
 
@@ -102,7 +104,7 @@ if (
       );
 
       choiceUrl.searchParams.set("plan", plan);
-      choiceUrl.searchParams.set("period", period);
+      choiceUrl.searchParams.set("period", String(period));
       choiceUrl.searchParams.set("returnPath", returnPath);
 
       return NextResponse.json({
@@ -112,15 +114,16 @@ if (
       });
     }
 
-    const amount =
-  plan === "boost" && period === "1h"
-    ? 500
-    : getPremiumPrice(plan, period as BillingPeriod);
+    // 3. Prix + description (avec cas spécial Mini-Boost 500 FCFA / 1h)
+    const isMiniBoost = plan === "boost" && period === "1h";
 
-const description =
-  plan === "boost" && period === "1h"
-    ? "Mini-Boost LoveLink - visibilité prioritaire pendant 1 heure"
-    : getPaymentDesignation(plan, period as BillingPeriod);
+    const amount = isMiniBoost
+      ? 500
+      : getPremiumPrice(plan, period as BillingPeriod);
+
+    const description = isMiniBoost
+      ? "Mini-Boost LoveLink - visibilité prioritaire pendant 1 heure"
+      : getPaymentDesignation(plan, period as BillingPeriod);
 
     const [user] = await db
       .select()
@@ -146,7 +149,7 @@ const description =
       const manualUrl = new URL("/premium/manual-cm", baseUrl);
 
       manualUrl.searchParams.set("plan", plan);
-      manualUrl.searchParams.set("period", period);
+      manualUrl.searchParams.set("period", String(period));
       manualUrl.searchParams.set("amount", String(amount));
       manualUrl.searchParams.set("userId", String(userId));
       manualUrl.searchParams.set("tx", merchantTransactionId);
@@ -178,10 +181,10 @@ const description =
         },
         actions: urls,
         custom_data: {
-  userId: String(userId),
-  plan,
-  period: String(period),
-},
+          userId: String(userId),
+          plan,
+          period: String(period),
+        },
       });
 
       paymentUrl = invoiceData.invoice_url || invoiceData.response_text;
@@ -200,7 +203,7 @@ const description =
       paymentUrl,
       amount,
       plan,
-      billingPeriod: period,
+      billingPeriod: String(period),
       status: "pending",
       clientEmail: user.email,
       clientFirstName: user.firstName,
@@ -215,7 +218,7 @@ const description =
         firstName: user.firstName,
         lastName: user.lastName,
         plan: plan,
-        period: period,
+        period: String(period),
         amount: amount,
         currency: country === "CM" ? "XAF" : "XOF",
         gateway: country === "CM" ? "MTN / Orange CM (Manuel)" : "PayDunya",
