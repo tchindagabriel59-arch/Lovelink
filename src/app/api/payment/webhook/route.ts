@@ -57,9 +57,17 @@ export async function POST(req: NextRequest) {
       // 🚀 BOOST
       // ═══════════════════════════════════════
       if (payment.plan === "boost") {
-        let addHours = 24;
-        if (payment.billingPeriod === "3d") addHours = 72;
-        if (payment.billingPeriod === "7d") addHours = 168;
+  let addHours = 24;
+
+  if (payment.billingPeriod === "1h") {
+    addHours = 1;
+  } else if (payment.billingPeriod === "24h") {
+    addHours = 24;
+  } else if (payment.billingPeriod === "3d") {
+    addHours = 72;
+  } else if (payment.billingPeriod === "7d") {
+    addHours = 168;
+  }
 
         const [user] = await db
           .select({ boostEndAt: users.boostEndAt })
