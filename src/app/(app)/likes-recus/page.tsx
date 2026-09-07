@@ -16,6 +16,7 @@ import {
   Eye,
   Sparkles,
   BadgeCheck,
+  Flame,
 } from "lucide-react";
 
 interface LikeReceived {
@@ -62,11 +63,15 @@ const gradients = [
 
 export default function LikesRecusPage() {
   const { user } = useUser();
-  const isPremium = user?.isPremium || false;
-
   const [likes, setLikes] = useState<LikeReceived[]>([]);
+  const [isPremium, setIsPremium] = useState<boolean>(user?.isPremium || false);
+  const [total, setTotal] = useState<number>(0);
+  const [premiumLikesCount, setPremiumLikesCount] = useState<number>(0);
   const [loading, setLoading] = useState(true);
-  const [matchPopup, setMatchPopup] = useState<{ firstName: string; photoUrl: string | null } | null>(null);
+  const [matchPopup, setMatchPopup] = useState<{
+    firstName: string;
+    photoUrl: string | null;
+  } | null>(null);
   const [processing, setProcessing] = useState<number | null>(null);
 
   useEffect(() => {
@@ -79,6 +84,9 @@ export default function LikesRecusPage() {
       if (res.ok) {
         const data = await res.json();
         setLikes(data.likes || []);
+        setIsPremium(data.isPremium || false);
+        setTotal(data.total || 0);
+        setPremiumLikesCount(data.premiumLikesCount || 0);
       }
     } catch {
       // silently fail
@@ -87,7 +95,11 @@ export default function LikesRecusPage() {
     }
   }
 
-  async function handleLikeBack(userId: number, firstName: string, photoUrl: string | null) {
+  async function handleLikeBack(
+    userId: number,
+    firstName: string,
+    photoUrl: string | null
+  ) {
     if (!isPremium) return;
     setProcessing(userId);
     try {
@@ -133,7 +145,6 @@ export default function LikesRecusPage() {
 
   const superLikes = likes.filter((l) => l.isSuperLike);
   const regularLikes = likes.filter((l) => !l.isSuperLike);
-  const premiumCount = likes.filter((l) => l.user.isPremium).length;
 
   if (loading) {
     return (
@@ -148,13 +159,13 @@ export default function LikesRecusPage() {
 
   return (
     <div className="p-6 lg:p-8 max-w-6xl mx-auto">
-      
       {/* Match Popup */}
       {matchPopup && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
           <div className="bg-white rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl">
             <div className="relative w-32 h-32 mx-auto mb-4">
               {matchPopup.photoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={matchPopup.photoUrl}
                   alt={matchPopup.firstName}
@@ -173,7 +184,8 @@ export default function LikesRecusPage() {
               C&apos;est un match ! 🎉
             </h2>
             <p className="text-slate-600 mb-6">
-              Vous et <strong>{matchPopup.firstName}</strong> vous êtes mutuellement likés !
+              Vous et <strong>{matchPopup.firstName}</strong> vous êtes
+              mutuellement likés !
             </p>
             <div className="flex gap-3">
               <button
@@ -206,11 +218,12 @@ export default function LikesRecusPage() {
               Ils t&apos;ont <span className="gradient-text">liké</span>
             </h1>
             <p className="mt-1 text-slate-600">
-              {likes.length} {likes.length > 1 ? "personnes" : "personne"} attendent ta réponse
-              {premiumCount > 0 && (
+              {total} {total > 1 ? "personnes" : "personne"} attendent ta
+              réponse
+              {premiumLikesCount > 0 && (
                 <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 bg-gradient-to-r from-yellow-100 to-orange-100 text-yellow-700 rounded-full text-xs font-bold border border-yellow-200">
                   <Crown className="w-3 h-3 fill-yellow-500" />
-                  {premiumCount} Premium
+                  {premiumLikesCount} Premium
                 </span>
               )}
             </p>
@@ -218,41 +231,42 @@ export default function LikesRecusPage() {
         </div>
       </div>
 
-      {/* 🔒 BANNIÈRE PREMIUM si non-Premium et il y a des likes */}
-      {!isPremium && likes.length > 0 && (
-        <div className="mb-6 relative overflow-hidden rounded-3xl bg-gradient-to-r from-yellow-400 via-orange-500 to-yellow-500 p-6 shadow-2xl">
+      {/* 🔒 BANNIÈRE PREMIUM VIP si non-Premium et il y a des likes */}
+      {!isPremium && total > 0 && (
+        <div className="mb-6 relative overflow-hidden rounded-3xl bg-gradient-to-br from-yellow-400 via-orange-500 to-rose-500 p-6 shadow-2xl">
           <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-32 translate-x-32" />
           <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/10 rounded-full translate-y-24 -translate-x-24" />
-          
+
           <div className="relative z-10 flex flex-col md:flex-row items-center gap-6">
             <div className="flex-shrink-0">
-              <div className="w-20 h-20 bg-white/20 backdrop-blur rounded-2xl flex items-center justify-center">
-                <Lock className="w-10 h-10 text-white" />
+              <div className="w-20 h-20 bg-white/20 backdrop-blur rounded-2xl flex items-center justify-center animate-pulse">
+                <Flame className="w-10 h-10 text-white" />
               </div>
             </div>
-            
+
             <div className="flex-1 text-white text-center md:text-left">
-              <h3 className="text-2xl font-black mb-2 flex items-center gap-2 justify-center md:justify-start">
-                <Gem className="w-6 h-6" />
-                {likes.length} {likes.length > 1 ? "personnes" : "personne"} ont craqué sur toi !
+              <h3 className="text-2xl md:text-3xl font-black mb-2 flex items-center gap-2 justify-center md:justify-start">
+                {total} {total > 1 ? "personnes" : "personne"} ont craqué sur
+                toi ! 🔥
               </h3>
               <p className="text-white/90 text-sm md:text-base">
-                Débloque leurs profils et matche instantanément avec Premium 👑
+                Débloque leurs profils pour découvrir qui et matcher
+                instantanément.
               </p>
             </div>
-            
+
             <Link
               href="/premium"
-              className="flex-shrink-0 bg-white text-orange-600 font-black px-6 py-3 rounded-xl shadow-lg hover:scale-105 transition-transform flex items-center gap-2"
+              className="flex-shrink-0 bg-white text-orange-600 font-black px-6 py-4 rounded-xl shadow-2xl hover:scale-105 transition-transform flex items-center gap-2 text-lg"
             >
-              <Sparkles className="w-5 h-5" />
-              Passer Premium
+              <Gem className="w-5 h-5" />
+              Voir qui &nbsp;→
             </Link>
           </div>
         </div>
       )}
 
-      {likes.length === 0 ? (
+      {total === 0 ? (
         <div className="text-center py-16 bg-white rounded-2xl border border-slate-100">
           <div className="w-24 h-24 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-6">
             <Heart className="w-12 h-12 text-rose-400" />
@@ -261,7 +275,8 @@ export default function LikesRecusPage() {
             Aucun like pour le moment
           </h2>
           <p className="text-slate-600 mb-6 max-w-md mx-auto">
-            Complète ton profil avec de belles photos et une bio attrayante pour maximiser tes chances !
+            Complète ton profil avec de belles photos et une bio attrayante
+            pour maximiser tes chances !
           </p>
           <Link
             href="/profile"
@@ -282,7 +297,7 @@ export default function LikesRecusPage() {
                 </h2>
               </div>
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                {superLikes.map((like) => (
+                {superLikes.map((like, idx) => (
                   <ProfileCard
                     key={like.likeId}
                     like={like}
@@ -291,6 +306,7 @@ export default function LikesRecusPage() {
                     processing={processing === like.user.id}
                     isSuperLike
                     isLocked={!isPremium}
+                    index={idx}
                   />
                 ))}
               </div>
@@ -307,7 +323,7 @@ export default function LikesRecusPage() {
                 </h2>
               </div>
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                {regularLikes.map((like) => (
+                {regularLikes.map((like, idx) => (
                   <ProfileCard
                     key={like.likeId}
                     like={like}
@@ -315,6 +331,7 @@ export default function LikesRecusPage() {
                     onPass={handlePass}
                     processing={processing === like.user.id}
                     isLocked={!isPremium}
+                    index={idx}
                   />
                 ))}
               </div>
@@ -329,7 +346,8 @@ export default function LikesRecusPage() {
                 Ne rate aucune opportunité ! 💕
               </h3>
               <p className="text-slate-600 mb-6 max-w-md mx-auto">
-                Avec Premium, tu vois exactement qui t&apos;a liké et tu peux matcher instantanément.
+                Avec Premium, tu vois exactement qui t&apos;a liké et tu peux
+                matcher instantanément.
               </p>
               <Link
                 href="/premium"
@@ -353,6 +371,7 @@ function ProfileCard({
   processing,
   isSuperLike,
   isLocked,
+  index,
 }: {
   like: LikeReceived;
   onLikeBack: (id: number, name: string, photo: string | null) => void;
@@ -360,19 +379,21 @@ function ProfileCard({
   processing: boolean;
   isSuperLike?: boolean;
   isLocked?: boolean;
+  index: number;
 }) {
-  const gradient = gradients[like.user.id % gradients.length];
+  const gradient = gradients[index % gradients.length];
   const isPremium = like.user.isPremium;
 
   return (
-    <div className={`group relative bg-white rounded-2xl overflow-hidden shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 ${
-      isPremium 
-        ? "ring-2 ring-yellow-400 shadow-yellow-500/20" 
-        : isSuperLike 
-        ? "border-2 border-blue-400 shadow-blue-200" 
-        : "border-2 border-slate-100"
-    }`}>
-      
+    <div
+      className={`group relative bg-white rounded-2xl overflow-hidden shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 ${
+        isPremium && !isLocked
+          ? "ring-2 ring-yellow-400 shadow-yellow-500/20"
+          : isSuperLike
+            ? "border-2 border-blue-400 shadow-blue-200"
+            : "border-2 border-slate-100"
+      }`}
+    >
       {/* Ruban Premium en haut */}
       {isPremium && !isLocked && (
         <div className="absolute top-0 left-0 right-0 z-20 bg-gradient-to-r from-yellow-400 via-orange-500 to-yellow-400 text-white text-center py-1 text-[10px] font-black tracking-widest flex items-center justify-center gap-1 shadow-md">
@@ -384,26 +405,44 @@ function ProfileCard({
 
       {/* Badge Super Like */}
       {isSuperLike && (
-        <div className={`absolute right-3 z-30 ${isPremium && !isLocked ? "top-8" : "top-3"}`}>
+        <div
+          className={`absolute right-3 z-30 ${
+            isPremium && !isLocked ? "top-8" : "top-3"
+          }`}
+        >
           <div className="w-10 h-10 bg-gradient-to-br from-blue-400 to-cyan-500 rounded-full flex items-center justify-center shadow-lg border-2 border-white">
             <Star className="w-5 h-5 text-white fill-white" />
           </div>
         </div>
       )}
 
-      {/* 🔗 LIEN VERS LE PROFIL PUBLIC */}
-      <Link href={isLocked ? "/premium" : `/discover/${like.user.id}`} className="block relative aspect-square overflow-hidden bg-gradient-to-br group cursor-pointer">
-        {like.user.photoUrl ? (
+      {/* 🔗 LIEN VERS LE PROFIL PUBLIC (bloqué si Free) */}
+      <Link
+        href={isLocked ? "/premium" : `/discover/${like.user.id}`}
+        className="block relative aspect-square overflow-hidden bg-gradient-to-br group cursor-pointer"
+      >
+        {isLocked ? (
+          // 🔒 MODE FREE : uniquement un dégradé (photoUrl est null, rien à révéler)
+          <div
+            className={`w-full h-full flex items-center justify-center bg-gradient-to-br ${gradient}`}
+          >
+            <div className="absolute inset-0 backdrop-blur-3xl bg-black/20" />
+            <span className="text-6xl font-bold text-white/30 relative z-10">
+              ?
+            </span>
+          </div>
+        ) : like.user.photoUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
           <img
             src={like.user.photoUrl}
             alt={like.user.firstName}
-            className={`w-full h-full object-cover transition-transform duration-500 group-hover:scale-110 ${
-              isLocked ? "blur-2xl scale-110" : ""
-            }`}
+            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
           />
         ) : (
-          <div className={`w-full h-full flex items-center justify-center ${gradient}`}>
-            <span className={`text-6xl font-bold text-white/80 transition-transform duration-500 group-hover:scale-110 ${isLocked ? "blur-xl" : ""}`}>
+          <div
+            className={`w-full h-full flex items-center justify-center bg-gradient-to-br ${gradient}`}
+          >
+            <span className="text-6xl font-bold text-white/80 transition-transform duration-500 group-hover:scale-110">
               {like.user.firstName.charAt(0)}
             </span>
           </div>
@@ -411,11 +450,11 @@ function ProfileCard({
 
         {/* 🔒 OVERLAY DE VERROUILLAGE */}
         {isLocked && (
-          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-gradient-to-br from-yellow-500/40 via-orange-500/40 to-yellow-500/40 backdrop-blur-sm group-hover:from-yellow-500/60 group-hover:to-orange-500/60 transition-all">
-            <div className="w-14 h-14 bg-white rounded-full flex items-center justify-center shadow-2xl mb-2">
-              <Lock className="w-7 h-7 text-orange-500" />
+          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-gradient-to-br from-yellow-500/30 via-orange-500/30 to-rose-500/30 group-hover:from-yellow-500/50 group-hover:to-orange-500/50 transition-all">
+            <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center shadow-2xl mb-3 animate-pulse">
+              <Lock className="w-8 h-8 text-orange-500" />
             </div>
-            <div className="bg-white/95 backdrop-blur rounded-full px-3 py-1 shadow-lg">
+            <div className="bg-white/95 backdrop-blur rounded-full px-4 py-1.5 shadow-lg">
               <p className="text-xs font-black text-orange-600 flex items-center gap-1">
                 <Crown className="w-3 h-3 fill-orange-500" />
                 Voir avec Premium
@@ -429,10 +468,10 @@ function ProfileCard({
           <div className="absolute bottom-3 right-3 w-3 h-3 bg-green-500 rounded-full border-2 border-white z-20" />
         )}
 
-        {/* Overlay avec nom */}
+        {/* Overlay avec nom (Premium uniquement) */}
         {!isLocked && (
           <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-3 z-10">
-           <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5">
               <p className="text-white font-bold text-lg drop-shadow">
                 {like.user.firstName}, {getAge(like.user.birthDate)}
               </p>
@@ -456,10 +495,10 @@ function ProfileCard({
         {isLocked && (
           <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-3 z-10">
             <p className="text-white font-bold text-lg drop-shadow">
-              ??? , {getAge(like.user.birthDate)}
+              ??? , {getAge(like.user.birthDate)} ans
             </p>
             <p className="text-white/80 text-xs drop-shadow">
-              📍 Localisation cachée
+              🔒 Débloque avec Premium
             </p>
           </div>
         )}
@@ -480,8 +519,8 @@ function ProfileCard({
         )}
         {isLocked && (
           <div className="mb-3 space-y-1">
-            <div className="h-3 bg-slate-100 rounded animate-pulse" />
-            <div className="h-3 bg-slate-100 rounded animate-pulse w-3/4" />
+            <div className="h-3 bg-gradient-to-r from-slate-100 to-slate-200 rounded animate-pulse" />
+            <div className="h-3 bg-gradient-to-r from-slate-100 to-slate-200 rounded animate-pulse w-3/4" />
           </div>
         )}
 
@@ -490,10 +529,10 @@ function ProfileCard({
           {isLocked ? (
             <Link
               href="/premium"
-              className="flex-1 py-2 bg-gradient-to-r from-yellow-500 to-orange-500 hover:shadow-lg text-white rounded-lg transition flex items-center justify-center gap-1 text-xs font-bold"
+              className="flex-1 py-2.5 bg-gradient-to-r from-yellow-500 to-orange-500 hover:shadow-lg text-white rounded-lg transition flex items-center justify-center gap-1.5 text-xs font-black"
             >
-              <Eye className="w-3.5 h-3.5" />
-              Découvrir
+              <Eye className="w-4 h-4" />
+              Voir Premium
             </Link>
           ) : (
             <>
@@ -506,7 +545,13 @@ function ProfileCard({
                 <X className="w-4 h-4" />
               </button>
               <button
-                onClick={() => onLikeBack(like.user.id, like.user.firstName, like.user.photoUrl)}
+                onClick={() =>
+                  onLikeBack(
+                    like.user.id,
+                    like.user.firstName,
+                    like.user.photoUrl
+                  )
+                }
                 disabled={processing}
                 className={`flex-1 py-2 rounded-lg text-white transition disabled:opacity-50 flex items-center justify-center hover:shadow-lg ${
                   isPremium
