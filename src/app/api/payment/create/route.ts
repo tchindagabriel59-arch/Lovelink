@@ -41,21 +41,46 @@ export async function POST(req: NextRequest) {
     }
 
     // 2. Normalisation de la DURÉE
-    let period: BillingPeriod = "monthly";
-    const rawPeriod = String(body.period || body.duration || body.billingPeriod || body.periodLabel || "monthly").toLowerCase();
+    let period: BillingPeriod | "1h" = "monthly";
 
-    if (rawPeriod.includes("an") || rawPeriod.includes("year") || rawPeriod === "1y" || rawPeriod === "yearly") {
-      period = "yearly";
-    } else if (rawPeriod.includes("24") || rawPeriod.includes("1j")) {
-      period = "24h";
-    } else if (rawPeriod.includes("3d") || rawPeriod.includes("3j") || rawPeriod.includes("3")) {
-      period = "3d";
-    } else if (rawPeriod.includes("7d") || rawPeriod.includes("7j") || rawPeriod.includes("7")) {
-      period = "7d";
-    } else {
-      period = "monthly";
-    }
+const rawPeriod = String(
+  body.period ||
+    body.duration ||
+    body.billingPeriod ||
+    body.periodLabel ||
+    "monthly"
+).toLowerCase();
 
+if (
+  rawPeriod === "1h" ||
+  rawPeriod.includes("1 heure") ||
+  rawPeriod.includes("1heure")
+) {
+  period = "1h";
+} else if (
+  rawPeriod.includes("an") ||
+  rawPeriod.includes("year") ||
+  rawPeriod === "1y" ||
+  rawPeriod === "yearly"
+) {
+  period = "yearly";
+} else if (rawPeriod.includes("24") || rawPeriod.includes("1j")) {
+  period = "24h";
+} else if (
+  rawPeriod.includes("3d") ||
+  rawPeriod.includes("3j") ||
+  rawPeriod === "3"
+) {
+  period = "3d";
+} else if (
+  rawPeriod.includes("7d") ||
+  rawPeriod.includes("7j") ||
+  rawPeriod === "7"
+) {
+  period = "7d";
+} else {
+  period = "monthly";
+}
     const country: PaymentCountry | undefined = body.country;
     const defaultReturnPath = plan === "boost" ? "/discover" : "/premium";
 
@@ -87,8 +112,15 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const amount = getPremiumPrice(plan, period);
-    const description = getPaymentDesignation(plan, period);
+    const amount =
+  plan === "boost" && period === "1h"
+    ? 500
+    : getPremiumPrice(plan, period as BillingPeriod);
+
+const description =
+  plan === "boost" && period === "1h"
+    ? "Mini-Boost LoveLink - visibilité prioritaire pendant 1 heure"
+    : getPaymentDesignation(plan, period as BillingPeriod);
 
     const [user] = await db
       .select()
@@ -146,10 +178,10 @@ export async function POST(req: NextRequest) {
         },
         actions: urls,
         custom_data: {
-          userId: String(userId),
-          plan,
-          period,
-        },
+  userId: String(userId),
+  plan,
+  period: String(period),
+},
       });
 
       paymentUrl = invoiceData.invoice_url || invoiceData.response_text;
