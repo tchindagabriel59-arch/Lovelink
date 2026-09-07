@@ -33,7 +33,7 @@ export default function BoostPage() {
       .catch(() => {});
   }, []);
 
-  const handleBuyBoost = async (period: "24h" | "3d" | "7d") => {
+  const handleBuyBoost = async (period: "1h" | "24h" | "3d" | "7d") => {
     setLoading(true);
     try {
       const res = await fetch("/api/payment/create", {
@@ -136,6 +136,46 @@ const handleBuyMiniBoost = async () => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
+        <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-3xl p-6 border-2 border-amber-300 shadow-xl flex flex-col relative">
+  <div className="absolute top-3 right-3 bg-amber-500 text-white text-[10px] font-black px-2 py-1 rounded-full uppercase">
+    Essai
+  </div>
+
+  <div className="text-center mb-6">
+    <div className="text-amber-600 font-black text-xl mb-2">
+      Mini-Boost
+    </div>
+
+    <div className="flex items-end justify-center gap-1">
+      <span className="text-4xl font-black text-slate-900">500</span>
+      <span className="text-slate-500 font-bold mb-1">FCFA</span>
+    </div>
+
+    <p className="text-sm text-slate-500 mt-1">
+      Pendant 1 heure
+    </p>
+  </div>
+
+  <ul className="space-y-4 mb-8 flex-1">
+    <li className="flex gap-3 text-sm text-slate-700">
+      <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
+      Profil affiché en priorité
+    </li>
+
+    <li className="flex gap-3 text-sm text-slate-700">
+      <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
+      Idéal pour tester le boost
+    </li>
+  </ul>
+
+  <button
+    onClick={() => handleBuyBoost("1h")}
+    disabled={loading}
+    className="w-full py-4 rounded-xl font-black bg-amber-500 text-white hover:bg-amber-600 transition disabled:opacity-50"
+  >
+    {loading ? "Chargement..." : "Choisir 1 heure"}
+  </button>
+</div>
         <div className="bg-gradient-to-b from-amber-50 to-white rounded-3xl p-6 border-2 border-amber-300 shadow-xl flex flex-col relative">
   <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-amber-500 text-white font-black text-xs px-4 py-1.5 rounded-full uppercase tracking-widest shadow-lg">
     Petit budget
@@ -182,6 +222,7 @@ const handleBuyMiniBoost = async () => {
 </div>
         <div className="bg-white rounded-3xl p-6 border-2 border-slate-100 shadow-xl flex flex-col hover:border-purple-300 transition">
           <div className="text-center mb-6">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-12">
             <div className="text-purple-600 font-black text-xl mb-2">Boost 24H</div>
             <div className="flex items-end justify-center gap-1">
               <span className="text-4xl font-black text-slate-900">1 500</span>
