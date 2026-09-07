@@ -58,7 +58,44 @@ export default function BoostPage() {
       setLoading(false);
     }
   };
+  
+const handleBuyMiniBoost = async () => {
+  setLoading(true);
 
+  try {
+    const res = await fetch("/api/payment/create", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        plan: "boost",
+        period: "1h",
+        amount: 100,
+        returnPath: "/boost",
+      }),
+    });
+
+    const data = await res.json();
+
+    if (res.ok && data.success && data.paymentUrl) {
+      window.location.href = data.paymentUrl;
+      return;
+    }
+
+    alert(
+      "Erreur : " +
+        (data.error ||
+          data.message ||
+          "Impossible de générer le lien de paiement")
+    );
+    setLoading(false);
+  } catch {
+    alert("Erreur de connexion au serveur.");
+    setLoading(false);
+  }
+};
+  
   return (
     <div className="p-6 lg:p-8 max-w-3xl mx-auto min-h-screen">
       <Link href="/discover" className="inline-flex items-center gap-2 text-sm text-slate-500 hover:text-purple-500 transition mb-6 font-bold">
@@ -98,7 +135,51 @@ export default function BoostPage() {
         )}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
+        <div className="bg-gradient-to-b from-amber-50 to-white rounded-3xl p-6 border-2 border-amber-300 shadow-xl flex flex-col relative">
+  <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-amber-500 text-white font-black text-xs px-4 py-1.5 rounded-full uppercase tracking-widest shadow-lg">
+    Petit budget
+  </div>
+
+  <div className="text-center mb-6 mt-4">
+    <div className="text-amber-600 font-black text-xl mb-2">
+      Mini Boost
+    </div>
+
+    <div className="flex items-end justify-center gap-1">
+      <span className="text-4xl font-black text-slate-900">
+        100
+      </span>
+      <span className="text-slate-500 font-bold mb-1">
+        FCFA
+      </span>
+    </div>
+
+    <p className="text-sm text-slate-500 mt-1">
+      Seulement pendant 1 heure
+    </p>
+  </div>
+
+  <ul className="space-y-4 mb-8 flex-1">
+    <li className="flex gap-3 text-sm text-slate-700">
+      <CheckCircle2 className="w-5 h-5 text-amber-500" />
+      Profil mis en avant pendant 1h
+    </li>
+
+    <li className="flex gap-3 text-sm text-slate-700">
+      <CheckCircle2 className="w-5 h-5 text-amber-500" />
+      Idéal pour essayer
+    </li>
+  </ul>
+
+  <button
+    onClick={handleBuyMiniBoost}
+    disabled={loading}
+    className="w-full py-4 rounded-xl font-black bg-amber-500 text-white hover:bg-amber-600 transition shadow-lg disabled:opacity-50"
+  >
+    {loading ? "Chargement..." : "Choisir 1 heure"}
+  </button>
+</div>
         <div className="bg-white rounded-3xl p-6 border-2 border-slate-100 shadow-xl flex flex-col hover:border-purple-300 transition">
           <div className="text-center mb-6">
             <div className="text-purple-600 font-black text-xl mb-2">Boost 24H</div>
