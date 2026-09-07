@@ -11,7 +11,23 @@ export async function GET() {
       return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
     }
 
-    // Récupérer tous les IDs déjà matchés (pour les exclure)
+    // 1. Vérifier si l'utilisateur actuel est Premium
+    const [currentUser] = await db
+      .select({
+        isPremium: users.isPremium,
+        premiumExpiresAt: users.premiumExpiresAt,
+      })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+
+    const now = new Date();
+    const isPremiumActive =
+      currentUser?.isPremium &&
+      (!currentUser.premiumExpiresAt ||
+        new Date(currentUser.premiumExpiresAt) > now);
+
+    // 2. Récupérer tous les IDs déjà matchés (pour les exclure)
     const existingMatches = await db
       .select({ user1Id: matches.user1Id, user2Id: matches.user2Id })
       .from(matches)
@@ -21,7 +37,7 @@ export async function GET() {
       m.user1Id === userId ? m.user2Id : m.user1Id
     );
 
-    // Récupérer tous ceux à qui J'ai déjà répondu (like ou pass)
+    // 3. Récupérer tous ceux à qui J'ai déjà répondu (like ou pass)
     const myActions = await db
       .select({ toUserId: likes.toUserId })
       .from(likes)
@@ -29,16 +45,18 @@ export async function GET() {
 
     const alreadyRespondedIds = myActions.map((a) => a.toUserId);
 
-    // IDs à exclure : ceux avec qui j'ai déjà matché OU à qui j'ai déjà répondu
-    const excludeIds = [...new Set([...matchedUserIds, ...alreadyRespondedIds, userId])];
+    // 4. IDs à exclure
+    const excludeIds = [
+      ...new Set([...matchedUserIds, ...alreadyRespondedIds, userId]),
+    ];
 
-    // Récupérer tous les likes reçus (pas encore traités)
+    // 5. Récupérer tous les likes reçus (pas encore traités)
     const likesReceived = await db
       .select({
         likeId: likes.id,
         isSuperLike: likes.isSuperLike,
         createdAt: likes.createdAt,
-           user: {
+        user: {
           id: users.id,
           firstName: users.firstName,
           lastName: users.lastName,
@@ -68,7 +86,45 @@ export async function GET() {
       )
       .orderBy(desc(likes.isSuperLike), desc(likes.createdAt));
 
-    return NextResponse.json({ likes: likesReceived });
+    // 6. 🔒 SÉCURITÉ CÔTÉ SERVEUR
+    // Si Free : on masque les données sensibles avant de les envoyer
+    const safeLikes = likesReceived.map((like) => {
+      if (isPremiumActive) {
+        // Premium → données complètes
+        return like;
+      }
+
+      // Free → données masquées (rien de sensible ne quitte le serveur)
+      return {
+        likeId: like.likeId,
+        isSuperLike: like.isSuperLike,
+        createdAt: like.createdAt,
+        user: {
+          id: 0, // ID masqué pour empêcher l'accès direct au profil
+          firstName: "?????",
+          lastName: "",
+          birthDate: like.user.birthDate, // On garde l'âge seulement
+          gender: like.user.gender,
+          bio: null,
+          city: null,
+          country: null,
+          photoUrl: null, // 🔒 Photo NON envoyée
+          coverPhotoUrl: null,
+          interests: null,
+          occupation: null,
+          isOnline: false,
+          isPremium: like.user.isPremium, // On garde pour montrer le ruban "Premium a craqué sur toi"
+          isVerified: like.user.isVerified,
+        },
+      };
+    });
+
+    return NextResponse.json({
+      likes: safeLikes,
+      isPremium: isPremiumActive,
+      total: likesReceived.length,
+      premiumLikesCount: likesReceived.filter((l) => l.user.isPremium).length,
+    });
   } catch (error) {
     console.error("Get likes received error:", error);
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
