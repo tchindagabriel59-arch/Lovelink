@@ -180,7 +180,7 @@ export const BOOST_PRICING = {
 } as const;
 
 export type PremiumPlan = "premium" | "gold" | "boost";
-export type BillingPeriod = "monthly" | "yearly" | "24h" | "3d" | "7d";
+export type BillingPeriod = "monthly" | "yearly" | "24h" | "3d" | "7d" | "1h" ;
 
 export function getPremiumPrice(plan: PremiumPlan, period: BillingPeriod): number {
   if (plan === "boost") {
