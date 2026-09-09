@@ -102,27 +102,43 @@ export default function AdminPaymentsPage() {
     }
 
     // SI LE CLIENT S'EST INSCRIT PAR EMAIL -> ENVOI MAIL DE RELANCE + PUSH
-    if (isRealEmail) {
-      setRelancingId(item.payment.id);
-      try {
-        const res = await fetch("/api/admin/payments/relance", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ paymentId: item.payment.id }),
-        });
+if (isRealEmail) {
+  setRelancingId(item.payment.id);
+  try {
+    const res = await fetch("/api/admin/payments/relance", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ paymentId: item.payment.id }),
+    });
 
-        if (res.ok) {
-          alert(`📧 E-mail de relance + Push envoyés avec succès à ${name} (${email}) !`);
-        } else {
-          alert("❌ Erreur lors de l'envoi du mail de relance.");
-        }
-      } catch {
-        alert("Erreur réseau.");
-      } finally {
-        setRelancingId(null);
+    const data = await res.json().catch(() => ({}));
+
+    if (res.ok && data.success) {
+      if (data.emailSent) {
+        alert(
+          `📧 E-mail de relance envoyé à ${name} (${email}) !\n` +
+            (data.pushSent ? "📱 Push envoyé aussi." : "📱 Push non délivré (pas d'abonnement).")
+        );
+      } else {
+        alert(
+          `⚠️ ${data.message || "Pas d'e-mail envoyé."}\n` +
+            (data.pushSent ? "Push OK." : "")
+        );
       }
-      return;
+    } else {
+      alert(
+        `❌ Erreur relance mail :\n${data.error || res.statusText || "Envoi impossible"}`
+      );
+      console.error("Relance failed:", data);
     }
+  } catch (e) {
+    console.error(e);
+    alert("Erreur réseau lors de la relance mail.");
+  } finally {
+    setRelancingId(null);
+  }
+  return;
+}
 
     // SI VRAIMENT NADA -> DEMANDER LE NUMÉRO WHATSAPP
     const inputPhone = prompt(`Saisis le numéro WhatsApp de ${name} (ex: 651387914) :`);
