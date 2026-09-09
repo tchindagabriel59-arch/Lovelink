@@ -9,7 +9,7 @@ import { sendPushToUser } from "@/lib/push";
 const resend = new Resend(process.env.RESEND_API_KEY || "");
 
 // Doit être le même domaine vérifié que dans src/lib/emails.ts
-const FROM_EMAIL = "LoveLink <noreply@lovelink237.com>";
+const FROM_EMAIL = "Gabriel de LoveLink <support@lovelink237.com>";
 const REPLY_TO = "lovelink237@gmail.com";
 const SUPPORT_WHATSAPP = "221787533626";
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://lovelink237.com";
