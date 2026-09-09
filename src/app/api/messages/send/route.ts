@@ -1,8 +1,8 @@
 // src/app/api/messages/send/route.ts
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { messages, matches } from "@/db/schema";
-import { and, eq, or } from "drizzle-orm";
+import { messages, matches, users } from "@/db/schema";
+import { and, eq, or, sql } from "drizzle-orm";
 import { getCurrentUserId } from "@/lib/auth";
 import { requirePhoto } from "@/lib/photo-check";
 import { createNotification } from "@/lib/notifications";
@@ -49,7 +49,22 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Message vide" }, { status: 400 });
     }
 
-    // 1. Vérifier si un match existe déjà
+    // 1. Vérifier le statut Premium de l'expéditeur
+    const [senderUser] = await db
+      .select({
+        isPremium: users.isPremium,
+        premiumExpiresAt: users.premiumExpiresAt,
+      })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+
+    const now = new Date();
+    const isPremiumActive =
+      senderUser?.isPremium &&
+      (!senderUser.premiumExpiresAt || new Date(senderUser.premiumExpiresAt) > now);
+
+    // 2. Vérifier si un match existe déjà
     const existingMatches = await db
       .select()
       .from(matches)
@@ -66,7 +81,7 @@ export async function POST(req: Request) {
     if (existingMatches && existingMatches.length > 0) {
       matchId = existingMatches[0].id;
     } else {
-      // 2. Créer le match (sans 'matchedAt' pour respecter le schema BDD)
+      // Créer le match s'il n'existe pas encore
       const newMatches = await db
         .insert(matches)
         .values({
@@ -81,7 +96,45 @@ export async function POST(req: Request) {
       matchId = newMatches[0].id;
     }
 
-    // 3. Insérer le message
+    // 3. 🛑 PAYWALL MESSAGES (Si utilisateur FREE -> Max 3 messages envoyés par match)
+    if (!isPremiumActive) {
+      const [sentCountResult] = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(messages)
+        .where(
+          and(
+            eq(messages.matchId, matchId),
+            eq(messages.senderId, userId)
+          )
+        );
+
+      const sentCount = Number(sentCountResult?.count || 0);
+
+      if (sentCount >= 3) {
+        logApiCall({
+          endpoint,
+          method,
+          statusCode: 402,
+          durationMs: Date.now() - startTime,
+          userId,
+          errorMessage: "Paywall : Limite de 3 messages gratuits atteinte",
+          userAgent,
+          ipAddress,
+        });
+
+        return NextResponse.json(
+          {
+            error: "PAYWALL_LIMIT",
+            message: "Tu as atteint la limite de 3 messages gratuits pour cette discussion. Passe Premium pour échanger en illimité !",
+            requiresPremium: true,
+            limit: 3,
+          },
+          { status: 402 } // 402 = Payment Required
+        );
+      }
+    }
+
+    // 4. Insérer le message (Si Premium OU < 3 messages)
     const newMessages = await db
       .insert(messages)
       .values({
@@ -92,7 +145,7 @@ export async function POST(req: Request) {
       })
       .returning();
 
-    // 4. Notifications non-bloquantes
+    // 5. Notifications non-bloquantes
     Promise.all([
       createNotification({
         userId: receiverId,
@@ -100,7 +153,7 @@ export async function POST(req: Request) {
         fromUserId: userId,
         content: `💬 Message : ${content.substring(0, 50)}${content.length > 50 ? "..." : ""}`,
       }),
-      sendPushToUser(receiverId, PushTemplates.message("Nouveau match", content.substring(0, 60))),
+      sendPushToUser(receiverId, PushTemplates.message("Nouveau message", content.substring(0, 60))),
     ]).catch((e) => console.error("Notif non bloquante:", e));
 
     logApiCall({ endpoint, method, statusCode: 200, durationMs: Date.now() - startTime, userId, errorMessage: `Message envoyé au match ${matchId}`, userAgent, ipAddress });
