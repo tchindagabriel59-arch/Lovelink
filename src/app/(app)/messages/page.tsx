@@ -27,6 +27,7 @@ import {
   Lock,
   Unlock,
   X,
+  Gem,
 } from "lucide-react";
 
 interface MatchData {
@@ -81,9 +82,7 @@ const gradients = [
   "from-emerald-400 to-teal-500",
 ];
 
-const quickEmojis = ["❤️", "😂", "🔥", "👍", "🥰", "😍", "😘", "🎉"];
-
-// 🎵 LECTEUR AUDIO POUR LES MESSAGES VOCAUX
+// 🎵 LECTEUR AUDIO
 function AudioPlayer({ audioUrl, isMine }: { audioUrl: string; isMine: boolean }) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [duration, setDuration] = useState(0);
@@ -231,6 +230,9 @@ function MessagesContent() {
   const [showEmojis, setShowEmojis] = useState(false);
   const [filterTab, setFilterTab] = useState<FilterTab>("all");
   const [searchQuery, setSearchQuery] = useState("");
+
+  // 🛑 PAYWALL MODAL
+  const [showPaywallModal, setShowPaywallModal] = useState(false);
 
   // 🤖 GABI AI
   const [showGabiModal, setShowGabiModal] = useState(false);
@@ -466,8 +468,15 @@ function MessagesContent() {
             body: JSON.stringify({ content: `[AUDIO]${base64Audio}` }),
           });
 
+          const data = await res.json();
+
+          // 🛑 PAYWALL CHECK SUR AUDIO
+          if (res.status === 402 || data.code === "PAYWALL_LIMIT" || data.requiresPremium) {
+            setShowPaywallModal(true);
+            return;
+          }
+
           if (res.ok) {
-            const data = await res.json();
             setChatMessages((prev) => [...prev, data.message]);
             lastMessageIdRef.current = data.message.id;
             shouldScrollRef.current = true;
@@ -497,7 +506,7 @@ function MessagesContent() {
     audioChunksRef.current = [];
   };
 
-  // 📝 GESTION DE L'ENVOI DE MESSAGE ET DU FILTRE ANTI-CONTACT
+  // 📝 ENVOI DU MESSAGE + DÉTECTION PAYWALL
   async function handleSend(e: React.FormEvent) {
     e.preventDefault();
     if (!newMessage.trim() || !selectedMatch || sending) return;
@@ -514,6 +523,13 @@ function MessagesContent() {
         body: JSON.stringify({ content: messageToSend }),
       });
       const data = await res.json();
+
+      // 🛑 DÉTECTION DU PAYWALL (STATUT 402 OU ERREUR LIMIT)
+      if (res.status === 402 || data.code === "PAYWALL_LIMIT" || data.requiresPremium) {
+        setNewMessage(messageToSend);
+        setShowPaywallModal(true);
+        return;
+      }
       
       if (res.ok) {
         setChatMessages((prev) => [...prev, data.message]);
@@ -521,13 +537,13 @@ function MessagesContent() {
         shouldScrollRef.current = true;
         fetchMatchesList();
       } else {
-        // 🛡️ SI LE MESSAGE EST BLOQUÉ PAR SÉCURITÉ (MOINS DE 30 MESSAGES)
+        // 🛡️ ANTI-CONTACT
         if (data.code === "CONTACT_BLOCKED") {
           setChatMessages((prev) => [
             ...prev,
             {
               id: Date.now(),
-              senderId: 0, // 0 = Message système local
+              senderId: 0,
               content: data.error,
               isRead: true,
               createdAt: new Date().toISOString(),
@@ -545,7 +561,6 @@ function MessagesContent() {
     }
   }
 
-  // ❌ SUPPRIMER UN MESSAGE SYSTÈME
   const dismissSystemMessage = (msgId: number) => {
     setChatMessages((prev) => prev.filter((msg) => msg.id !== msgId));
   };
@@ -576,8 +591,15 @@ function MessagesContent() {
         body: JSON.stringify({ content: `[IMAGE]${imageUrl}` }),
       });
 
+      const data = await res.json();
+
+      // 🛑 PAYWALL CHECK SUR IMAGE
+      if (res.status === 402 || data.code === "PAYWALL_LIMIT" || data.requiresPremium) {
+        setShowPaywallModal(true);
+        return;
+      }
+
       if (res.ok) {
-        const data = await res.json();
         setChatMessages((prev) => [...prev, data.message]);
         lastMessageIdRef.current = data.message.id;
         shouldScrollRef.current = true;
@@ -644,6 +666,64 @@ function MessagesContent() {
 
   return (
     <div className="flex h-[calc(100vh-64px)] lg:h-screen bg-[#F7F8FC]">
+      
+      {/* 🛑 POP-UP PAYWALL MESSAGES */}
+      {showPaywallModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in">
+          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-sm w-full text-center shadow-2xl relative overflow-hidden">
+            <button
+              onClick={() => setShowPaywallModal(false)}
+              className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100 transition"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="w-20 h-20 bg-gradient-to-tr from-rose-500 to-purple-600 rounded-3xl flex items-center justify-center mx-auto mb-5 shadow-xl shadow-rose-500/30 transform rotate-3">
+              <MessageCircle className="w-10 h-10 text-white" />
+            </div>
+
+            <h2 className="text-2xl font-black text-slate-900 mb-2">
+              Passe en <span className="gradient-text">Illimité !</span> 💬
+            </h2>
+
+            <p className="text-slate-600 text-sm mb-6 leading-relaxed">
+              Tu as utilisé tes <strong className="text-rose-600">3 messages gratuits</strong> avec <strong>{otherUser?.firstName || "ton match"}</strong>. Passe Premium pour continuer à discuter !
+            </p>
+
+            <div className="bg-rose-50/60 rounded-2xl p-4 mb-6 text-left space-y-2.5 border border-rose-100">
+              <div className="flex items-center gap-2 text-xs font-bold text-slate-700">
+                <Sparkles className="w-4 h-4 text-rose-500 shrink-0" />
+                Messages & tchats illimités
+              </div>
+              <div className="flex items-center gap-2 text-xs font-bold text-slate-700">
+                <Heart className="w-4 h-4 text-rose-500 shrink-0" />
+                Débloque tous ceux qui t'ont liké
+              </div>
+              <div className="flex items-center gap-2 text-xs font-bold text-slate-700">
+                <Gem className="w-4 h-4 text-purple-600 shrink-0" />
+                Badge VIP sur ton profil
+              </div>
+            </div>
+
+            <Link
+              href="/premium"
+              onClick={() => setShowPaywallModal(false)}
+              className="w-full py-4 bg-gradient-to-r from-rose-500 via-pink-500 to-purple-600 text-white font-black rounded-2xl shadow-lg shadow-rose-500/25 hover:scale-[1.02] transition-transform flex items-center justify-center gap-2 text-base"
+            >
+              <Gem className="w-5 h-5" />
+              Débloquer mes messages
+            </Link>
+
+            <button
+              onClick={() => setShowPaywallModal(false)}
+              className="mt-3 text-xs font-semibold text-slate-400 hover:text-slate-600 transition"
+            >
+              Plus tard
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* SIDEBAR CONVERSATIONS */}
       <div
         className={`${
@@ -804,10 +884,6 @@ function MessagesContent() {
               <div className={`absolute flex items-center justify-center w-6 h-6 rounded-full bg-white shadow-sm border ${isContactUnlocked ? "border-emerald-200 text-emerald-500" : "border-amber-200 text-amber-500"}`}>
                 {isContactUnlocked ? <Unlock className="w-3 h-3" /> : <Lock className="w-3 h-3" />}
               </div>
-              
-              <div className="absolute top-11 right-0 bg-slate-800 text-white text-[10px] px-2.5 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition shadow-lg whitespace-nowrap z-50 pointer-events-none">
-                {isContactUnlocked ? "Contacts débloqués ✨" : `${realMessageCount}/${progressTarget} msgs pour débloquer`}
-              </div>
             </div>
           </div>
 
@@ -820,7 +896,6 @@ function MessagesContent() {
                 const isMine = msg.senderId === user?.id;
                 const isSystem = msg.senderId === 0;
 
-                // 🛡️ ALERTE SYSTÈME ANTI-CONTACT DANS LE CHAT (Avec Croix)
                 if (isSystem) {
                   return (
                     <div key={msg.id} className="flex justify-center mt-6 mb-4 animate-in zoom-in-95">
@@ -1005,7 +1080,7 @@ function MessagesContent() {
                   <Mic className="w-5 h-5" />
                 </button>
 
-                {/* ✈️ BOUTON ENVOYER (TOUJOURS VISIBLE) */}
+                {/* ✈️ BOUTON ENVOYER */}
                 <button
                   type="submit"
                   disabled={!newMessage.trim() || sending}
