@@ -11,7 +11,8 @@ import {
   AlertCircle, 
   ShieldCheck, 
   Smartphone,
-  Info
+  Info,
+  ExternalLink
 } from "lucide-react";
 
 function ManualPaymentContent() {
@@ -27,13 +28,14 @@ function ManualPaymentContent() {
   // ⚙️ CONFIGURATION DES INFOS DE PAIEMENT
   // ==========================================
   const RECIPIENT_NAME = "Cedric Merlin Fossi Bekam";
-  const RECIPIENT_NUMBER = +237651387914; // 
-  const SUPPORT_WHATSAPP = "221787533626";
+  const RECIPIENT_NUMBER: string = "651387914"; // 👈 Ton numéro au format texte
+  const SUPPORT_WHATSAPP: string = "221787533626";
   // ==========================================
 
   const handleCopy = (text: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedText(text);
+    const textToCopy = String(text);
+    navigator.clipboard.writeText(textToCopy);
+    setCopiedText(textToCopy);
     setTimeout(() => setCopiedText(null), 2000);
   };
 
@@ -96,12 +98,13 @@ function ManualPaymentContent() {
             <div className="flex gap-4">
               <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-600 font-black flex items-center justify-center shrink-0">1</div>
               <div className="flex-1">
-                <p className="font-bold text-slate-900 mb-2">Fais un dépôt (Orange Money ou MTN) à ce numéro :</p>
+                <p className="font-bold text-slate-900 mb-2">Fais un transfert (Orange Money ou MTN) à ce numéro :</p>
                 <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 flex items-center justify-between">
                   <div>
                     <p className="text-3xl font-black tracking-wider text-slate-800">{RECIPIENT_NUMBER}</p>
                   </div>
                   <button 
+                    type="button"
                     onClick={() => handleCopy(RECIPIENT_NUMBER)}
                     className="p-3 bg-white border border-slate-200 rounded-xl hover:bg-slate-100 transition shadow-sm"
                   >
