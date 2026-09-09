@@ -42,9 +42,8 @@ function ManualPaymentContent() {
 
   const planName = plan === "boost" ? "Boost" : plan === "gold" ? "LoveLink Gold" : "LoveLink Premium";
   
-  // Codes USSD de numérotation directe
+  // Code USSD automatique pour MTN Mobile Money
   const mtnUssdCode = `*126*9*${RECIPIENT_NUMBER}*${amount}#`;
-  const orangeUssdCode = `*150*1*1*${RECIPIENT_NUMBER}*${amount}#`;
 
   // Message pré-rempli WhatsApp
   const whatsappMessage = `Bonjour le support LoveLink 👋\n\nJe viens d'effectuer un paiement Mobile Money.\n\n📦 Offre : ${planName}\n💰 Montant : ${amount} FCFA\n🧾 Réf : ${tx}\n\nVoici la capture d'écran du message de confirmation :`;
@@ -90,46 +89,29 @@ function ManualPaymentContent() {
           </div>
         </div>
 
-        {/* NUMEROTATION AUTOMATIQUE USSD */}
+        {/* NUMEROTATION AUTOMATIQUE USSD MTN */}
         <div className="bg-white rounded-3xl p-6 md:p-8 shadow-sm border border-slate-200 mb-6">
           <h2 className="text-xl font-black text-slate-900 mb-2 flex items-center gap-2">
             <Zap className="w-6 h-6 text-amber-500 fill-amber-500" />
-            Paiement Rapide par Téléphone
+            Paiement Rapide MTN Mobile Money
           </h2>
           <p className="text-sm text-slate-600 mb-6">
-            Clique sur ton réseau ci-dessous pour ouvrir le clavier d'appel avec le montant et le numéro pré-remplis :
+            Clique ci-dessous pour ouvrir le clavier d'appel avec le montant et le numéro pré-remplis :
           </p>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
-            {/* BOUTON MTN */}
+          <div className="mb-8">
+            {/* BOUTON UNIQUE MTN */}
             <a
               href={`tel:${encodeURIComponent(mtnUssdCode)}`}
-              className="flex items-center justify-between bg-yellow-400 hover:bg-yellow-500 text-slate-900 font-black p-4 rounded-2xl transition shadow-md hover:shadow-lg"
+              className="w-full flex items-center justify-between bg-yellow-400 hover:bg-yellow-500 text-slate-900 font-black p-4 rounded-2xl transition shadow-md hover:shadow-lg"
             >
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-black text-yellow-400 rounded-xl flex items-center justify-center font-black text-xs">
                   MTN
                 </div>
                 <div>
-                  <p className="text-sm font-black">Lancer via MTN</p>
+                  <p className="text-sm font-black">Lancer le paiement MTN</p>
                   <p className="text-[11px] font-semibold opacity-80">{mtnUssdCode}</p>
-                </div>
-              </div>
-              <PhoneCall className="w-5 h-5 shrink-0" />
-            </a>
-
-            {/* BOUTON ORANGE */}
-            <a
-              href={`tel:${encodeURIComponent(orangeUssdCode)}`}
-              className="flex items-center justify-between bg-orange-500 hover:bg-orange-600 text-white font-black p-4 rounded-2xl transition shadow-md hover:shadow-lg"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-white text-orange-600 rounded-xl flex items-center justify-center font-black text-xs">
-                  OM
-                </div>
-                <div>
-                  <p className="text-sm font-black">Lancer via Orange</p>
-                  <p className="text-[11px] font-semibold opacity-80">{orangeUssdCode}</p>
                 </div>
               </div>
               <PhoneCall className="w-5 h-5 shrink-0" />
@@ -146,7 +128,7 @@ function ManualPaymentContent() {
               {/* NUMERO A COPIER */}
               <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 flex items-center justify-between">
                 <div>
-                  <p className="text-xs text-slate-500 font-medium">Numéro du destinataire</p>
+                  <p className="text-xs text-slate-500 font-medium">Numéro MTN Mobile Money</p>
                   <p className="text-2xl font-black text-slate-800">{RECIPIENT_NUMBER}</p>
                 </div>
                 <button 
