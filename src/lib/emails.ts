@@ -3,7 +3,7 @@ import { Resend } from "resend";
 const resend = new Resend(process.env.RESEND_API_KEY);
 
 // ✅ MODE PRODUCTION : emails envoyés depuis ton domaine lovelink237.com
-const FROM_EMAIL = "LoveLink <noreply@lovelink237.com>";
+const FROM_EMAIL = "Gabriel de LoveLink <support@lovelink237.com>";
 const REPLY_TO = "lovelink237@gmail.com";
 const SITE_URL = "https://lovelink237.com";
 
