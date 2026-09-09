@@ -12,7 +12,8 @@ import {
   ShieldCheck, 
   Smartphone,
   Info,
-  ExternalLink
+  Zap,
+  PhoneCall
 } from "lucide-react";
 
 function ManualPaymentContent() {
@@ -28,7 +29,7 @@ function ManualPaymentContent() {
   // ⚙️ CONFIGURATION DES INFOS DE PAIEMENT
   // ==========================================
   const RECIPIENT_NAME = "Cedric Merlin Fossi Bekam";
-  const RECIPIENT_NUMBER: string = "651387914"; // 👈 Ton numéro au format texte
+  const RECIPIENT_NUMBER: string = "651387914"; 
   const SUPPORT_WHATSAPP: string = "221787533626";
   // ==========================================
 
@@ -41,7 +42,11 @@ function ManualPaymentContent() {
 
   const planName = plan === "boost" ? "Boost" : plan === "gold" ? "LoveLink Gold" : "LoveLink Premium";
   
-  // Message pré-rempli pour WhatsApp
+  // Codes USSD de numérotation directe
+  const mtnUssdCode = `*126*9*${RECIPIENT_NUMBER}*${amount}#`;
+  const orangeUssdCode = `*150*1*1*${RECIPIENT_NUMBER}*${amount}#`;
+
+  // Message pré-rempli WhatsApp
   const whatsappMessage = `Bonjour le support LoveLink 👋\n\nJe viens d'effectuer un paiement Mobile Money.\n\n📦 Offre : ${planName}\n💰 Montant : ${amount} FCFA\n🧾 Réf : ${tx}\n\nVoici la capture d'écran du message de confirmation :`;
   const whatsappUrl = `https://wa.me/${SUPPORT_WHATSAPP}?text=${encodeURIComponent(whatsappMessage)}`;
   const supportUrlOnly = `https://wa.me/${SUPPORT_WHATSAPP}?text=Bonjour,%20j'ai%20besoin%20d'aide%20pour%20mon%20paiement%20LoveLink.`;
@@ -56,7 +61,7 @@ function ManualPaymentContent() {
             Retour
           </Link>
           <div className="font-black text-slate-900 flex items-center gap-2">
-            Paiement Sécurisé <ShieldCheck className="w-5 h-5 text-emerald-500" />
+            Paiement Cameroun <ShieldCheck className="w-5 h-5 text-emerald-500" />
           </div>
         </div>
       </div>
@@ -85,81 +90,112 @@ function ManualPaymentContent() {
           </div>
         </div>
 
-        {/* INSTRUCTIONS */}
+        {/* NUMEROTATION AUTOMATIQUE USSD */}
         <div className="bg-white rounded-3xl p-6 md:p-8 shadow-sm border border-slate-200 mb-6">
-          <h2 className="text-xl font-black text-slate-900 mb-6 flex items-center gap-2">
-            <Smartphone className="w-6 h-6 text-rose-500" />
-            Comment payer ?
+          <h2 className="text-xl font-black text-slate-900 mb-2 flex items-center gap-2">
+            <Zap className="w-6 h-6 text-amber-500 fill-amber-500" />
+            Paiement Rapide par Téléphone
           </h2>
+          <p className="text-sm text-slate-600 mb-6">
+            Clique sur ton réseau ci-dessous pour ouvrir le clavier d'appel avec le montant et le numéro pré-remplis :
+          </p>
 
-          <div className="space-y-6">
-            
-            {/* ETAPE 1 */}
-            <div className="flex gap-4">
-              <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-600 font-black flex items-center justify-center shrink-0">1</div>
-              <div className="flex-1">
-                <p className="font-bold text-slate-900 mb-2">Fais un transfert (Orange Money ou MTN) à ce numéro :</p>
-                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 flex items-center justify-between">
-                  <div>
-                    <p className="text-3xl font-black tracking-wider text-slate-800">{RECIPIENT_NUMBER}</p>
-                  </div>
-                  <button 
-                    type="button"
-                    onClick={() => handleCopy(RECIPIENT_NUMBER)}
-                    className="p-3 bg-white border border-slate-200 rounded-xl hover:bg-slate-100 transition shadow-sm"
-                  >
-                    {copiedText === RECIPIENT_NUMBER ? <CheckCircle2 className="w-5 h-5 text-emerald-500" /> : <Copy className="w-5 h-5 text-slate-500" />}
-                  </button>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
+            {/* BOUTON MTN */}
+            <a
+              href={`tel:${encodeURIComponent(mtnUssdCode)}`}
+              className="flex items-center justify-between bg-yellow-400 hover:bg-yellow-500 text-slate-900 font-black p-4 rounded-2xl transition shadow-md hover:shadow-lg"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-black text-yellow-400 rounded-xl flex items-center justify-center font-black text-xs">
+                  MTN
+                </div>
+                <div>
+                  <p className="text-sm font-black">Lancer via MTN</p>
+                  <p className="text-[11px] font-semibold opacity-80">{mtnUssdCode}</p>
                 </div>
               </div>
-            </div>
+              <PhoneCall className="w-5 h-5 shrink-0" />
+            </a>
 
-            {/* ETAPE 2 (VERIFICATION NOM) */}
-            <div className="flex gap-4">
-              <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-600 font-black flex items-center justify-center shrink-0">2</div>
-              <div className="flex-1">
-                <p className="font-bold text-slate-900 mb-2">Vérifie bien le nom avant de valider :</p>
-                <div className="bg-amber-50 p-4 rounded-2xl border border-amber-200 flex items-start gap-3">
-                  <Info className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-                  <div>
-                    <p className="text-sm text-amber-800 font-medium">Le nom qui s'affichera sur ton téléphone doit être exactement :</p>
-                    <p className="text-lg font-black text-amber-900 mt-1">{RECIPIENT_NAME}</p>
-                  </div>
+            {/* BOUTON ORANGE */}
+            <a
+              href={`tel:${encodeURIComponent(orangeUssdCode)}`}
+              className="flex items-center justify-between bg-orange-500 hover:bg-orange-600 text-white font-black p-4 rounded-2xl transition shadow-md hover:shadow-lg"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-white text-orange-600 rounded-xl flex items-center justify-center font-black text-xs">
+                  OM
+                </div>
+                <div>
+                  <p className="text-sm font-black">Lancer via Orange</p>
+                  <p className="text-[11px] font-semibold opacity-80">{orangeUssdCode}</p>
                 </div>
               </div>
-            </div>
-
-            {/* ETAPE 3 */}
-            <div className="flex gap-4">
-              <div className="w-8 h-8 rounded-full bg-rose-100 text-rose-600 font-black flex items-center justify-center shrink-0">3</div>
-              <div className="flex-1">
-                <p className="font-bold text-slate-900 mb-2">Envoie-nous la capture d'écran de confirmation</p>
-                <p className="text-sm text-slate-600 mb-4">
-                  Dès que le transfert est fait, clique sur le bouton ci-dessous pour nous envoyer la preuve par WhatsApp. Ton compte sera activé en 2 minutes chrono ! ⚡
-                </p>
-                <a 
-                  href={whatsappUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full flex items-center justify-center gap-2 bg-[#25D366] hover:bg-[#20bd5a] text-white py-4 px-6 rounded-2xl font-black text-lg transition-transform hover:scale-[1.02] shadow-lg shadow-green-500/30"
-                >
-                  <MessageCircle className="w-6 h-6" />
-                  J'ai payé, j'envoie la preuve
-                </a>
-              </div>
-            </div>
-
+              <PhoneCall className="w-5 h-5 shrink-0" />
+            </a>
           </div>
+
+          <div className="border-t border-slate-100 pt-6">
+            <h3 className="font-bold text-slate-900 mb-4 flex items-center gap-2">
+              <Smartphone className="w-5 h-5 text-rose-500" />
+              Ou fais le transfert manuellement :
+            </h3>
+
+            <div className="space-y-4">
+              {/* NUMERO A COPIER */}
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-slate-500 font-medium">Numéro du destinataire</p>
+                  <p className="text-2xl font-black text-slate-800">{RECIPIENT_NUMBER}</p>
+                </div>
+                <button 
+                  type="button"
+                  onClick={() => handleCopy(RECIPIENT_NUMBER)}
+                  className="p-3 bg-white border border-slate-200 rounded-xl hover:bg-slate-100 transition shadow-sm"
+                >
+                  {copiedText === RECIPIENT_NUMBER ? <CheckCircle2 className="w-5 h-5 text-emerald-500" /> : <Copy className="w-5 h-5 text-slate-500" />}
+                </button>
+              </div>
+
+              {/* NOM OBLIGATOIRE */}
+              <div className="bg-amber-50 p-4 rounded-2xl border border-amber-200 flex items-start gap-3">
+                <Info className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-xs text-amber-800 font-medium">Nom à vérifier sur ton écran :</p>
+                  <p className="text-base font-black text-amber-900 mt-0.5">{RECIPIENT_NAME}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* CONFIRMATION WHATSAPP */}
+          <div className="mt-8 border-t border-slate-100 pt-6">
+            <p className="font-bold text-slate-900 mb-2">Après avoir validé avec ton code secret :</p>
+            <p className="text-sm text-slate-600 mb-4">
+              Clique ci-dessous pour envoyer la preuve par WhatsApp. Ton compte sera activé immédiatement ! ⚡
+            </p>
+            <a 
+              href={whatsappUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full flex items-center justify-center gap-2 bg-[#25D366] hover:bg-[#20bd5a] text-white py-4 px-6 rounded-2xl font-black text-lg transition-transform hover:scale-[1.02] shadow-lg shadow-green-500/30"
+            >
+              <MessageCircle className="w-6 h-6" />
+              J'ai payé, j'envoie la preuve
+            </a>
+          </div>
+
         </div>
 
-        {/* SUPPORT BLOCK */}
+        {/* SUPPORT */}
         <div className="bg-white rounded-3xl p-6 border border-slate-200 text-center">
           <div className="w-12 h-12 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-3">
             <AlertCircle className="w-6 h-6 text-slate-400" />
           </div>
           <h3 className="font-bold text-slate-900 mb-1">Un problème lors du paiement ?</h3>
           <p className="text-sm text-slate-500 mb-4">
-            Notre équipe est disponible pour t'aider à finaliser ton activation.
+            Notre équipe est disponible pour t'aider.
           </p>
           <a 
             href={supportUrlOnly}
