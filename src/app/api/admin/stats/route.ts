@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { users, likes, matches, messages, reports } from "@/db/schema";
+import { users, likes, matches, messages, reports, payments } from "@/db/schema";
 import { isCurrentUserAdmin } from "@/lib/auth";
-import { eq, gte, sql } from "drizzle-orm";
+import { eq, gte, sql, or, and } from "drizzle-orm";
 
 export async function GET() {
   try {
@@ -15,8 +15,7 @@ export async function GET() {
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const weekAgo = new Date(today);
     weekAgo.setDate(weekAgo.getDate() - 7);
-    const monthAgo = new Date(today);
-    monthAgo.setMonth(monthAgo.getMonth() - 1);
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     const last24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
     const [
@@ -27,13 +26,20 @@ export async function GET() {
       [activeUsers],
       [premiumUsers],
       [bannedUsers],
-      [verifiedUsers], // ✅ NOUVEAU
+      [verifiedUsers],
       genderStats,
       [totalLikes],
       [totalMatches],
       [totalMessages],
       [pendingReports],
       [totalReports],
+      // 💰 VRAIS REVENUS depuis payments
+      [revenueTotal],
+      [revenueMonth],
+      [paidCount],
+      [pendingPayments],
+      [boostPaid],
+      [premiumPaid],
     ] = await Promise.all([
       db.select({ count: sql<number>`count(*)::int` }).from(users),
       db
@@ -47,7 +53,7 @@ export async function GET() {
       db
         .select({ count: sql<number>`count(*)::int` })
         .from(users)
-        .where(gte(users.createdAt, monthAgo)),
+        .where(gte(users.createdAt, monthStart)),
       db
         .select({ count: sql<number>`count(*)::int` })
         .from(users)
@@ -60,7 +66,6 @@ export async function GET() {
         .select({ count: sql<number>`count(*)::int` })
         .from(users)
         .where(eq(users.isBanned, true)),
-      // ✅ Compte exact des badges vérifiés
       db
         .select({ count: sql<number>`count(*)::int` })
         .from(users)
@@ -80,7 +85,84 @@ export async function GET() {
         .from(reports)
         .where(eq(reports.status, "pending")),
       db.select({ count: sql<number>`count(*)::int` }).from(reports),
+
+      // Total encaissé (tous temps) — status success OU completed
+      db
+        .select({
+          total: sql<number>`coalesce(sum(${payments.amount}), 0)::int`,
+        })
+        .from(payments)
+        .where(
+          or(
+            eq(payments.status, "success"),
+            eq(payments.status, "completed")
+          )
+        ),
+
+      // Encaissé ce mois-ci
+      db
+        .select({
+          total: sql<number>`coalesce(sum(${payments.amount}), 0)::int`,
+        })
+        .from(payments)
+        .where(
+          and(
+            or(
+              eq(payments.status, "success"),
+              eq(payments.status, "completed")
+            ),
+            gte(payments.createdAt, monthStart)
+          )
+        ),
+
+      // Nombre de paiements validés
+      db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(payments)
+        .where(
+          or(
+            eq(payments.status, "success"),
+            eq(payments.status, "completed")
+          )
+        ),
+
+      // Paiements en attente
+      db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(payments)
+        .where(eq(payments.status, "pending")),
+
+      // Boosts payés validés
+      db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(payments)
+        .where(
+          and(
+            or(
+              eq(payments.status, "success"),
+              eq(payments.status, "completed")
+            ),
+            sql`lower(${payments.plan}) like '%boost%'`
+          )
+        ),
+
+      // Premium/Gold payés validés
+      db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(payments)
+        .where(
+          and(
+            or(
+              eq(payments.status, "success"),
+              eq(payments.status, "completed")
+            ),
+            sql`lower(${payments.plan}) not like '%boost%'`
+          )
+        ),
     ]);
+
+    const totalXof = Number(revenueTotal?.total || 0);
+    const monthXof = Number(revenueMonth?.total || 0);
 
     return NextResponse.json(
       {
@@ -92,7 +174,7 @@ export async function GET() {
           active24h: activeUsers.count,
           premium: premiumUsers.count,
           banned: bannedUsers.count,
-          verified: verifiedUsers.count, // ✅ NOUVEAU
+          verified: verifiedUsers.count,
         },
         gender: genderStats,
         activity: {
@@ -105,8 +187,17 @@ export async function GET() {
           total: totalReports.count,
         },
         revenue: {
-          monthlyRevenue: premiumUsers.count * 5,
-          yearlyRevenue: premiumUsers.count * 5 * 12,
+          // Vrais montants FCFA
+          totalXof,
+          monthXof,
+          paidCount: paidCount.count,
+          pendingCount: pendingPayments.count,
+          boostPaidCount: boostPaid.count,
+          premiumPaidCount: premiumPaid.count,
+          // rétrocompat (évite crash si ancien front)
+          monthlyRevenue: monthXof,
+          yearlyRevenue: totalXof,
+          currency: "XOF",
         },
       },
       {
