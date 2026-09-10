@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { payments, users, subscriptions, notifications } from "@/db/schema";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, or, sql } from "drizzle-orm";
 import { getCurrentUserId } from "@/lib/auth";
 import { sendPushToUser, PushTemplates } from "@/lib/push";
 
-// 1️⃣ GET : paiements en attente (manuel CM)
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
     const adminId = await getCurrentUserId();
     if (!adminId) {
@@ -23,28 +22,88 @@ export async function GET() {
       return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
     }
 
-    const pendingPayments = await db
+    const tab = (req.nextUrl.searchParams.get("tab") || "pending").toLowerCase();
+
+    const selectShape = {
+      payment: payments,
+      user: {
+        id: users.id,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        photoUrl: users.photoUrl,
+        email: users.email,
+      },
+    };
+
+    let items;
+
+    if (tab === "success" || tab === "validated") {
+      items = await db
+        .select(selectShape)
+        .from(payments)
+        .leftJoin(users, eq(payments.userId, users.id))
+        .where(
+          or(
+            eq(payments.status, "success"),
+            eq(payments.status, "completed")
+          )
+        )
+        .orderBy(desc(payments.completedAt), desc(payments.createdAt))
+        .limit(100);
+    } else {
+      items = await db
+        .select(selectShape)
+        .from(payments)
+        .leftJoin(users, eq(payments.userId, users.id))
+        .where(eq(payments.status, "pending"))
+        .orderBy(desc(payments.createdAt));
+    }
+
+    const [pendingCount] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(payments)
+      .where(eq(payments.status, "pending"));
+
+    const [successCount] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(payments)
+      .where(
+        or(
+          eq(payments.status, "success"),
+          eq(payments.status, "completed")
+        )
+      );
+
+    const [successSum] = await db
       .select({
-        payment: payments,
-        user: {
-          id: users.id,
-          firstName: users.firstName,
-          lastName: users.lastName,
-          photoUrl: users.photoUrl,
-          email: users.email,
-        },
+        total: sql<number>`coalesce(sum(${payments.amount}), 0)::int`,
       })
       .from(payments)
-      .leftJoin(users, eq(payments.userId, users.id))
-      .where(eq(payments.status, "pending"))
-      .orderBy(desc(payments.createdAt));
+      .where(
+        or(
+          eq(payments.status, "success"),
+          eq(payments.status, "completed")
+        )
+      );
 
-    return NextResponse.json({ pending: pendingPayments });
+    // rétrocompat : "pending" pour l'ancien front
+    return NextResponse.json({
+      pending: tab === "pending" ? items : [],
+      validated: tab === "success" || tab === "validated" ? items : [],
+      items,
+      counts: {
+        pending: pendingCount?.count || 0,
+        success: successCount?.count || 0,
+        successTotalXof: Number(successSum?.total || 0),
+      },
+    });
   } catch (error) {
     console.error("Erreur GET pending payments:", error);
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
   }
 }
+
+// ... garde ton POST et DELETE tels quels (avec le fix 1h)
 
 // 2️⃣ POST : Valider un paiement manuel → active Boost ou Premium
 export async function POST(req: NextRequest) {
