@@ -102,11 +102,19 @@ export async function POST(req: NextRequest) {
     const isBoost = rawPlan.includes("boost");
 
     // ═══════════════════════════════════════
-    // 🚀 BOOST
+    // 🚀 BOOST (SUPPORT DE 1H / 24H / 3D / 7D)
     // ═══════════════════════════════════════
     if (isBoost) {
       let hoursToAdd = 24;
+
       if (
+        rawPeriod === "1h" ||
+        rawPeriod.includes("1h") ||
+        rawPeriod.includes("1 heure") ||
+        rawPeriod.includes("1heure")
+      ) {
+        hoursToAdd = 1;
+      } else if (
         rawPeriod.includes("3d") ||
         rawPeriod.includes("3j") ||
         rawPeriod === "3"
@@ -120,7 +128,7 @@ export async function POST(req: NextRequest) {
         hoursToAdd = 168;
       }
 
-      // Empile si boost encore actif (vrai champ = boostEndAt)
+      // Empile si boost encore actif
       let baseDate = now;
       if (user.boostEndAt) {
         const parsed = new Date(user.boostEndAt);
@@ -144,10 +152,13 @@ export async function POST(req: NextRequest) {
 
       // Notifs
       try {
+        const durationLabel =
+          hoursToAdd === 1 ? "1 heure" : `${hoursToAdd}h`;
+
         await db.insert(notifications).values({
           userId: user.id,
           type: "boost_activated",
-          content: `🚀 Ton Boost est activé jusqu'au ${newBoostEndAt.toLocaleString("fr-FR")} !`,
+          content: `🚀 Ton Boost (${durationLabel}) est activé jusqu'au ${newBoostEndAt.toLocaleString("fr-FR")} !`,
           isRead: false,
         });
         await sendPushToUser(user.id, PushTemplates.boost());
@@ -155,6 +166,7 @@ export async function POST(req: NextRequest) {
         console.error("Notif boost:", e);
       }
 
+      // Marquer le paiement comme VALIDE (Comptabilisé dans les revenus)
       await db
         .update(payments)
         .set({
@@ -252,6 +264,7 @@ export async function POST(req: NextRequest) {
       console.error("Notif premium:", e);
     }
 
+    // Marquer le paiement comme VALIDE (Comptabilisé dans les revenus)
     await db
       .update(payments)
       .set({
