@@ -41,9 +41,16 @@ interface Stats {
     pending: number;
     total: number;
   };
-  revenue: {
-    monthlyRevenue: number;
-    yearlyRevenue: number;
+    revenue: {
+    totalXof: number;
+    monthXof: number;
+    paidCount: number;
+    pendingCount: number;
+    boostPaidCount: number;
+    premiumPaidCount: number;
+    monthlyRevenue?: number;
+    yearlyRevenue?: number;
+    currency?: string;
   };
 }
 
@@ -243,7 +250,7 @@ export default function AdminDashboard() {
             label="Abonnés Premium"
             value={stats.users.premium}
             color="from-amber-500 to-orange-500"
-            trend={`${stats.revenue.monthlyRevenue}€ / mois`}
+            trend={`${(stats.revenue.monthXof || 0).toLocaleString("fr-FR")} F ce mois`}
           />
           {/* ✅ NOUVEAU : Profils avec badge vérifié */}
           <StatCard
@@ -400,25 +407,57 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        <div className="bg-gradient-to-br from-amber-500/10 to-orange-500/10 border border-amber-500/30 rounded-2xl p-6">
+                {/* 💰 REVENUS RÉELS (PayDunya + validations manuelles CM) */}
+        <div className="bg-gradient-to-br from-emerald-500/10 to-teal-500/10 border border-emerald-500/30 rounded-2xl p-6">
           <div className="flex items-center gap-2 mb-4">
-            <DollarSign className="w-5 h-5 text-amber-400" />
-            <h2 className="text-lg font-bold">💰 Revenus (estimation)</h2>
+            <DollarSign className="w-5 h-5 text-emerald-400" />
+            <h2 className="text-lg font-bold">💰 Revenus réels encaissés</h2>
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <p className="text-sm text-slate-400">Revenus mensuels</p>
-              <p className="text-3xl font-bold text-amber-400">{stats.revenue.monthlyRevenue} €</p>
-              <p className="text-xs text-slate-500 mt-1">{stats.users.premium} abonnés × 5€</p>
+
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="bg-slate-900/60 rounded-xl p-4 border border-slate-800">
+              <p className="text-xs text-slate-400 mb-1">Ce mois-ci</p>
+              <p className="text-2xl font-black text-emerald-400">
+                {(stats.revenue.monthXof || 0).toLocaleString("fr-FR")}
+                <span className="text-sm font-bold text-emerald-500/80 ml-1">F</span>
+              </p>
+              <p className="text-[11px] text-slate-500 mt-1">FCFA encaissés</p>
             </div>
-            <div>
-              <p className="text-sm text-slate-400">Revenus annuels estimés</p>
-              <p className="text-3xl font-bold text-orange-400">{stats.revenue.yearlyRevenue} €</p>
-              <p className="text-xs text-slate-500 mt-1">Projection sur 12 mois</p>
+
+            <div className="bg-slate-900/60 rounded-xl p-4 border border-slate-800">
+              <p className="text-xs text-slate-400 mb-1">Total depuis le début</p>
+              <p className="text-2xl font-black text-teal-400">
+                {(stats.revenue.totalXof || 0).toLocaleString("fr-FR")}
+                <span className="text-sm font-bold text-teal-500/80 ml-1">F</span>
+              </p>
+              <p className="text-[11px] text-slate-500 mt-1">FCFA cumulés</p>
+            </div>
+
+            <div className="bg-slate-900/60 rounded-xl p-4 border border-slate-800">
+              <p className="text-xs text-slate-400 mb-1">Paiements validés</p>
+              <p className="text-2xl font-black text-white">
+                {stats.revenue.paidCount || 0}
+              </p>
+              <p className="text-[11px] text-slate-500 mt-1">
+                🚀 {stats.revenue.boostPaidCount || 0} boosts · 💎 {stats.revenue.premiumPaidCount || 0} premium
+              </p>
+            </div>
+
+            <div className="bg-slate-900/60 rounded-xl p-4 border border-slate-800">
+              <p className="text-xs text-slate-400 mb-1">En attente</p>
+              <p className="text-2xl font-black text-amber-400">
+                {stats.revenue.pendingCount || 0}
+              </p>
+              <p className="text-[11px] text-slate-500 mt-1">
+                initiés non validés
+              </p>
             </div>
           </div>
+
           <p className="text-xs text-slate-500 mt-4">
-            💡 Note : Les revenus seront calculés automatiquement une fois Stripe intégré.
+            ✅ Calcul réel depuis la table <code className="text-slate-400">payments</code> (status{" "}
+            <code className="text-emerald-500">success</code> /{" "}
+            <code className="text-emerald-500">completed</code>) — PayDunya + validations manuelles CM.
           </p>
         </div>
 
