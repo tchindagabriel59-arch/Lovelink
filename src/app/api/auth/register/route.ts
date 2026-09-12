@@ -186,6 +186,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    // 4. 🚀 META CAPI : Envoi d'événement enrichi avec tous les paramètres demandés par Meta
     const metaEventId = clientEventId || generateEventId();
     
     try {
@@ -196,15 +197,22 @@ export async function POST(req: NextRequest) {
       const referer = req.headers.get('referer');
       const eventSourceUrl = referer || `${process.env.NEXT_PUBLIC_SITE_URL || 'https://lovelink237.com'}/register`;
 
+      // Détection du code pays ISO (2 lettres)
+      const userCountry = country && (country.toLowerCase().includes("sénégal") || country.toLowerCase().includes("senegal") || country.toLowerCase() === "sn") ? "sn" : "cm";
+
       await sendMetaEvent({
         eventName: 'CompleteRegistration',
         eventId: metaEventId,
         eventSourceUrl,
         userData: {
           email: isEmail ? finalEmail : undefined,
+          phone: !isEmail ? finalPhone : (rawPhone || inputIdentifier), // 👈 Numéro de téléphone pour le matching !
           firstName,
           lastName,
-          country: 'cm',
+          city: city?.trim() || undefined, // 👈 Ville pour le matching !
+          country: userCountry, // 👈 Code Pays (sn/cm) pour le matching !
+          gender, // 👈 Genre pour le matching !
+          birthDate, // 👈 Date de naissance pour le matching !
           clientIpAddress: clientIp,
           clientUserAgent: capiUserAgent,
           fbp,
@@ -232,14 +240,14 @@ export async function POST(req: NextRequest) {
       referralApplied: !!referrer,
     });
 
-    // Remplace maxAge: 60 * 60 * 24 * 7 par 365 jours :
-response.cookies.set("auth_token", token, {
-  httpOnly: true,
-  secure: process.env.NODE_ENV === "production",
-  sameSite: "lax",
-  maxAge: 60 * 60 * 24 * 365, // 👈 1 an
-  path: "/",
-});
+    // Cookie d'authentification valide 1 an
+    response.cookies.set("auth_token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 60 * 60 * 24 * 365,
+      path: "/",
+    });
 
     logApiCall({
       endpoint,
