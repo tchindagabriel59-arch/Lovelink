@@ -4,7 +4,6 @@ const PIXEL_ID = process.env.META_PIXEL_ID!;
 const ACCESS_TOKEN = process.env.META_CAPI_TOKEN!;
 const API_VERSION = 'v21.0';
 
-// Fonction pour hasher les données personnelles (obligatoire par Meta)
 function hashData(data: string): string {
   return crypto
     .createHash('sha256')
@@ -19,10 +18,12 @@ interface UserData {
   lastName?: string;
   city?: string;
   country?: string;
+  gender?: string;
+  birthDate?: string;
   clientIpAddress?: string;
   clientUserAgent?: string;
-  fbc?: string; // Facebook click ID
-  fbp?: string; // Facebook browser ID
+  fbc?: string;
+  fbp?: string;
 }
 
 interface CustomData {
@@ -35,7 +36,7 @@ interface CustomData {
 
 interface SendEventParams {
   eventName: string;
-  eventId: string; // Pour déduplication avec le Pixel
+  eventId: string;
   eventSourceUrl?: string;
   userData: UserData;
   customData?: CustomData;
@@ -54,19 +55,48 @@ export async function sendMetaEvent({
   }
 
   try {
-    // Construire user_data avec hachage SHA256
     const user_data: Record<string, string | string[]> = {};
 
-    if (userData.email) user_data.em = hashData(userData.email);
-    if (userData.phone) {
-      // Nettoyer le numéro (garder que les chiffres)
-      const cleanPhone = userData.phone.replace(/\D/g, '');
-      user_data.ph = hashData(cleanPhone);
+    // Email
+    if (userData.email && !userData.email.includes('@phone.lovelink237.com')) {
+      user_data.em = hashData(userData.email);
     }
+
+    // Phone (Nettoyé, uniquement chiffres)
+    if (userData.phone) {
+      const cleanPhone = userData.phone.replace(/\D/g, '');
+      if (cleanPhone.length >= 8) {
+        user_data.ph = hashData(cleanPhone);
+      }
+    }
+
+    // First Name / Last Name
     if (userData.firstName) user_data.fn = hashData(userData.firstName);
     if (userData.lastName) user_data.ln = hashData(userData.lastName);
-    if (userData.city) user_data.ct = hashData(userData.city);
-    if (userData.country) user_data.country = hashData(userData.country);
+
+    // City
+    if (userData.city) {
+      const cleanCity = userData.city.toLowerCase().replace(/[^a-z]/g, '');
+      if (cleanCity) user_data.ct = hashData(cleanCity);
+    }
+
+    // Country (Code 2 lettres ISO e.g., 'sn' ou 'cm')
+    if (userData.country) user_data.country = hashData(userData.country.toLowerCase());
+
+    // Gender ('m' ou 'f')
+    if (userData.gender) {
+      const g = userData.gender.toLowerCase();
+      const metaGender = g === 'male' || g === 'homme' || g === 'm' ? 'm' : g === 'female' || g === 'femme' || g === 'f' ? 'f' : undefined;
+      if (metaGender) user_data.ge = hashData(metaGender);
+    }
+
+    // Date of Birth (Format YYYYMMDD selon norme Meta)
+    if (userData.birthDate) {
+      const cleanDob = userData.birthDate.replace(/\D/g, ''); // YYYYMMDD
+      if (cleanDob.length === 8) user_data.db = hashData(cleanDob);
+    }
+
+    // Technical IDs
     if (userData.clientIpAddress) user_data.client_ip_address = userData.clientIpAddress;
     if (userData.clientUserAgent) user_data.client_user_agent = userData.clientUserAgent;
     if (userData.fbc) user_data.fbc = userData.fbc;
@@ -103,7 +133,7 @@ export async function sendMetaEvent({
       return null;
     }
 
-    console.log(`[Meta CAPI] ✅ Événement "${eventName}" envoyé:`, result);
+    console.log(`[Meta CAPI] ✅ Événement "${eventName}" envoyé avec succès:`, result);
     return result;
   } catch (error) {
     console.error('[Meta CAPI] Exception:', error);
@@ -111,7 +141,6 @@ export async function sendMetaEvent({
   }
 }
 
-// Fonction utilitaire pour extraire l'IP du client
 export function getClientIp(request: Request): string | undefined {
   const forwarded = request.headers.get('x-forwarded-for');
   if (forwarded) {
@@ -122,7 +151,6 @@ export function getClientIp(request: Request): string | undefined {
   return undefined;
 }
 
-// Fonction pour générer un event ID unique (pour déduplication)
 export function generateEventId(): string {
   return `${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
 }
