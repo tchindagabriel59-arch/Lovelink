@@ -1,8 +1,8 @@
 // src/app/api/messages/send/route.ts
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { messages, matches, users } from "@/db/schema";
-import { and, eq, or, sql } from "drizzle-orm";
+import { messages, matches } from "@/db/schema";
+import { and, eq, or } from "drizzle-orm";
 import { getCurrentUserId } from "@/lib/auth";
 import { requirePhoto } from "@/lib/photo-check";
 import { createNotification } from "@/lib/notifications";
@@ -49,22 +49,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Message vide" }, { status: 400 });
     }
 
-    // 1. Vérifier le statut Premium de l'expéditeur
-    const [senderUser] = await db
-      .select({
-        isPremium: users.isPremium,
-        premiumExpiresAt: users.premiumExpiresAt,
-      })
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1);
-
-    const now = new Date();
-    const isPremiumActive =
-      senderUser?.isPremium &&
-      (!senderUser.premiumExpiresAt || new Date(senderUser.premiumExpiresAt) > now);
-
-    // 2. Vérifier si un match existe déjà
+    // 1. Vérifier si un match existe déjà
     const existingMatches = await db
       .select()
       .from(matches)
@@ -96,45 +81,7 @@ export async function POST(req: Request) {
       matchId = newMatches[0].id;
     }
 
-    // 3. 🛑 PAYWALL MESSAGES (Si utilisateur FREE -> Max 3 messages envoyés par match)
-    if (!isPremiumActive) {
-      const [sentCountResult] = await db
-        .select({ count: sql<number>`count(*)` })
-        .from(messages)
-        .where(
-          and(
-            eq(messages.matchId, matchId),
-            eq(messages.senderId, userId)
-          )
-        );
-
-      const sentCount = Number(sentCountResult?.count || 0);
-
-      if (sentCount >= 3) {
-        logApiCall({
-          endpoint,
-          method,
-          statusCode: 402,
-          durationMs: Date.now() - startTime,
-          userId,
-          errorMessage: "Paywall : Limite de 3 messages gratuits atteinte",
-          userAgent,
-          ipAddress,
-        });
-
-        return NextResponse.json(
-          {
-            error: "PAYWALL_LIMIT",
-            message: "Tu as atteint la limite de 3 messages gratuits pour cette discussion. Passe Premium pour échanger en illimité !",
-            requiresPremium: true,
-            limit: 3,
-          },
-          { status: 402 } // 402 = Payment Required
-        );
-      }
-    }
-
-    // 4. Insérer le message (Si Premium OU < 3 messages)
+    // 2. Insérer le message (Messagerie 100% ILLIMITÉE)
     const newMessages = await db
       .insert(messages)
       .values({
@@ -145,7 +92,7 @@ export async function POST(req: Request) {
       })
       .returning();
 
-    // 5. Notifications non-bloquantes
+    // 3. Notifications non-bloquantes
     Promise.all([
       createNotification({
         userId: receiverId,
