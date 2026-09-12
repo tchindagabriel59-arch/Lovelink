@@ -40,6 +40,33 @@ interface PendingPayment {
 
 type Tab = "pending" | "success";
 
+// 🧠 FONCTION INTELLIGENTE DE DÉTECTION DES PRÉFIXES
+function formatWhatsAppNumber(phone: string): string {
+  let clean = phone.replace(/\D/g, ""); // Ne garder que les chiffres
+
+  // Si le préfixe pays est déjà présent
+  if (clean.startsWith("221") && clean.length === 12) return clean; // Sénégal
+  if (clean.startsWith("237") && clean.length === 12) return clean; // Cameroun
+  if (clean.startsWith("225") && clean.length === 13) return clean; // Côte d'Ivoire
+
+  // Détection pour les numéros à 9 chiffres
+  if (clean.length === 9) {
+    if (clean.startsWith("7")) {
+      return `221${clean}`; // 🇸🇳 Sénégal (77, 78, 76, 70, 75)
+    }
+    if (clean.startsWith("6")) {
+      return `237${clean}`; // 🇨🇲 Cameroun (65, 67, 69, 68, 62)
+    }
+  }
+
+  // Détection pour les numéros à 10 chiffres (Côte d'Ivoire)
+  if (clean.length === 10 && clean.startsWith("0")) {
+    return `225${clean}`; // 🇨🇮 Côte d'Ivoire
+  }
+
+  return clean;
+}
+
 export default function AdminPaymentsPage() {
   const [tab, setTab] = useState<Tab>("pending");
   const [payments, setPayments] = useState<PendingPayment[]>([]);
@@ -130,11 +157,11 @@ export default function AdminPaymentsPage() {
       if (match && match[1]) rawPhone = match[1];
     }
 
+    // SI CLIENT PAR TÉLÉPHONE -> DÉTECTION DU BON PAYS (221 / 237 / 225)
     if (rawPhone) {
-      let cleanPhone = rawPhone.replace(/[\s\-\+\(\)]/g, "");
-      if (cleanPhone.length === 9) cleanPhone = `237${cleanPhone}`;
+      const cleanPhone = formatWhatsAppNumber(rawPhone);
 
-      const message = `Bonjour ${name} 👋 !\nJ'ai vu que tu souhaitais activer ton ${item.payment.plan.toUpperCase()} sur LoveLink.\n\nAs-tu rencontré une difficulté pour effectuer le transfert MTN / Orange Money ? Je suis là si tu as besoin d'aide ! 😊`;
+      const message = `Bonjour ${name} 👋 !\nJ'ai vu que tu souhaitais activer ton ${item.payment.plan.toUpperCase()} sur LoveLink.\n\nAs-tu rencontré une difficulté pour effectuer ton paiement ? Je suis là si tu as besoin d'aide ! 😊`;
       const whatsappUrl = `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(message)}`;
       window.open(whatsappUrl, "_blank");
       return;
@@ -168,11 +195,10 @@ export default function AdminPaymentsPage() {
     }
 
     const inputPhone = prompt(
-      `Saisis le numéro WhatsApp de ${name} (ex: 651387914) :`
+      `Saisis le numéro WhatsApp de ${name} (ex: 771115292 ou 651387914) :`
     );
     if (inputPhone) {
-      let cleanPhone = inputPhone.replace(/[\s\-\+\(\)]/g, "");
-      if (cleanPhone.length === 9) cleanPhone = `237${cleanPhone}`;
+      const cleanPhone = formatWhatsAppNumber(inputPhone);
       const message = `Bonjour ${name} 👋 ! J'ai vu que tu souhaitais activer ton ${item.payment.plan.toUpperCase()} sur LoveLink. As-tu besoin d'aide pour le paiement ? 😊`;
       window.open(
         `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(message)}`,
