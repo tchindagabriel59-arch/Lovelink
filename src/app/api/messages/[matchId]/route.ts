@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { messages, matches, users } from "@/db/schema";
-import { eq, and, asc, ne, sql } from "drizzle-orm";
+import { eq, and, asc, ne } from "drizzle-orm";
 import { getCurrentUserId } from "@/lib/auth";
 import { createNotification } from "@/lib/notifications";
 import { sendPushToUser, PushTemplates } from "@/lib/push";
@@ -91,7 +91,7 @@ export async function GET(
 }
 
 // ═══════════════════════════════════════
-// POST : Envoyer un nouveau message
+// POST : Envoyer un nouveau message (SANS LIMITATION DE PAYWALL)
 // ═══════════════════════════════════════
 export async function POST(
   req: NextRequest,
@@ -136,7 +136,7 @@ export async function POST(
 
     const cleanContent = content.trim();
 
-    // 1. Récupérer le match et les infos de l'expéditeur (dont le statut Premium)
+    // 1. Récupérer le match et les infos de l'expéditeur
     const [match, senderData] = await Promise.all([
       db.select().from(matches).where(eq(matches.id, matchId)).limit(1),
       db.select({
@@ -144,8 +144,6 @@ export async function POST(
         firstName: users.firstName,
         lastName: users.lastName,
         photoUrl: users.photoUrl,
-        isPremium: users.isPremium,
-        premiumExpiresAt: users.premiumExpiresAt,
       }).from(users).where(eq(users.id, userId)).limit(1),
     ]);
 
@@ -162,50 +160,7 @@ export async function POST(
       return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
     }
 
-    // 2. 🛑 PAYWALL MESSAGES (Si l'expéditeur n'est pas Premium active -> Max 3 messages envoyés par match)
-    const now = new Date();
-    const isPremiumActive =
-      sender?.isPremium &&
-      (!sender.premiumExpiresAt || new Date(sender.premiumExpiresAt) > now);
-
-    if (!isPremiumActive) {
-      const [sentCountResult] = await db
-        .select({ count: sql<number>`count(*)` })
-        .from(messages)
-        .where(
-          and(
-            eq(messages.matchId, matchId),
-            eq(messages.senderId, userId)
-          )
-        );
-
-      const sentCount = Number(sentCountResult?.count || 0);
-
-      if (sentCount >= 3) {
-        logApiCall({
-          endpoint,
-          method,
-          statusCode: 402,
-          durationMs: Date.now() - startTime,
-          userId,
-          errorMessage: "Paywall : Limite de 3 msgs gratuits atteinte",
-          userAgent,
-          ipAddress,
-        });
-
-        return NextResponse.json(
-          {
-            error: "Tu as atteint la limite de 3 messages gratuits pour cette discussion. Passe Premium pour échanger en illimité !",
-            code: "PAYWALL_LIMIT",
-            requiresPremium: true,
-            limit: 3,
-          },
-          { status: 402 } // 402 = Payment Required
-        );
-      }
-    }
-
-    // 3. 🛡️ SÉCURITÉ : VÉRIFICATION D'ÉCHANGE DE CONTACTS AVANT 30 MESSAGES
+    // 2. 🛡️ SÉCURITÉ : VÉRIFICATION D'ÉCHANGE DE CONTACTS AVANT 30 MESSAGES
     const contactRegex = /((?:\+?\d{1,3}[\s-]?)?(?:\d[\s-]?){8,14}|[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}|(snap|insta|ig|whatsapp|wa|fb|facebook|telegram|tg|tiktok)[\s:]*@?[\w\.]+)/i;
     
     if (contactRegex.test(cleanContent)) {
@@ -225,7 +180,7 @@ export async function POST(
 
     const recipientId = matchData.user1Id === userId ? matchData.user2Id : matchData.user1Id;
 
-    // 4. Insérer le message
+    // 3. Insérer le message
     const newMessage = await db.insert(messages).values({
         matchId,
         senderId: userId,
