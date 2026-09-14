@@ -15,6 +15,7 @@ import Notifications from "../components/Notifications";
 import InstallAppButton from "../components/InstallAppButton";
 import PushAutoSubscriber from "../components/PushAutoSubscriber";
 import GabiAiButton from "../components/GabiAiButton";
+import ExpiredPremiumModal from "../components/ExpiredPremiumModal";
 import {
   Heart,
   User,
@@ -54,6 +55,8 @@ interface UserData {
   isVerified?: boolean;
   isIncognito?: boolean;
   isAdmin?: boolean;
+  premiumExpiresAt?: string | null;
+  premiumPlan?: string | null;
 }
 
 interface UnreadCounts {
@@ -150,11 +153,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!user) return;
-    
-    // 🛡️ OPTIMISATION CPU : Passage de 30 secondes à 60 secondes (1 minute)
-    // Cela divise par 2 la charge sur la base de données !
+
     const interval = setInterval(fetchCounts, 60000);
-    
+
     return () => clearInterval(interval);
   }, [user, fetchCounts]);
 
@@ -304,7 +305,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               <span className="text-2xl font-bold gradient-text">LoveLink</span>
             </Link>
 
-            {/* Une seule cloche de notifications */}
             <Notifications />
           </div>
 
@@ -573,7 +573,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </div>
         </div>
 
-        {/* ========== MAIN CONTENT (UNE SEULE FOIS) ========== */}
+        {/* ========== MAIN CONTENT ========== */}
         <main className="flex-1 lg:ml-72 pt-16 pb-20 lg:pt-0 lg:pb-0 min-h-screen">
           {user?.isIncognito && (
             <div className="bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-600 text-white text-center py-1.5 px-4 text-xs font-black tracking-wider flex items-center justify-center gap-2 shadow-md">
@@ -590,8 +590,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           {children}
         </main>
 
-        {/* 🤖 Gabi AI flottant partout (Accueil, Profil, Préférences, etc.) */}
+        {/* 🤖 Gabi AI flottant */}
         <GabiAiButton />
+
+        {/* 💔 Bulle de réabonnement si Premium expiré */}
+        <ExpiredPremiumModal user={user} />
 
         <InstallAppButton />
       </div>
