@@ -2,639 +2,258 @@
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
-import {
-  Crown,
-  DollarSign,
-  TrendingUp,
-  Search,
-  Calendar,
-  Mail,
-  MapPin,
-  X,
-  AlertTriangle,
-  Clock,
-  CheckCircle,
-  CreditCard,
-} from "lucide-react";
+import { Crown, Search, CheckCircle2, AlertTriangle, RefreshCw } from "lucide-react";
 
-interface PremiumUser {
+interface Subscriber {
   id: number;
-  email: string;
   firstName: string;
   lastName: string;
-  photoUrl: string | null;
-  gender: string;
+  email: string;
   city: string | null;
-  country: string | null;
+  photoUrl: string | null;
   isPremium: boolean;
   premiumPlan: string | null;
   premiumExpiresAt: string | null;
-  isOnline: boolean;
-  lastSeen: string | null;
   createdAt: string;
-  lastPayment: {
-    amount: number;
-    currency: string;
-    plan: string;
-    billingPeriod: string;
-    paymentMethod: string | null;
-    completedAt: string;
-    status: string;
-  } | null;
 }
 
-interface Stats {
-  total: number;
-  monthly: number;
-  gold: number;
-  monthlyRevenue: number;
-  totalRevenue: number;
-  expiringSoon: number;
-}
+type Tab = "all" | "premium" | "gold" | "expiring_soon" | "expired";
 
-function getDaysRemaining(expiryDate: string | null): number {
-  if (!expiryDate) return 0;
-  const now = new Date();
-  const expiry = new Date(expiryDate);
-  const diff = expiry.getTime() - now.getTime();
-  return Math.ceil(diff / (1000 * 60 * 60 * 24));
-}
-
-/** ✅ Premium VRAIMENT actif (isPremium + date non expirée) */
-function isTrulyPremium(user: PremiumUser): boolean {
-  if (!user.isPremium) return false;
-  if (!user.premiumExpiresAt) return true; // premium à vie
-  return new Date(user.premiumExpiresAt) > new Date();
-}
-
-export default function AdminPremiumPage() {
-  const [premiumUsers, setPremiumUsers] = useState<PremiumUser[]>([]);
-  const [stats, setStats] = useState<Stats | null>(null);
+export default function AdminSubscribersPage() {
+  const [subscribers, setSubscribers] = useState<Subscriber[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<string>("all");
-  const [selectedUser, setSelectedUser] = useState<PremiumUser | null>(null);
+  const [activeTab, setActiveTab] = useState<Tab>("all");
+  const [searchQuery, setSearchQuery] = useState("");
 
-  useEffect(() => {
-    fetchPremiumUsers();
-  }, []);
-
-  async function fetchPremiumUsers() {
+  const fetchSubscribers = async () => {
+    setLoading(true);
     try {
       const res = await fetch("/api/admin/premium/list");
       if (res.ok) {
         const data = await res.json();
-        setPremiumUsers(data.premiumUsers || []);
-        setStats(data.stats || null);
+        setSubscribers(data.subscribers || []);
       }
-    } catch {
-      // silently fail
+    } catch (err) {
+      console.error(err);
     } finally {
       setLoading(false);
     }
-  }
+  };
 
-  async function removePremium(userId: number) {
-    if (!confirm("Retirer le statut Premium de cet utilisateur ?")) return;
+  useEffect(() => {
+    fetchSubscribers();
+  }, []);
 
-    try {
-      const res = await fetch("/api/admin/users/role", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId, role: "isPremium", value: false }),
-      });
+  const now = new Date();
 
-      if (res.ok) {
-        alert("✅ Premium retiré");
-        setSelectedUser(null);
-        fetchPremiumUsers();
-      } else {
-        alert("❌ Erreur");
-      }
-    } catch {
-      alert("Erreur de connexion");
+  // Filtrage par onglet + recherche
+  const filtered = subscribers.filter((sub) => {
+    const matchesSearch =
+      searchQuery === "" ||
+      `${sub.firstName} ${sub.lastName}`.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (sub.email && sub.email.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (sub.city && sub.city.toLowerCase().includes(searchQuery.toLowerCase()));
+
+    if (!matchesSearch) return false;
+
+    const expiresAt = sub.premiumExpiresAt ? new Date(sub.premiumExpiresAt) : null;
+    const isCurrentlyActive = sub.isPremium && expiresAt && expiresAt > now;
+    const daysLeft = expiresAt ? Math.ceil((expiresAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)) : 0;
+
+    if (activeTab === "premium") {
+      return isCurrentlyActive && (sub.premiumPlan === "premium" || !sub.premiumPlan);
     }
-  }
-
-  const filteredUsers = premiumUsers.filter((u) => {
-    const searchMatch =
-      search === "" ||
-      u.firstName.toLowerCase().includes(search.toLowerCase()) ||
-      u.lastName.toLowerCase().includes(search.toLowerCase()) ||
-      u.email.toLowerCase().includes(search.toLowerCase());
-
-    let categoryMatch = true;
-    const days = getDaysRemaining(u.premiumExpiresAt);
-    const active = isTrulyPremium(u);
-
-    switch (filter) {
-      case "premium":
-        categoryMatch = active && u.premiumPlan === "premium";
-        break;
-      case "gold":
-        categoryMatch = active && u.premiumPlan === "gold";
-        break;
-      case "expiring":
-        categoryMatch = active && days > 0 && days <= 7;
-        break;
-      case "expired":
-        categoryMatch = !active || days < 0;
-        break;
-      case "all":
-      default:
-        categoryMatch = true;
-        break;
+    if (activeTab === "gold") {
+      return isCurrentlyActive && sub.premiumPlan === "gold";
+    }
+    if (activeTab === "expiring_soon") {
+      return isCurrentlyActive && daysLeft <= 3 && daysLeft >= 0;
+    }
+    if (activeTab === "expired") {
+      return !sub.isPremium || (expiresAt && expiresAt <= now);
     }
 
-    return searchMatch && categoryMatch;
+    return true; // Onglet "all" (Tous)
   });
 
+  const activeCount = subscribers.filter(
+    (s) => s.isPremium && s.premiumExpiresAt && new Date(s.premiumExpiresAt) > now
+  ).length;
+
+  const expiredCount = subscribers.filter(
+    (s) => !s.isPremium || (s.premiumExpiresAt && new Date(s.premiumExpiresAt) <= now)
+  ).length;
+
   return (
-    <div className="min-h-screen bg-slate-950 text-white">
-      <header className="p-6 border-b border-slate-800">
-        <div className="max-w-7xl mx-auto flex items-center gap-3">
-          <div className="w-12 h-12 bg-gradient-to-br from-amber-500 to-orange-500 rounded-xl flex items-center justify-center shadow-lg">
+    <div className="p-6 text-white max-w-6xl mx-auto animate-in fade-in">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-8">
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 bg-gradient-to-br from-amber-500 to-orange-500 rounded-2xl flex items-center justify-center shadow-lg shadow-orange-500/20">
             <Crown className="w-6 h-6 text-white" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold">👑 Abonnés Premium</h1>
+            <h1 className="text-3xl font-black text-white">Abonnés Premium</h1>
             <p className="text-sm text-slate-400">
-              {filteredUsers.length} / {premiumUsers.length} membres
+              {activeCount} actif(s) · {expiredCount} expiré(s)
             </p>
           </div>
         </div>
-      </header>
 
-      <main className="max-w-7xl mx-auto p-6 space-y-6">
-        {loading ? (
-          <div className="text-center py-12">
-            <Crown className="w-12 h-12 text-amber-500 animate-pulse mx-auto" />
-            <p className="mt-4 text-slate-400">Chargement des abonnés...</p>
-          </div>
-        ) : (
-          <>
-            {stats && (
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="bg-gradient-to-br from-amber-500/20 to-orange-500/20 border border-amber-500/30 rounded-2xl p-5">
-                  <div className="w-12 h-12 bg-gradient-to-br from-amber-500 to-orange-500 rounded-xl flex items-center justify-center mb-3">
-                    <Crown className="w-6 h-6 text-white" />
-                  </div>
-                  <p className="text-sm text-slate-400">Total Premium actifs</p>
-                  <p className="text-3xl font-bold mt-1">{stats.total}</p>
-                  <p className="text-xs text-slate-500 mt-1">
-                    {stats.monthly} Premium • {stats.gold} Gold
-                  </p>
-                </div>
+        <button
+          onClick={fetchSubscribers}
+          className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold flex items-center gap-2 transition"
+        >
+          <RefreshCw className="w-4 h-4" />
+          Actualiser
+        </button>
+      </div>
 
-                <div className="bg-gradient-to-br from-green-500/20 to-emerald-500/20 border border-green-500/30 rounded-2xl p-5">
-                  <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-500 rounded-xl flex items-center justify-center mb-3">
-                    <DollarSign className="w-6 h-6 text-white" />
-                  </div>
-                  <p className="text-sm text-slate-400">Revenus 30 derniers jours</p>
-                  <p className="text-3xl font-bold mt-1">
-                    {stats.monthlyRevenue.toLocaleString()}
-                  </p>
-                  <p className="text-xs text-slate-500 mt-1">FCFA</p>
-                </div>
+      {/* Recherche */}
+      <div className="mb-6 relative">
+        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
+        <input
+          type="text"
+          placeholder="Rechercher un abonné par nom, e-mail, ville..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="w-full pl-12 pr-4 py-3.5 bg-slate-900 border border-slate-800 rounded-2xl text-sm text-white placeholder-slate-500 outline-none focus:border-amber-500 transition"
+        />
+      </div>
 
-                <div className="bg-gradient-to-br from-purple-500/20 to-pink-500/20 border border-purple-500/30 rounded-2xl p-5">
-                  <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-500 rounded-xl flex items-center justify-center mb-3">
-                    <TrendingUp className="w-6 h-6 text-white" />
-                  </div>
-                  <p className="text-sm text-slate-400">Revenus totaux</p>
-                  <p className="text-3xl font-bold mt-1">
-                    {stats.totalRevenue.toLocaleString()}
-                  </p>
-                  <p className="text-xs text-slate-500 mt-1">FCFA (tous temps)</p>
-                </div>
+      {/* Onglets */}
+      <div className="flex flex-wrap gap-2 mb-8">
+        <button
+          onClick={() => setActiveTab("all")}
+          className={`px-4 py-2.5 rounded-xl font-bold text-xs transition ${
+            activeTab === "all"
+              ? "bg-amber-500 text-slate-950 shadow-lg shadow-amber-500/20"
+              : "bg-slate-900 text-slate-400 border border-slate-800 hover:text-white"
+          }`}
+        >
+          Tous ({subscribers.length})
+        </button>
 
-                <div
-                  className={`rounded-2xl p-5 border ${
-                    stats.expiringSoon > 0
-                      ? "bg-gradient-to-br from-red-500/20 to-pink-500/20 border-red-500/30"
-                      : "bg-slate-900 border-slate-800"
-                  }`}
-                >
-                  <div
-                    className={`w-12 h-12 rounded-xl flex items-center justify-center mb-3 ${
-                      stats.expiringSoon > 0
-                        ? "bg-gradient-to-br from-red-500 to-pink-500"
-                        : "bg-slate-800"
-                    }`}
-                  >
-                    <Clock className="w-6 h-6 text-white" />
-                  </div>
-                  <p className="text-sm text-slate-400">Expirent bientôt</p>
-                  <p className="text-3xl font-bold mt-1">{stats.expiringSoon}</p>
-                  <p className="text-xs text-slate-500 mt-1">Dans les 7 jours</p>
-                </div>
-              </div>
-            )}
+        <button
+          onClick={() => setActiveTab("premium")}
+          className={`px-4 py-2.5 rounded-xl font-bold text-xs transition flex items-center gap-1.5 ${
+            activeTab === "premium"
+              ? "bg-amber-500 text-slate-950 shadow-lg shadow-amber-500/20"
+              : "bg-slate-900 text-slate-400 border border-slate-800 hover:text-white"
+          }`}
+        >
+          💎 Premium
+        </button>
 
-            <div className="relative">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Rechercher un abonné..."
-                className="w-full pl-12 pr-4 py-3 bg-slate-900 border border-slate-800 rounded-xl focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 transition"
-              />
-            </div>
+        <button
+          onClick={() => setActiveTab("gold")}
+          className={`px-4 py-2.5 rounded-xl font-bold text-xs transition flex items-center gap-1.5 ${
+            activeTab === "gold"
+              ? "bg-amber-500 text-slate-950 shadow-lg shadow-amber-500/20"
+              : "bg-slate-900 text-slate-400 border border-slate-800 hover:text-white"
+          }`}
+        >
+          🏆 Gold
+        </button>
 
-            <div className="flex flex-wrap gap-2">
-              <FilterBtn current={filter} value="all" onClick={setFilter}>
-                Tous
-              </FilterBtn>
-              <FilterBtn current={filter} value="premium" onClick={setFilter}>
-                💎 Premium
-              </FilterBtn>
-              <FilterBtn current={filter} value="gold" onClick={setFilter}>
-                🏆 Gold
-              </FilterBtn>
-              <FilterBtn current={filter} value="expiring" onClick={setFilter}>
-                ⏰ Expirent bientôt
-              </FilterBtn>
-              <FilterBtn current={filter} value="expired" onClick={setFilter}>
-                ❌ Expirés
-              </FilterBtn>
-            </div>
+        <button
+          onClick={() => setActiveTab("expiring_soon")}
+          className={`px-4 py-2.5 rounded-xl font-bold text-xs transition flex items-center gap-1.5 ${
+            activeTab === "expiring_soon"
+              ? "bg-amber-500 text-slate-950 shadow-lg shadow-amber-500/20"
+              : "bg-slate-900 text-slate-400 border border-slate-800 hover:text-white"
+          }`}
+        >
+          ⏰ Expirent bientôt
+        </button>
 
-            {filteredUsers.length === 0 ? (
-              <div className="text-center py-12 bg-slate-900 border border-slate-800 rounded-2xl">
-                <Crown className="w-16 h-16 text-slate-700 mx-auto mb-4" />
-                <p className="text-slate-500">Aucun abonné Premium trouvé</p>
-              </div>
-            ) : (
-              <div className="grid gap-3">
-                {filteredUsers.map((user) => (
-                  <PremiumUserRow
-                    key={user.id}
-                    user={user}
-                    onView={() => setSelectedUser(user)}
-                  />
-                ))}
-              </div>
-            )}
-          </>
-        )}
-      </main>
+        <button
+          onClick={() => setActiveTab("expired")}
+          className={`px-4 py-2.5 rounded-xl font-bold text-xs transition flex items-center gap-1.5 ${
+            activeTab === "expired"
+              ? "bg-rose-500 text-white shadow-lg shadow-rose-500/20"
+              : "bg-slate-900 text-slate-400 border border-slate-800 hover:text-white"
+          }`}
+        >
+          ❌ Expirés ({expiredCount})
+        </button>
+      </div>
 
-      {selectedUser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 overflow-y-auto">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-2xl w-full my-8">
-            <div className="p-6 border-b border-slate-800 flex items-center justify-between">
-              <h2 className="text-xl font-bold flex items-center gap-2">
-                <Crown className="w-5 h-5 text-amber-500" />
-                Détails de l&apos;abonné
-              </h2>
-              <button
-                onClick={() => setSelectedUser(null)}
-                className="p-2 hover:bg-slate-800 rounded-lg"
+      {/* Contenu */}
+      {loading ? (
+        <div className="text-center py-16 text-slate-500 animate-pulse">Chargement des abonnés...</div>
+      ) : filtered.length === 0 ? (
+        <div className="bg-slate-900 border border-slate-800 rounded-3xl p-12 text-center">
+          <Crown className="w-12 h-12 text-slate-700 mx-auto mb-3" />
+          <p className="text-slate-400 font-bold">Aucun abonné trouvé dans cette catégorie</p>
+        </div>
+      ) : (
+        <div className="grid gap-4">
+          {filtered.map((sub) => {
+            const expiresAt = sub.premiumExpiresAt ? new Date(sub.premiumExpiresAt) : null;
+            const isCurrentlyActive = sub.isPremium && expiresAt && expiresAt > now;
+            const daysLeft = expiresAt ? Math.ceil((expiresAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)) : 0;
+
+            return (
+              <div
+                key={sub.id}
+                className={`bg-slate-900 border rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4 transition ${
+                  isCurrentlyActive ? "border-slate-800" : "border-rose-500/30 bg-rose-950/10"
+                }`}
               >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="p-6 space-y-6">
-              <div className="flex items-start gap-4">
-                {selectedUser.photoUrl ? (
-                  <Image
-                    src={selectedUser.photoUrl}
-                    alt={selectedUser.firstName}
-                    width={96}
-                    height={96}
-                    className={`w-24 h-24 rounded-2xl object-cover border-2 ${
-                      isTrulyPremium(selectedUser)
-                        ? "border-amber-500/50"
-                        : "border-slate-600"
-                    }`}
-                  />
-                ) : (
-                  <div
-                    className={`w-24 h-24 rounded-2xl flex items-center justify-center text-white font-bold text-3xl ${
-                      isTrulyPremium(selectedUser)
-                        ? "bg-gradient-to-br from-amber-500 to-orange-500"
-                        : "bg-slate-700"
-                    }`}
-                  >
-                    {selectedUser.firstName.charAt(0)}
-                    {selectedUser.lastName.charAt(0)}
-                  </div>
-                )}
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="text-2xl font-bold">
-                      {selectedUser.firstName} {selectedUser.lastName}
-                    </h3>
-                    {isTrulyPremium(selectedUser) ? (
-                      selectedUser.premiumPlan === "gold" ? (
-                        <span className="px-3 py-1 bg-gradient-to-r from-yellow-500 to-orange-500 text-white rounded-full text-xs font-black">
-                          🏆 GOLD
-                        </span>
-                      ) : (
-                        <span className="px-3 py-1 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-full text-xs font-black">
-                          💎 PREMIUM
-                        </span>
-                      )
+                <div className="flex items-center gap-4 w-full sm:w-auto">
+                  <div className="w-12 h-12 rounded-full bg-slate-800 overflow-hidden shrink-0 relative">
+                    {sub.photoUrl ? (
+                      <Image src={sub.photoUrl} alt="" width={48} height={48} className="object-cover w-full h-full" />
                     ) : (
-                      <span className="px-3 py-1 bg-slate-700 text-slate-300 rounded-full text-xs font-black">
-                        🔒 EXPIRÉ
+                      <div className="w-full h-full flex items-center justify-center font-bold text-slate-500">
+                        {sub.firstName.charAt(0)}
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-bold text-white text-base">
+                        {sub.firstName} {sub.lastName}
+                      </h3>
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${
+                          sub.premiumPlan === "gold"
+                            ? "bg-amber-500/20 text-amber-400 border border-amber-500/30"
+                            : "bg-purple-500/20 text-purple-400 border border-purple-500/30"
+                        }`}
+                      >
+                        {sub.premiumPlan || "PREMIUM"}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-400">{sub.email}</p>
+                    {sub.city && <p className="text-xs text-slate-500">📍 {sub.city}</p>}
+                  </div>
+                </div>
+
+                <div className="text-right w-full sm:w-auto flex sm:flex-col items-center sm:items-end justify-between border-t sm:border-t-0 border-slate-800 pt-3 sm:pt-0">
+                  <div className="text-xs font-bold">
+                    {isCurrentlyActive ? (
+                      <span className="text-emerald-400 flex items-center gap-1">
+                        <CheckCircle2 className="w-4 h-4" /> ACTIF ({daysLeft}j restants)
+                      </span>
+                    ) : (
+                      <span className="text-rose-400 flex items-center gap-1">
+                        <AlertTriangle className="w-4 h-4" /> EXPIRÉ
                       </span>
                     )}
                   </div>
-                  <div className="flex items-center gap-3 text-sm text-slate-400 mt-2 flex-wrap">
-                    <span className="flex items-center gap-1">
-                      <Mail className="w-3.5 h-3.5" />
-                      {selectedUser.email}
-                    </span>
-                    {selectedUser.city && (
-                      <span className="flex items-center gap-1">
-                        <MapPin className="w-3.5 h-3.5" />
-                        {selectedUser.city}
-                        {selectedUser.country && `, ${selectedUser.country}`}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
 
-              {selectedUser.premiumExpiresAt && (
-                <div
-                  className={`p-4 rounded-xl border ${
-                    getDaysRemaining(selectedUser.premiumExpiresAt) < 0
-                      ? "bg-red-500/10 border-red-500/30"
-                      : getDaysRemaining(selectedUser.premiumExpiresAt) <= 7
-                      ? "bg-amber-500/10 border-amber-500/30"
-                      : "bg-green-500/10 border-green-500/30"
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-xs text-slate-400 mb-1">
-                        Statut de l&apos;abonnement
-                      </p>
-                      <p className="font-bold flex items-center gap-2">
-                        {getDaysRemaining(selectedUser.premiumExpiresAt) < 0 ? (
-                          <>
-                            <AlertTriangle className="w-5 h-5 text-red-400" />
-                            <span className="text-red-400">
-                              Expiré depuis{" "}
-                              {Math.abs(
-                                getDaysRemaining(selectedUser.premiumExpiresAt)
-                              )}{" "}
-                              jours
-                            </span>
-                          </>
-                        ) : (
-                          <>
-                            <CheckCircle className="w-5 h-5 text-green-400" />
-                            <span className="text-green-400">
-                              Actif •{" "}
-                              {getDaysRemaining(selectedUser.premiumExpiresAt)}{" "}
-                              jours restants
-                            </span>
-                          </>
-                        )}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-xs text-slate-400 mb-1">Expire le</p>
-                      <p className="font-bold">
-                        {new Date(
-                          selectedUser.premiumExpiresAt
-                        ).toLocaleDateString("fr-FR")}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {selectedUser.lastPayment && (
-                <div className="bg-slate-800/50 rounded-xl p-4">
-                  <p className="text-sm font-semibold text-slate-400 mb-3 flex items-center gap-2">
-                    <CreditCard className="w-4 h-4" />
-                    Dernier paiement
-                  </p>
-                  <div className="grid grid-cols-2 gap-3 text-sm">
-                    <div>
-                      <p className="text-xs text-slate-500">Montant</p>
-                      <p className="font-bold text-lg text-green-400">
-                        {selectedUser.lastPayment.amount.toLocaleString()}{" "}
-                        {selectedUser.lastPayment.currency}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-slate-500">Formule</p>
-                      <p className="font-bold">
-                        {selectedUser.lastPayment.plan === "gold"
-                          ? "🏆 Gold"
-                          : "💎 Premium"}
-                        {" • "}
-                        {selectedUser.lastPayment.billingPeriod === "yearly"
-                          ? "Annuel"
-                          : "Mensuel"}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-slate-500">Méthode</p>
-                      <p className="font-bold">
-                        {selectedUser.lastPayment.paymentMethod || "N/A"}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-slate-500">Date</p>
-                      <p className="font-bold">
-                        {new Date(
-                          selectedUser.lastPayment.completedAt
-                        ).toLocaleDateString("fr-FR")}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                <div className="p-3 bg-slate-800/50 rounded-xl">
-                  <p className="text-xs text-slate-500 flex items-center gap-1">
-                    <Calendar className="w-3 h-3" />
-                    Membre depuis
-                  </p>
-                  <p className="mt-1 font-medium">
-                    {new Date(selectedUser.createdAt).toLocaleDateString("fr-FR")}
-                  </p>
-                </div>
-                <div className="p-3 bg-slate-800/50 rounded-xl">
-                  <p className="text-xs text-slate-500">Statut</p>
-                  <p className="mt-1 font-medium flex items-center gap-2">
-                    {selectedUser.isOnline ? (
-                      <>
-                        <span className="w-2 h-2 bg-green-500 rounded-full" />
-                        En ligne
-                      </>
-                    ) : selectedUser.lastSeen ? (
-                      `Vu le ${new Date(selectedUser.lastSeen).toLocaleDateString("fr-FR")}`
-                    ) : (
-                      "Jamais connecté"
-                    )}
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    {expiresAt ? `Fin : ${expiresAt.toLocaleDateString("fr-FR")}` : "Pas de date"}
                   </p>
                 </div>
               </div>
-
-              {isTrulyPremium(selectedUser) && (
-                <div className="border-t border-slate-800 pt-6">
-                  <button
-                    onClick={() => removePremium(selectedUser.id)}
-                    className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 rounded-xl font-semibold transition"
-                  >
-                    <X className="w-4 h-4" />
-                    Retirer le statut Premium
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
+            );
+          })}
         </div>
       )}
-    </div>
-  );
-}
-
-function FilterBtn({
-  current,
-  value,
-  onClick,
-  children,
-}: {
-  current: string;
-  value: string;
-  onClick: (v: string) => void;
-  children: React.ReactNode;
-}) {
-  const isActive = current === value;
-  return (
-    <button
-      onClick={() => onClick(value)}
-      className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-        isActive
-          ? "bg-amber-500 text-white"
-          : "bg-slate-800 text-slate-400 hover:bg-slate-700"
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
-
-function PremiumUserRow({
-  user,
-  onView,
-}: {
-  user: PremiumUser;
-  onView: () => void;
-}) {
-  const daysRemaining = getDaysRemaining(user.premiumExpiresAt);
-  const active = isTrulyPremium(user);
-  const isExpired = !active;
-  const isExpiringSoon = active && daysRemaining > 0 && daysRemaining <= 7;
-
-  return (
-    <div
-      className={`bg-slate-900 border rounded-xl p-4 hover:border-amber-500/50 transition cursor-pointer ${
-        isExpired
-          ? "border-red-500/30 opacity-75"
-          : isExpiringSoon
-          ? "border-amber-500/30"
-          : "border-slate-800"
-      }`}
-      onClick={onView}
-    >
-      <div className="flex items-center gap-4">
-        <div className="relative flex-shrink-0">
-          {user.photoUrl ? (
-            <Image
-              src={user.photoUrl}
-              alt={user.firstName}
-              width={56}
-              height={56}
-              className={`w-14 h-14 rounded-xl object-cover border-2 ${
-                active ? "border-amber-500/30" : "border-slate-600"
-              }`}
-            />
-          ) : (
-            <div
-              className={`w-14 h-14 rounded-xl flex items-center justify-center text-white font-bold ${
-                active
-                  ? "bg-gradient-to-br from-amber-500 to-orange-500"
-                  : "bg-slate-700"
-              }`}
-            >
-              {user.firstName.charAt(0)}
-              {user.lastName.charAt(0)}
-            </div>
-          )}
-
-          {/* 👑 Couronne UNIQUEMENT si encore actif */}
-          {active && (
-            <div className="absolute -top-1 -right-1 w-6 h-6 bg-gradient-to-br from-amber-500 to-orange-500 rounded-full flex items-center justify-center">
-              <Crown className="w-3 h-3 text-white fill-white" />
-            </div>
-          )}
-        </div>
-
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <p className="font-bold truncate">
-              {user.firstName} {user.lastName}
-            </p>
-
-            {/* Badge UNIQUEMENT si actif, sinon EXPIRÉ */}
-            {active ? (
-              user.premiumPlan === "gold" ? (
-                <span className="text-xs px-2 py-0.5 bg-yellow-500/20 text-yellow-400 rounded-full font-bold">
-                  🏆 GOLD
-                </span>
-              ) : (
-                <span className="text-xs px-2 py-0.5 bg-amber-500/20 text-amber-400 rounded-full font-bold">
-                  💎 PREMIUM
-                </span>
-              )
-            ) : (
-              <span className="text-xs px-2 py-0.5 bg-red-500/20 text-red-400 rounded-full font-bold">
-                🔒 EXPIRÉ
-              </span>
-            )}
-          </div>
-          <p className="text-sm text-slate-400 truncate">{user.email}</p>
-          {user.city && (
-            <p className="text-xs text-slate-500 flex items-center gap-1 mt-1">
-              <MapPin className="w-3 h-3" />
-              {user.city}
-            </p>
-          )}
-        </div>
-
-        <div className="text-right">
-          {isExpired ? (
-            <div className="text-red-400">
-              <p className="text-xs font-bold">EXPIRÉ</p>
-              <p className="text-xs">
-                Il y a {Math.abs(daysRemaining)}j
-              </p>
-            </div>
-          ) : isExpiringSoon ? (
-            <div className="text-amber-400">
-              <p className="text-xs font-bold">EXPIRE BIENTÔT</p>
-              <p className="text-xs">Dans {daysRemaining}j</p>
-            </div>
-          ) : (
-            <div className="text-green-400">
-              <p className="text-xs font-bold">ACTIF</p>
-              <p className="text-xs">{daysRemaining}j restants</p>
-            </div>
-          )}
-        </div>
-      </div>
     </div>
   );
 }
