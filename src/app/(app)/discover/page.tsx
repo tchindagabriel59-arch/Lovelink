@@ -20,6 +20,7 @@ import {
   ArrowRight,
   Gem,
   Loader2,
+  Briefcase,
 } from "lucide-react";
 
 // ==========================================
@@ -100,13 +101,14 @@ function MatchModal({ isOpen, onClose, matchedUser }: MatchModalProps) {
         <div className="space-y-2 mb-6">
           <div className="inline-flex items-center space-x-1.5 px-3 py-1 bg-pink-500/10 border border-pink-500/30 rounded-full text-pink-400 text-xs font-semibold">
             <Sparkles className="w-3.5 h-3.5" />
-            <span>C'est un Match !</span>
+            <span>C&apos;est un Match !</span>
           </div>
 
           <h2 className="text-2xl font-bold text-white">Nouveau Match !</h2>
 
           <p className="text-sm text-slate-300 leading-relaxed px-2">
-            <strong className="text-pink-300">{matchedUser.name}</strong> vous a aussi donné un Like 🙌
+            <strong className="text-pink-300">{matchedUser.name}</strong> vous a
+            aussi donné un Like 🙌
             <br />
             On peut lui envoyer un petit message tout prêt si vous voulez.
           </p>
@@ -338,6 +340,7 @@ interface Profile {
   photo4Url: string | null;
   interests: string | null;
   occupation: string | null;
+  lookingFor?: string | null;
   isOnline: boolean;
   isPremium: boolean;
   isVerified: boolean;
@@ -348,6 +351,13 @@ interface CurrentUser {
   isPremium?: boolean;
   isBoosted?: boolean;
 }
+
+const lookingForLabels: Record<string, string> = {
+  relationship: "Une histoire sérieuse",
+  marriage: "Le mariage",
+  friendship: "Amitié",
+  casual: "Sans prise de tête",
+};
 
 function getAge(birthDate: string): number {
   if (!birthDate) return 0;
@@ -395,7 +405,6 @@ export default function DiscoverPage() {
   const [showPremiumModal, setShowPremiumModal] = useState(false);
   const [premiumFeature, setPremiumFeature] = useState<string>("");
 
-  // 💬 Modale Message Direct & Modale Match
   const [showDirectMessageModal, setShowDirectMessageModal] = useState(false);
   const [directMessageText, setDirectMessageText] = useState("");
   const [sendingDirectMessage, setSendingDirectMessage] = useState(false);
@@ -405,8 +414,12 @@ export default function DiscoverPage() {
     photoUrl: string | null;
   } | null>(null);
 
-  const [animating, setAnimating] = useState<"left" | "right" | "up" | null>(null);
-  const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
+  const [animating, setAnimating] = useState<"left" | "right" | "up" | null>(
+    null
+  );
+  const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(
+    null
+  );
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
 
   useEffect(() => {
@@ -446,7 +459,6 @@ export default function DiscoverPage() {
     loadAll();
   }, []);
 
-  // 🚀 PROMO BOOST : max 2 fois, après le tour, pas si Premium/Boost
   useEffect(() => {
     if (loading || showTour) return;
     if (currentUser?.isPremium || currentUser?.isBoosted) return;
@@ -515,7 +527,11 @@ export default function DiscoverPage() {
       const res = await fetch("/api/like", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ toUserId: profile.id, isLike: true, isSuperLike: true }),
+        body: JSON.stringify({
+          toUserId: profile.id,
+          isLike: true,
+          isSuperLike: true,
+        }),
       });
 
       if (res.ok) {
@@ -599,7 +615,7 @@ export default function DiscoverPage() {
   if (loading) return <DiscoverSkeleton />;
 
   // ==========================================
-  // ÉCRAN VIDE (Tu as tout vu !)
+  // ÉCRAN VIDE
   // ==========================================
   if (!currentProfile || currentIndex >= profiles.length) {
     return (
@@ -646,18 +662,24 @@ export default function DiscoverPage() {
   if (animating === "right") cardTransform = "translateX(150%) rotate(30deg)";
   if (animating === "up") cardTransform = "translateY(-150%)";
 
+  const interestTags =
+    currentProfile.interests
+      ?.split(/[,;|]/)
+      .map((t) => t.trim())
+      .filter(Boolean) || [];
+
   return (
     <div className="fixed inset-0 bg-black lg:relative lg:min-h-screen lg:bg-slate-100 lg:flex lg:flex-col lg:items-center lg:justify-center lg:p-4">
       {/* Bannière complétion profil */}
-{!showTour && (
-  <div className="fixed top-3 left-3 right-3 z-[80] max-w-md mx-auto pointer-events-auto">
-    <ProfileCompletionCard variant="banner" dismissible={true} />
-  </div>
-)}
-      {/* 🚀 TOUR EN DIRECT */}
+      {!showTour && (
+        <div className="fixed top-3 left-3 right-3 z-[80] max-w-md mx-auto pointer-events-auto">
+          <ProfileCompletionCard variant="banner" dismissible={true} />
+        </div>
+      )}
+
       {showTour && <OnboardingTour onFinish={completeTour} />}
 
-      {/* 🚀 BANNIÈRE PROMO BOOST */}
+      {/* Promo Boost */}
       {showBoostPromo && !showTour && (
         <div className="fixed bottom-28 left-3 right-3 z-[90] max-w-md mx-auto animate-in slide-in-from-bottom duration-300">
           <div className="bg-gradient-to-r from-purple-600 via-rose-500 to-amber-400 p-[1.5px] rounded-2xl shadow-2xl">
@@ -696,7 +718,7 @@ export default function DiscoverPage() {
         </div>
       )}
 
-      {/* 💬 MODALE MESSAGE DIRECT */}
+      {/* Message Direct */}
       {showDirectMessageModal && currentProfile && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4">
           <div className="bg-slate-900 border border-slate-800 text-white rounded-3xl p-6 max-w-md w-full shadow-2xl">
@@ -729,12 +751,14 @@ export default function DiscoverPage() {
         </div>
       )}
 
-      {/* MODALE PREMIUM */}
+      {/* Premium Modal */}
       {showPremiumModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4">
           <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl text-slate-900 text-center">
             <Crown className="w-16 h-16 text-amber-500 mx-auto mb-3" />
-            <h3 className="font-black text-xl mb-2">Fonctionnalité Premium 👑</h3>
+            <h3 className="font-black text-xl mb-2">
+              Fonctionnalité Premium 👑
+            </h3>
             <p className="text-slate-600 text-sm mb-6">
               {premiumFeature === "rewind"
                 ? "Revenir au profil précédent est réservé aux membres Premium."
@@ -759,14 +783,13 @@ export default function DiscoverPage() {
         </div>
       )}
 
-      {/* 💖 MODALE NOUVEAU MATCH */}
       <MatchModal
         isOpen={!!matchModalUser}
         onClose={() => setMatchModalUser(null)}
         matchedUser={matchModalUser}
       />
 
-      {/* CARTE PROFIL */}
+      {/* ========== CARTE STYLE BADOO ========== */}
       <div
         key={currentIndex}
         style={{
@@ -774,73 +797,293 @@ export default function DiscoverPage() {
           transition: dragStart ? "none" : "transform 350ms ease",
         }}
         className="relative w-full h-full lg:w-[420px] lg:h-[750px] lg:rounded-3xl overflow-hidden bg-black shadow-2xl"
+        onTouchStart={(e) => {
+          if (showTour || animating) return;
+          const t = e.touches[0];
+          setDragStart({ x: t.clientX, y: t.clientY });
+        }}
+        onTouchMove={(e) => {
+          if (!dragStart || showTour || animating) return;
+          const t = e.touches[0];
+          const dx = t.clientX - dragStart.x;
+          const dy = t.clientY - dragStart.y;
+          // Swipe horizontal seulement si geste clairement latéral
+          if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 14) {
+            setDragOffset({ x: dx, y: 0 });
+          }
+        }}
+        onTouchEnd={() => {
+          if (!dragStart) return;
+          const dx = dragOffset.x;
+          if (dx > 100) handleAction(true);
+          else if (dx < -100) handleAction(false);
+          else setDragOffset({ x: 0, y: 0 });
+          setDragStart(null);
+        }}
       >
-        <div className="absolute inset-0 select-none">
-          {hasPhotos ? (
-            <img
-              src={photos[currentPhotoIndex]}
-              alt=""
-              className="w-full h-full object-cover"
-            />
-          ) : (
-            <div className="w-full h-full bg-gradient-to-br from-rose-500 to-purple-600 flex items-center justify-center text-7xl font-bold text-white">
-              {currentProfile.firstName.charAt(0)}
-            </div>
-          )}
-        </div>
+        {/* Zone scroll vertical (style Badoo) */}
+        <div className="absolute inset-0 overflow-y-auto overflow-x-hidden overscroll-y-contain pb-28">
+          {/* —— PHOTO —— */}
+          <div className="relative w-full h-[min(100dvh,780px)] min-h-[72vh] lg:min-h-[640px] bg-black">
+            {hasPhotos ? (
+              <>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={photos[currentPhotoIndex]}
+                  alt=""
+                  className="w-full h-full object-cover select-none pointer-events-none"
+                  draggable={false}
+                />
 
-        <div className="absolute bottom-0 left-0 right-0 h-72 bg-gradient-to-t from-black via-black/60 to-transparent pointer-events-none z-10" />
-
-        <div className="absolute bottom-36 left-4 right-4 text-white z-20 pointer-events-none">
-          <h2 className="text-3xl font-black flex items-center gap-2">
-            {currentProfile.firstName}, {getAge(currentProfile.birthDate)}
-            {currentProfile.isVerified && (
-              <BadgeCheck className="w-6 h-6 text-blue-400 fill-blue-500" />
+                {photos.length > 1 && (
+                  <>
+                    <div className="absolute inset-0 flex z-10">
+                      <button
+                        type="button"
+                        className="w-1/3 h-full"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setCurrentPhotoIndex((i) => Math.max(0, i - 1));
+                        }}
+                        aria-label="Photo précédente"
+                      />
+                      <div className="w-1/3" />
+                      <button
+                        type="button"
+                        className="w-1/3 h-full"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setCurrentPhotoIndex((i) =>
+                            Math.min(photos.length - 1, i + 1)
+                          );
+                        }}
+                        aria-label="Photo suivante"
+                      />
+                    </div>
+                    <div className="absolute top-3 left-3 right-3 flex gap-1 z-20">
+                      {photos.map((_, i) => (
+                        <div
+                          key={i}
+                          className={`h-1 flex-1 rounded-full ${
+                            i === currentPhotoIndex
+                              ? "bg-white"
+                              : "bg-white/35"
+                          }`}
+                        />
+                      ))}
+                    </div>
+                  </>
+                )}
+              </>
+            ) : (
+              <div className="w-full h-full bg-gradient-to-br from-rose-500 to-purple-600 flex items-center justify-center text-7xl font-bold text-white">
+                {currentProfile.firstName.charAt(0)}
+              </div>
             )}
-          </h2>
-          <p className="text-sm text-white/80 flex items-center gap-1 mt-1">
-            <MapPin size={14} /> {currentProfile.city || "Cameroun"}
-          </p>
+
+            {/* Infos sur la photo */}
+            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black via-black/75 to-transparent pt-28 pb-7 px-5 z-20 pointer-events-none">
+              <div className="flex items-center gap-2 flex-wrap mb-1">
+                {currentProfile.isOnline && (
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 ring-2 ring-black/40" />
+                )}
+                <h2 className="text-3xl font-black text-white drop-shadow flex items-center gap-2">
+                  {currentProfile.firstName},{" "}
+                  {getAge(currentProfile.birthDate)}
+                  {currentProfile.isVerified && (
+                    <BadgeCheck className="w-6 h-6 text-blue-400 fill-blue-500" />
+                  )}
+                  {currentProfile.isPremium && (
+                    <Crown className="w-5 h-5 text-amber-400 fill-amber-400" />
+                  )}
+                </h2>
+              </div>
+
+              {(currentProfile.city || currentProfile.country) && (
+                <p className="text-sm text-white/85 flex items-center gap-1 mb-3">
+                  <MapPin size={14} />
+                  {[currentProfile.city, currentProfile.country]
+                    .filter(Boolean)
+                    .join(", ")}
+                </p>
+              )}
+
+              {currentProfile.lookingFor && (
+                <div className="inline-flex items-center gap-2 bg-white/95 text-slate-900 rounded-full px-3.5 py-1.5 text-sm font-bold shadow-lg">
+                  <Heart className="w-4 h-4 fill-rose-500 text-rose-500" />
+                  {lookingForLabels[currentProfile.lookingFor] ||
+                    currentProfile.lookingFor}
+                </div>
+              )}
+
+              <div className="mt-4 flex flex-col items-center gap-1 opacity-90">
+                <div className="w-10 h-1 rounded-full bg-white/55" />
+                <p className="text-[10px] text-white/75 font-semibold tracking-wide uppercase">
+                  Glisse vers le bas pour le profil
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* —— DÉTAILS PROFIL (scroll) —— */}
+          <div className="relative bg-white text-slate-900 rounded-t-3xl -mt-5 z-30 px-5 pt-5 pb-10 min-h-[55vh]">
+            <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-5" />
+
+            {currentProfile.lookingFor && (
+              <section className="mb-6">
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+                  Pourquoi {currentProfile.firstName} est ici
+                </p>
+                <div className="bg-slate-50 border border-slate-100 rounded-2xl px-4 py-3.5 flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-rose-100 flex items-center justify-center flex-shrink-0">
+                    <Heart className="w-5 h-5 text-rose-500 fill-rose-500" />
+                  </div>
+                  <p className="font-black text-lg text-slate-900">
+                    {lookingForLabels[currentProfile.lookingFor] ||
+                      currentProfile.lookingFor}
+                  </p>
+                </div>
+              </section>
+            )}
+
+            {currentProfile.bio && currentProfile.bio.trim() && (
+              <section className="mb-6">
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+                  À propos de moi
+                </p>
+                <p className="text-base text-slate-700 leading-relaxed whitespace-pre-wrap">
+                  {currentProfile.bio}
+                </p>
+              </section>
+            )}
+
+            {currentProfile.occupation && currentProfile.occupation.trim() && (
+              <section className="mb-6">
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+                  Profession
+                </p>
+                <p className="text-base font-semibold text-slate-800 flex items-center gap-2">
+                  <Briefcase className="w-4 h-4 text-slate-400" />
+                  {currentProfile.occupation}
+                </p>
+              </section>
+            )}
+
+            {(currentProfile.city || currentProfile.country) && (
+              <section className="mb-6">
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+                  Localisation
+                </p>
+                <p className="text-base font-semibold text-slate-800 flex items-center gap-1.5">
+                  <MapPin className="w-4 h-4 text-rose-500" />
+                  {[currentProfile.city, currentProfile.country]
+                    .filter(Boolean)
+                    .join(", ")}
+                </p>
+              </section>
+            )}
+
+            {interestTags.length > 0 && (
+              <section className="mb-6">
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">
+                  Centres d&apos;intérêt
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {interestTags.map((tag) => (
+                    <span
+                      key={tag}
+                      className="px-3 py-1.5 rounded-full bg-rose-50 text-rose-600 text-sm font-bold border border-rose-100"
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            <section className="mb-4 flex flex-wrap gap-2">
+              {currentProfile.isVerified && (
+                <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-blue-50 text-blue-600 text-xs font-bold border border-blue-100">
+                  <BadgeCheck className="w-3.5 h-3.5" /> Vérifié
+                </span>
+              )}
+              {currentProfile.isPremium && (
+                <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-amber-50 text-amber-700 text-xs font-bold border border-amber-100">
+                  <Crown className="w-3.5 h-3.5" /> Premium
+                </span>
+              )}
+              {currentProfile.isOnline && (
+                <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-bold border border-emerald-100">
+                  ● En ligne
+                </span>
+              )}
+            </section>
+
+            <p className="text-center text-[11px] text-slate-400 pt-2 pb-4">
+              Remonte pour les photos · Swipe ← → pour passer ou liker
+            </p>
+          </div>
         </div>
 
-        <div className="absolute bottom-20 lg:bottom-6 left-0 right-0 flex items-center justify-center gap-2 z-30 px-2">
-          <button
-            onClick={handleRewind}
-            className="w-11 h-11 bg-white rounded-full shadow-lg flex items-center justify-center text-amber-500 hover:scale-110 active:scale-95 transition"
-          >
-            <RotateCcw size={20} />
-          </button>
-          <button
-            onClick={() => handleAction(false)}
-            className="w-14 h-14 bg-white rounded-full shadow-xl flex items-center justify-center text-red-500 hover:scale-110 active:scale-95 transition"
-          >
-            <X size={28} />
-          </button>
-          <button
-            onClick={handleSuperLike}
-            className="w-12 h-12 bg-white rounded-full shadow-lg flex items-center justify-center text-blue-500 hover:scale-110 active:scale-95 transition"
-          >
-            <Star size={24} className="fill-blue-500" />
-          </button>
-          <button
-            onClick={() => handleAction(true)}
-            className="w-14 h-14 bg-white rounded-full shadow-xl flex items-center justify-center text-green-500 hover:scale-110 active:scale-95 transition"
-          >
-            <Heart size={28} className="fill-green-500" />
-          </button>
-          <button
-            onClick={handleDirectMessage}
-            className="w-11 h-11 bg-white rounded-full shadow-lg flex items-center justify-center text-purple-500 hover:scale-110 active:scale-95 transition"
-          >
-            <MessageCircle size={20} />
-          </button>
-          <button
-            onClick={() => router.push("/boost")}
-            className="w-11 h-11 bg-gradient-to-tr from-purple-600 to-amber-500 rounded-full shadow-lg flex items-center justify-center text-white hover:scale-110 active:scale-95 transition"
-          >
-            <Rocket size={20} />
-          </button>
+        {/* Boutons fixes */}
+        <div className="absolute bottom-4 lg:bottom-5 left-0 right-0 flex items-center justify-center gap-2 z-40 px-2 pointer-events-none">
+          <div className="flex items-center justify-center gap-2 pointer-events-auto bg-black/25 backdrop-blur-md rounded-full px-2.5 py-1.5 shadow-xl">
+            <button
+              type="button"
+              onClick={handleRewind}
+              className="w-11 h-11 bg-white rounded-full shadow-lg flex items-center justify-center text-amber-500 hover:scale-110 active:scale-95 transition"
+            >
+              <RotateCcw size={20} />
+            </button>
+            <button
+              type="button"
+              onClick={() => handleAction(false)}
+              className="w-14 h-14 bg-white rounded-full shadow-xl flex items-center justify-center text-red-500 hover:scale-110 active:scale-95 transition"
+            >
+              <X size={28} />
+            </button>
+            <button
+              type="button"
+              onClick={handleSuperLike}
+              className="w-12 h-12 bg-white rounded-full shadow-lg flex items-center justify-center text-blue-500 hover:scale-110 active:scale-95 transition"
+            >
+              <Star size={24} className="fill-blue-500" />
+            </button>
+            <button
+              type="button"
+              onClick={() => handleAction(true)}
+              className="w-14 h-14 bg-white rounded-full shadow-xl flex items-center justify-center text-green-500 hover:scale-110 active:scale-95 transition"
+            >
+              <Heart size={28} className="fill-green-500" />
+            </button>
+            <button
+              type="button"
+              onClick={handleDirectMessage}
+              className="w-11 h-11 bg-white rounded-full shadow-lg flex items-center justify-center text-purple-500 hover:scale-110 active:scale-95 transition"
+            >
+              <MessageCircle size={20} />
+            </button>
+            <button
+              type="button"
+              onClick={() => router.push("/boost")}
+              className="w-11 h-11 bg-gradient-to-tr from-purple-600 to-amber-500 rounded-full shadow-lg flex items-center justify-center text-white hover:scale-110 active:scale-95 transition"
+            >
+              <Rocket size={20} />
+            </button>
+          </div>
         </div>
+
+        {/* Labels LIKE / NOPE */}
+        {dragOffset.x > 40 && (
+          <div className="absolute top-24 left-6 z-50 border-4 border-green-400 text-green-400 font-black text-3xl px-4 py-1 rounded-xl rotate-[-12deg] bg-black/30 pointer-events-none">
+            LIKE
+          </div>
+        )}
+        {dragOffset.x < -40 && (
+          <div className="absolute top-24 right-6 z-50 border-4 border-red-400 text-red-400 font-black text-3xl px-4 py-1 rounded-xl rotate-[12deg] bg-black/30 pointer-events-none">
+            NOPE
+          </div>
+        )}
       </div>
     </div>
   );
