@@ -1,4 +1,3 @@
-// src/app/(app)/discover/page.tsx
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
@@ -381,8 +380,8 @@ function getAllPhotos(profile: Profile): string[] {
 
 function DiscoverSkeleton() {
   return (
-    <div className="fixed inset-0 bg-black flex items-center justify-center p-4">
-      <div className="relative w-full h-full lg:w-[420px] lg:h-[750px] lg:rounded-3xl overflow-hidden bg-slate-800 animate-pulse flex items-center justify-center">
+    <div className="fixed inset-0 bg-black flex items-center justify-center p-4 z-50">
+      <div className="relative w-full h-full lg:w-[420px] lg:h-[750px] lg:rounded-3xl overflow-hidden bg-slate-900 animate-pulse flex items-center justify-center">
         <Heart className="w-12 h-12 text-rose-400 animate-pulse fill-rose-400" />
       </div>
     </div>
@@ -414,13 +413,10 @@ export default function DiscoverPage() {
     photoUrl: string | null;
   } | null>(null);
 
-  const [animating, setAnimating] = useState<"left" | "right" | "up" | null>(
-    null
-  );
-  const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(
-    null
-  );
+  const [animating, setAnimating] = useState<"left" | "right" | "up" | null>(null);
+  const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const [scrollRatio, setScrollRatio] = useState(0);
 
   useEffect(() => {
     const hasSeenTour = localStorage.getItem("lovelink_tour_completed");
@@ -509,6 +505,7 @@ export default function DiscoverPage() {
 
       setTimeout(() => {
         setDragOffset({ x: 0, y: 0 });
+        setScrollRatio(0);
         setCurrentIndex((i) => i + 1);
         setCurrentPhotoIndex(0);
         setTimeout(() => setAnimating(null), 20);
@@ -550,6 +547,7 @@ export default function DiscoverPage() {
 
     setTimeout(() => {
       setDragOffset({ x: 0, y: 0 });
+      setScrollRatio(0);
       setCurrentIndex((i) => i + 1);
       setCurrentPhotoIndex(0);
       setTimeout(() => setAnimating(null), 20);
@@ -566,6 +564,7 @@ export default function DiscoverPage() {
     if (currentIndex > 0) {
       setCurrentIndex((i) => Math.max(0, i - 1));
       setCurrentPhotoIndex(0);
+      setScrollRatio(0);
     }
   }, [currentIndex, currentUser, animating, showTour]);
 
@@ -608,6 +607,14 @@ export default function DiscoverPage() {
     }
   };
 
+  const onCardScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const el = e.currentTarget;
+    const max = el.scrollHeight - el.clientHeight;
+    if (max > 0) {
+      setScrollRatio(el.scrollTop / max);
+    }
+  };
+
   const currentProfile = profiles[currentIndex];
   const photos = currentProfile ? getAllPhotos(currentProfile) : [];
   const hasPhotos = photos.length > 0;
@@ -619,7 +626,7 @@ export default function DiscoverPage() {
   // ==========================================
   if (!currentProfile || currentIndex >= profiles.length) {
     return (
-      <div className="min-h-screen bg-slate-900 p-4 flex flex-col items-center justify-center text-center text-white">
+      <div className="fixed inset-0 lg:static z-20 min-h-screen bg-slate-900 p-4 flex flex-col items-center justify-center text-center text-white">
         <Sparkles className="w-16 h-16 text-rose-500 mb-4" />
         <h2 className="text-2xl font-black mb-2">Tu as tout vu !</h2>
         <p className="text-slate-400 text-sm mb-6">
@@ -669,10 +676,14 @@ export default function DiscoverPage() {
       .filter(Boolean) || [];
 
   return (
-    <div className="fixed inset-0 bg-black lg:relative lg:min-h-screen lg:bg-slate-100 lg:flex lg:flex-col lg:items-center lg:justify-center lg:p-4">
+    /* 🛡️ Conteneur Principal : 
+       Top 60px pour éviter le header mobile, Bottom 64px pour éviter le menu mobile bas.
+       Lg (Desktop) = Plein écran relatif classique. */
+    <div className="fixed top-[60px] bottom-[64px] left-0 right-0 z-10 bg-black lg:relative lg:min-h-screen lg:bg-slate-100 lg:flex lg:flex-col lg:items-center lg:justify-center lg:p-4 lg:inset-auto">
+      
       {/* Bannière complétion profil */}
       {!showTour && (
-        <div className="fixed top-3 left-3 right-3 z-[80] max-w-md mx-auto pointer-events-auto">
+        <div className="absolute top-2 left-2 right-2 z-[80] max-w-md mx-auto pointer-events-auto">
           <ProfileCompletionCard variant="banner" dismissible={true} />
         </div>
       )}
@@ -681,7 +692,7 @@ export default function DiscoverPage() {
 
       {/* Promo Boost */}
       {showBoostPromo && !showTour && (
-        <div className="fixed bottom-28 left-3 right-3 z-[90] max-w-md mx-auto animate-in slide-in-from-bottom duration-300">
+        <div className="fixed bottom-24 left-3 right-3 z-[90] max-w-md mx-auto animate-in slide-in-from-bottom duration-300">
           <div className="bg-gradient-to-r from-purple-600 via-rose-500 to-amber-400 p-[1.5px] rounded-2xl shadow-2xl">
             <div className="bg-slate-950/95 rounded-2xl p-3.5 flex items-center gap-3">
               <div className="w-11 h-11 rounded-full bg-gradient-to-tr from-purple-500 to-amber-400 flex items-center justify-center flex-shrink-0 shadow-lg">
@@ -789,7 +800,7 @@ export default function DiscoverPage() {
         matchedUser={matchModalUser}
       />
 
-      {/* ========== CARTE STYLE BADOO ========== */}
+      {/* ========== CARTE PROFIL (Swipeable) ========== */}
       <div
         key={currentIndex}
         style={{
@@ -821,10 +832,26 @@ export default function DiscoverPage() {
           setDragStart(null);
         }}
       >
+        {/* 📍 INDICATEUR SCROLL VERTICAL (DROITE) */}
+        <div className="absolute right-2 top-[30%] bottom-[30%] z-50 w-1 pointer-events-none flex justify-center opacity-80">
+          <div className="relative h-full w-[3px] rounded-full bg-white/20">
+            <div
+              className="absolute left-0 right-0 mx-auto w-full h-10 rounded-full bg-white shadow-md transition-all duration-75"
+              style={{
+                top: `calc(${scrollRatio} * (100% - 40px))`,
+              }}
+            />
+          </div>
+        </div>
+
         {/* Zone scroll vertical (style Badoo) */}
-        <div className="absolute inset-0 overflow-y-auto overflow-x-hidden overscroll-y-contain pb-28">
+        <div
+          onScroll={onCardScroll}
+          className="absolute inset-0 overflow-y-auto overflow-x-hidden overscroll-y-contain pb-28 scroll-smooth"
+          style={{ WebkitOverflowScrolling: "touch" }}
+        >
           {/* —— PHOTO —— */}
-          <div className="relative w-full h-[min(100dvh,780px)] min-h-[72vh] lg:min-h-[640px] bg-black">
+          <div className="relative w-full h-[min(100%,780px)] min-h-[72vh] lg:min-h-[640px] bg-black">
             {hasPhotos ? (
               <>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -860,14 +887,14 @@ export default function DiscoverPage() {
                         aria-label="Photo suivante"
                       />
                     </div>
-                    <div className="absolute top-3 left-3 right-3 flex gap-1 z-20">
+                    <div className="absolute top-3 left-3 right-3 flex gap-1 z-20 pointer-events-none">
                       {photos.map((_, i) => (
                         <div
                           key={i}
-                          className={`h-1 flex-1 rounded-full ${
+                          className={`h-1 flex-1 rounded-full shadow-sm ${
                             i === currentPhotoIndex
                               ? "bg-white"
-                              : "bg-white/35"
+                              : "bg-white/40"
                           }`}
                         />
                       ))}
@@ -882,7 +909,7 @@ export default function DiscoverPage() {
             )}
 
             {/* Infos sur la photo */}
-            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black via-black/75 to-transparent pt-28 pb-7 px-5 z-20 pointer-events-none">
+            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black via-black/75 to-transparent pt-28 pb-8 px-5 z-20 pointer-events-none">
               <div className="flex items-center gap-2 flex-wrap mb-1">
                 {currentProfile.isOnline && (
                   <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 ring-2 ring-black/40" />
@@ -900,7 +927,7 @@ export default function DiscoverPage() {
               </div>
 
               {(currentProfile.city || currentProfile.country) && (
-                <p className="text-sm text-white/85 flex items-center gap-1 mb-3">
+                <p className="text-sm text-white/90 flex items-center gap-1.5 mb-3 drop-shadow">
                   <MapPin size={14} />
                   {[currentProfile.city, currentProfile.country]
                     .filter(Boolean)
@@ -909,29 +936,22 @@ export default function DiscoverPage() {
               )}
 
               {currentProfile.lookingFor && (
-                <div className="inline-flex items-center gap-2 bg-white/95 text-slate-900 rounded-full px-3.5 py-1.5 text-sm font-bold shadow-lg">
+                <div className="inline-flex items-center gap-2 bg-white/95 text-slate-900 rounded-full px-3.5 py-1.5 text-sm font-bold shadow-lg mt-1">
                   <Heart className="w-4 h-4 fill-rose-500 text-rose-500" />
                   {lookingForLabels[currentProfile.lookingFor] ||
                     currentProfile.lookingFor}
                 </div>
               )}
-
-              <div className="mt-4 flex flex-col items-center gap-1 opacity-90">
-                <div className="w-10 h-1 rounded-full bg-white/55" />
-                <p className="text-[10px] text-white/75 font-semibold tracking-wide uppercase">
-                  Glisse vers le bas pour le profil
-                </p>
-              </div>
             </div>
           </div>
 
           {/* —— DÉTAILS PROFIL (scroll) —— */}
-          <div className="relative bg-white text-slate-900 rounded-t-3xl -mt-5 z-30 px-5 pt-5 pb-10 min-h-[55vh]">
-            <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-5" />
+          <div className="relative bg-white text-slate-900 rounded-t-3xl -mt-5 z-30 px-5 pt-5 pb-10 min-h-[50vh]">
+            <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-6" />
 
             {currentProfile.lookingFor && (
-              <section className="mb-6">
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+              <section className="mb-7">
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2.5">
                   Pourquoi {currentProfile.firstName} est ici
                 </p>
                 <div className="bg-slate-50 border border-slate-100 rounded-2xl px-4 py-3.5 flex items-center gap-3">
@@ -947,8 +967,8 @@ export default function DiscoverPage() {
             )}
 
             {currentProfile.bio && currentProfile.bio.trim() && (
-              <section className="mb-6">
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+              <section className="mb-7">
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2.5">
                   À propos de moi
                 </p>
                 <p className="text-base text-slate-700 leading-relaxed whitespace-pre-wrap">
@@ -958,8 +978,8 @@ export default function DiscoverPage() {
             )}
 
             {currentProfile.occupation && currentProfile.occupation.trim() && (
-              <section className="mb-6">
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+              <section className="mb-7">
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2.5">
                   Profession
                 </p>
                 <p className="text-base font-semibold text-slate-800 flex items-center gap-2">
@@ -970,11 +990,11 @@ export default function DiscoverPage() {
             )}
 
             {(currentProfile.city || currentProfile.country) && (
-              <section className="mb-6">
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+              <section className="mb-7">
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2.5">
                   Localisation
                 </p>
-                <p className="text-base font-semibold text-slate-800 flex items-center gap-1.5">
+                <p className="text-base font-semibold text-slate-800 flex items-center gap-2">
                   <MapPin className="w-4 h-4 text-rose-500" />
                   {[currentProfile.city, currentProfile.country]
                     .filter(Boolean)
@@ -984,7 +1004,7 @@ export default function DiscoverPage() {
             )}
 
             {interestTags.length > 0 && (
-              <section className="mb-6">
+              <section className="mb-7">
                 <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">
                   Centres d&apos;intérêt
                 </p>
@@ -1001,72 +1021,68 @@ export default function DiscoverPage() {
               </section>
             )}
 
-            <section className="mb-4 flex flex-wrap gap-2">
+            <section className="mb-6 flex flex-wrap gap-2">
               {currentProfile.isVerified && (
-                <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-blue-50 text-blue-600 text-xs font-bold border border-blue-100">
+                <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-blue-50 text-blue-600 text-xs font-bold border border-blue-100">
                   <BadgeCheck className="w-3.5 h-3.5" /> Vérifié
                 </span>
               )}
               {currentProfile.isPremium && (
-                <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-amber-50 text-amber-700 text-xs font-bold border border-amber-100">
+                <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-amber-50 text-amber-700 text-xs font-bold border border-amber-100">
                   <Crown className="w-3.5 h-3.5" /> Premium
                 </span>
               )}
               {currentProfile.isOnline && (
-                <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-bold border border-emerald-100">
+                <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-emerald-50 text-emerald-700 text-xs font-bold border border-emerald-100">
                   ● En ligne
                 </span>
               )}
             </section>
-
-            <p className="text-center text-[11px] text-slate-400 pt-2 pb-4">
-              Remonte pour les photos · Swipe ← → pour passer ou liker
-            </p>
           </div>
         </div>
 
-        {/* Boutons fixes */}
-        <div className="absolute bottom-4 lg:bottom-5 left-0 right-0 flex items-center justify-center gap-2 z-40 px-2 pointer-events-none">
-          <div className="flex items-center justify-center gap-2 pointer-events-auto bg-black/25 backdrop-blur-md rounded-full px-2.5 py-1.5 shadow-xl">
+        {/* —— BOUTONS D'ACTION FIXES AU DESSUS DE LA BOTTOM NAV —— */}
+        <div className="absolute bottom-5 left-0 right-0 flex items-center justify-center gap-2 z-[60] px-2 pointer-events-none">
+          <div className="flex items-center justify-center gap-2 pointer-events-auto bg-black/35 backdrop-blur-md rounded-full px-2.5 py-2 shadow-2xl border border-white/10">
             <button
               type="button"
               onClick={handleRewind}
-              className="w-11 h-11 bg-white rounded-full shadow-lg flex items-center justify-center text-amber-500 hover:scale-110 active:scale-95 transition"
+              className="w-11 h-11 bg-white rounded-full shadow-lg flex items-center justify-center text-amber-500 active:scale-95 transition"
             >
               <RotateCcw size={20} />
             </button>
             <button
               type="button"
               onClick={() => handleAction(false)}
-              className="w-14 h-14 bg-white rounded-full shadow-xl flex items-center justify-center text-red-500 hover:scale-110 active:scale-95 transition"
+              className="w-14 h-14 bg-white rounded-full shadow-xl flex items-center justify-center text-red-500 active:scale-95 transition"
             >
               <X size={28} />
             </button>
             <button
               type="button"
               onClick={handleSuperLike}
-              className="w-12 h-12 bg-white rounded-full shadow-lg flex items-center justify-center text-blue-500 hover:scale-110 active:scale-95 transition"
+              className="w-12 h-12 bg-white rounded-full shadow-lg flex items-center justify-center text-blue-500 active:scale-95 transition"
             >
               <Star size={24} className="fill-blue-500" />
             </button>
             <button
               type="button"
               onClick={() => handleAction(true)}
-              className="w-14 h-14 bg-white rounded-full shadow-xl flex items-center justify-center text-green-500 hover:scale-110 active:scale-95 transition"
+              className="w-14 h-14 bg-white rounded-full shadow-xl flex items-center justify-center text-green-500 active:scale-95 transition"
             >
               <Heart size={28} className="fill-green-500" />
             </button>
             <button
               type="button"
               onClick={handleDirectMessage}
-              className="w-11 h-11 bg-white rounded-full shadow-lg flex items-center justify-center text-purple-500 hover:scale-110 active:scale-95 transition"
+              className="w-11 h-11 bg-white rounded-full shadow-lg flex items-center justify-center text-purple-500 active:scale-95 transition"
             >
               <MessageCircle size={20} />
             </button>
             <button
               type="button"
               onClick={() => router.push("/boost")}
-              className="w-11 h-11 bg-gradient-to-tr from-purple-600 to-amber-500 rounded-full shadow-lg flex items-center justify-center text-white hover:scale-110 active:scale-95 transition"
+              className="w-11 h-11 bg-gradient-to-tr from-purple-600 to-amber-500 rounded-full shadow-lg flex items-center justify-center text-white active:scale-95 transition"
             >
               <Rocket size={20} />
             </button>
