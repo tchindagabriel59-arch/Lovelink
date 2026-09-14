@@ -21,18 +21,15 @@ export async function GET() {
       return NextResponse.json({ user: null }, { status: 401 });
     }
 
-    // ⚡ VÉRIFICATION ET AUTO-NETTOYAGE DU PREMIUM EXPIRÉ
     const now = new Date();
-    let isPremiumActive = user.isPremium;
 
-    if (
-      user.isPremium &&
-      user.premiumExpiresAt &&
-      new Date(user.premiumExpiresAt) <= now
-    ) {
-      isPremiumActive = false;
+    // ⚡ CONDITION STRICTE : Premium VALIDE uniquement si date dans le futur
+    const hasValidDate =
+      user.premiumExpiresAt && new Date(user.premiumExpiresAt) > now;
+    const isPremiumActive = Boolean(user.isPremium && hasValidDate);
 
-      // Mise à jour silencieuse en BDD
+    // Auto-correction BDD si isPremium est bloqué à true alors que la date est dépassée ou vide
+    if (user.isPremium && !isPremiumActive) {
       await db
         .update(users)
         .set({
@@ -69,8 +66,8 @@ export async function GET() {
       prompt3Question: user.prompt3Question,
       prompt3Answer: user.prompt3Answer,
       isOnline: user.isOnline,
-      isPremium: isPremiumActive, // 👈 Statut corrigé en temps réel
-      premiumExpiresAt: user.premiumExpiresAt,
+      isPremium: isPremiumActive, // 👈 VRAI statut calculé en temps réel
+      premiumExpiresAt: isPremiumActive ? user.premiumExpiresAt : null,
       premiumPlan: isPremiumActive ? user.premiumPlan : null,
       isVerified: user.isVerified,
       isIncognito: user.isIncognito,
@@ -80,11 +77,12 @@ export async function GET() {
       createdAt: user.createdAt,
     };
 
+    // 🛑 AUCUN CACHE NAVIGATEUR : Réponse instantanée en temps réel
     return NextResponse.json(
       { user: safeUser },
       {
         headers: {
-          "Cache-Control": "private, max-age=10, stale-while-revalidate=30",
+          "Cache-Control": "no-store, max-age=0, must-revalidate",
         },
       }
     );
