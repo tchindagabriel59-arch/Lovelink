@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { users } from "@/db/schema";
-import { eq, desc, or, isNotNull } from "drizzle-orm";
+import { desc, isNotNull, or, eq } from "drizzle-orm";
 import { isCurrentUserAdmin } from "@/lib/auth";
 import { cleanupExpiredPremium } from "@/lib/premium-cleanup";
 
@@ -12,10 +12,10 @@ export async function GET() {
       return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
     }
 
-    // 🧹 Auto-nettoyage
+    // 🧹 Auto-nettoyage BDD des abonnements expirés
     await cleanupExpiredPremium();
 
-    // Récupérer TOUS ceux qui sont Premium OU qui ont une date/plan enregistrés
+    // Récupérer tous les membres qui ont ou ont eu un Premium
     const subscribers = await db
       .select({
         id: users.id,
