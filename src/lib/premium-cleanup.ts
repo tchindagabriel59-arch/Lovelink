@@ -1,13 +1,17 @@
 import { db } from "@/db";
 import { users, notifications } from "@/db/schema";
-import { and, eq, lte, isNotNull } from "drizzle-orm";
+import { and, eq, lte, isNull, or, isNotNull } from "drizzle-orm";
 import { sendPushToUser } from "@/lib/push";
 
+/**
+ * Nettoie automatiquement la BDD :
+ * Passe isPremium à false si la date est dépassée OU si la date est nulle/invalide.
+ */
 export async function cleanupExpiredPremium() {
   try {
     const now = new Date();
 
-    // 1. Récupérer les abonnés dont la date est dépassée
+    // 1. Trouver tous les faux Premium (date dépassée OU pas de date enregistrée)
     const expiredUsers = await db
       .select({
         id: users.id,
@@ -17,29 +21,34 @@ export async function cleanupExpiredPremium() {
       .where(
         and(
           eq(users.isPremium, true),
-          isNotNull(users.premiumExpiresAt),
-          lte(users.premiumExpiresAt, now)
+          or(
+            isNull(users.premiumExpiresAt),
+            lte(users.premiumExpiresAt, now)
+          )
         )
       );
 
     if (expiredUsers.length === 0) return;
 
-    // 2. Basculer isPremium = false (ON GARDE premiumPlan & premiumExpiresAt pour l'historique admin)
+    // 2. Corriger en BDD -> isPremium = false
     await db
       .update(users)
       .set({
         isPremium: false,
+        premiumPlan: null,
         updatedAt: now,
       })
       .where(
         and(
           eq(users.isPremium, true),
-          isNotNull(users.premiumExpiresAt),
-          lte(users.premiumExpiresAt, now)
+          or(
+            isNull(users.premiumExpiresAt),
+            lte(users.premiumExpiresAt, now)
+          )
         )
       );
 
-    // 3. Envoyer la notif in-app + Push
+    // 3. Envoyer la notif de relance
     for (const u of expiredUsers) {
       try {
         await db.insert(notifications).values({
