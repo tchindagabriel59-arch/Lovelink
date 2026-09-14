@@ -105,6 +105,7 @@ export async function GET(req: NextRequest) {
         isOnline: users.isOnline,
         lastSeen: users.lastSeen,
         isPremium: users.isPremium,
+        lookingFor: users.lookingFor,
         isVerified: users.isVerified,
         // ✅ vrai champ schema
         boostEndAt: users.boostEndAt,
