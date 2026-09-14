@@ -6,9 +6,9 @@ import { Crown, Sparkles, Heart, Zap, X, ArrowRight } from "lucide-react";
 
 interface ExpiredPremiumModalProps {
   user: {
-    isPremium: boolean;
-    premiumExpiresAt?: string | null;
-    firstName: string;
+    isPremium?: boolean;
+    premiumExpiresAt?: string | Date | null;
+    firstName?: string;
   } | null;
 }
 
@@ -72,11 +72,11 @@ export default function ExpiredPremiumModal({ user }: ExpiredPremiumModalProps) 
         </div>
 
         <h2 className="text-2xl font-black mb-2">
-          Tu nous manques, <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-rose-400">{user.firstName}</span> ! 💔
+          Tu nous manques, <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-rose-400">{user.firstName || "cher membre"}</span> ! 💔
         </h2>
 
         <p className="text-slate-300 text-sm mb-6 leading-relaxed">
-          Ton abonnement Premium est arrivé à terme. Tes likes recus et tes super-pouvoirs sont actuellement mis en pause.
+          Ton abonnement Premium est arrivé à terme. Tes likes reçus et tes super-pouvoirs sont actuellement mis en pause.
         </p>
 
         {/* Avantages rappel */}
