@@ -12,40 +12,7 @@ export async function GET() {
     }
 
     const [user] = await db
-      .select({
-        id: users.id,
-        email: users.email,
-        firstName: users.firstName,
-        lastName: users.lastName,
-        birthDate: users.birthDate,
-        gender: users.gender,
-        lookingFor: users.lookingFor,
-        bio: users.bio,
-        city: users.city,
-        country: users.country,
-        photoUrl: users.photoUrl,
-        coverPhotoUrl: users.coverPhotoUrl,
-        photo1Url: users.photo1Url,
-        photo2Url: users.photo2Url,
-        photo3Url: users.photo3Url,
-        photo4Url: users.photo4Url,
-        interests: users.interests,
-        occupation: users.occupation,
-        prompt1Question: users.prompt1Question,
-        prompt1Answer: users.prompt1Answer,
-        prompt2Question: users.prompt2Question,
-        prompt2Answer: users.prompt2Answer,
-        prompt3Question: users.prompt3Question,
-        prompt3Answer: users.prompt3Answer,
-        isOnline: users.isOnline,
-        isPremium: users.isPremium,
-        isVerified: users.isVerified,
-        isIncognito: users.isIncognito,
-        isAdmin: users.isAdmin,
-        latitude: users.latitude,
-        longitude: users.longitude,
-        createdAt: users.createdAt,
-      })
+      .select()
       .from(users)
       .where(eq(users.id, userId))
       .limit(1);
@@ -54,13 +21,70 @@ export async function GET() {
       return NextResponse.json({ user: null }, { status: 401 });
     }
 
-    // ⚡ Cache 60 secondes côté navigateur
-    // Évite de refaire la requête à chaque navigation
+    // ⚡ VÉRIFICATION ET AUTO-NETTOYAGE DU PREMIUM EXPIRÉ
+    const now = new Date();
+    let isPremiumActive = user.isPremium;
+
+    if (
+      user.isPremium &&
+      user.premiumExpiresAt &&
+      new Date(user.premiumExpiresAt) <= now
+    ) {
+      isPremiumActive = false;
+
+      // Mise à jour silencieuse en BDD
+      await db
+        .update(users)
+        .set({
+          isPremium: false,
+          premiumPlan: null,
+          updatedAt: now,
+        })
+        .where(eq(users.id, userId));
+    }
+
+    const safeUser = {
+      id: user.id,
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      birthDate: user.birthDate,
+      gender: user.gender,
+      lookingFor: user.lookingFor,
+      bio: user.bio,
+      city: user.city,
+      country: user.country,
+      photoUrl: user.photoUrl,
+      coverPhotoUrl: user.coverPhotoUrl,
+      photo1Url: user.photo1Url,
+      photo2Url: user.photo2Url,
+      photo3Url: user.photo3Url,
+      photo4Url: user.photo4Url,
+      interests: user.interests,
+      occupation: user.occupation,
+      prompt1Question: user.prompt1Question,
+      prompt1Answer: user.prompt1Answer,
+      prompt2Question: user.prompt2Question,
+      prompt2Answer: user.prompt2Answer,
+      prompt3Question: user.prompt3Question,
+      prompt3Answer: user.prompt3Answer,
+      isOnline: user.isOnline,
+      isPremium: isPremiumActive, // 👈 Statut corrigé en temps réel
+      premiumExpiresAt: user.premiumExpiresAt,
+      premiumPlan: isPremiumActive ? user.premiumPlan : null,
+      isVerified: user.isVerified,
+      isIncognito: user.isIncognito,
+      isAdmin: user.isAdmin,
+      latitude: user.latitude,
+      longitude: user.longitude,
+      createdAt: user.createdAt,
+    };
+
     return NextResponse.json(
-      { user },
+      { user: safeUser },
       {
         headers: {
-          "Cache-Control": "private, max-age=60, stale-while-revalidate=120",
+          "Cache-Control": "private, max-age=10, stale-while-revalidate=30",
         },
       }
     );
