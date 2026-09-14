@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { users } from "@/db/schema";
-import { eq, desc, and, gte, lte, or } from "drizzle-orm";
+import { eq, desc, or, isNotNull } from "drizzle-orm";
 import { isCurrentUserAdmin } from "@/lib/auth";
 import { cleanupExpiredPremium } from "@/lib/premium-cleanup";
 
@@ -12,13 +12,11 @@ export async function GET() {
       return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
     }
 
-    // 🧹 Lancer le nettoyage automatique des expirés
+    // 🧹 Auto-nettoyage
     await cleanupExpiredPremium();
 
-    const now = new Date();
-
-    // Récupérer les abonnés actifs et expirés
-    const allSubscribers = await db
+    // Récupérer TOUS ceux qui sont Premium OU qui ont une date/plan enregistrés
+    const subscribers = await db
       .select({
         id: users.id,
         firstName: users.firstName,
@@ -35,16 +33,13 @@ export async function GET() {
       .where(
         or(
           eq(users.isPremium, true),
-          and(
-            eq(users.isPremium, false),
-            // Garder un historique des 30 derniers jours d'expiration
-            gte(users.premiumExpiresAt, new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000))
-          )
+          isNotNull(users.premiumExpiresAt),
+          isNotNull(users.premiumPlan)
         )
       )
       .orderBy(desc(users.premiumExpiresAt));
 
-    return NextResponse.json({ subscribers: allSubscribers });
+    return NextResponse.json({ subscribers });
   } catch (error) {
     console.error("Admin premium list error:", error);
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
